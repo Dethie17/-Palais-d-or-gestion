@@ -328,7 +328,7 @@ Ce projet est sous licence **MIT**. Voir le fichier [LICENSE](LICENSE) pour plus
 
 ## 👨‍💻 Auteur
 
-**Boubacar Cissé**
+**Babacar Cissé**
 
 - GitHub: [@etudiantcisse](https://github.com/etudiantcisse)
 - Dépôt: [miam-street-food](https://github.com/etudiantcisse/miam-street-food)

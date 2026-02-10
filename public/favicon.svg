@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f97316;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#dc2626;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="url(#grad)"/>
+  
+  <!-- Chef hat icon -->
+  <g fill="white">
+    <!-- Hat base -->
+    <ellipse cx="50" cy="65" rx="25" ry="8"/>
+    <!-- Hat top -->
+    <path d="M 30 60 Q 30 40 50 35 Q 70 40 70 60 L 30 60 Z"/>
+    <!-- Hat puff -->
+    <circle cx="45" cy="38" r="6"/>
+    <circle cx="55" cy="38" r="6"/>
+    <circle cx="50" cy="32" r="7"/>
+  </g>
+  
+  <!-- Fork and knife crossed -->
+  <g fill="white" opacity="0.8">
+    <!-- Fork -->
+    <rect x="25" y="48" width="2" height="25" transform="rotate(-45 26 60.5)"/>
+    <rect x="22" y="42" width="1" height="8"/>
+    <rect x="25" y="42" width="1" height="8"/>
+    <rect x="28" y="42" width="1" height="8"/>
+    
+    <!-- Knife -->
+    <rect x="73" y="48" width="2" height="25" transform="rotate(45 74 60.5)"/>
+    <path d="M 77 42 L 79 42 L 75 50 L 73 50 Z"/>
+  </g>
+</svg>
