@@ -179,10 +179,6 @@ const LoginPage = () => {
               <LogIn className="w-5 h-5" />
               Se connecter
             </button>
-
-            <p className="text-center text-sm text-slate-500">
-              Par défaut : <span className="font-mono bg-slate-100 px-2 py-1 rounded">{selectedRole}123</span>
-            </p>
           </form>
         </div>
       </div>
