@@ -8,9 +8,10 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-5.4.19-646cff?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4.17-38bdf8?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[Démo](#-fonctionnalités) • [Installation](#-installation) • [Documentation](#-utilisation) • [Contribution](#-contribution)
+[Démo](#-fonctionnalités) • [Installation](#-installation) • [Documentation](#-utilisation) • [Configuration](#️-configuration) • [Contribution](#-contribution)
 
 </div>
 
@@ -22,9 +23,11 @@
 - [Fonctionnalités](#-fonctionnalités)
 - [Technologies](#️-technologies)
 - [Installation](#-installation)
+- [Configuration Supabase](#-configuration-supabase)
 - [Utilisation](#-utilisation)
 - [Structure du projet](#-structure-du-projet)
 - [Configuration](#️-configuration)
+- [Authentification](#-authentification)
 - [Contribution](#-contribution)
 - [Licence](#-licence)
 
@@ -41,12 +44,22 @@
 - 📱 **Responsive** - Adapté à tous les écrans (mobile, tablette, desktop)
 - ⚡ **Performance** - Build optimisé avec Vite pour des temps de chargement ultra-rapides
 - 🧩 **Composants réutilisables** - Bibliothèque shadcn-ui pour une cohérence visuelle
+- 🔐 **Authentification sécurisée** - Système de rôles (caissier/manager) avec Supabase
+- 💾 **Persistance des données** - Sauvegarde automatique dans PostgreSQL via Supabase
+- 🔄 **Synchronisation temps réel** - Mise à jour optimiste avec rollback automatique
 
 ---
 
 ## 🚀 Fonctionnalités
 
-### 📊 Dashboard
+### � Authentification et Rôles
+- **Rôle Caissier** : Accès Menu, POS, Commandes, Profil
+- **Rôle Manager** : Accès complet + Dashboard, Gestion menu, Statistiques
+- Changement de mot de passe sécurisé
+- Session persistante avec sessionStorage
+- Déconnexion avec confirmation personnalisée
+
+### �📊 Dashboard
 - Vue d'ensemble des statistiques en temps réel
 - Indicateurs de performance (revenus, commandes, clients)
 - Graphiques de ventes avec Recharts
@@ -55,11 +68,13 @@
 
 ### 🍕 Gestion du menu
 - CRUD complet des produits (Créer, Lire, Modifier, Supprimer)
+- **Persistance automatique dans Supabase** - Les modifications sont sauvegardées en temps réel
 - Catégories : Burgers, Pizzas, Boissons, Desserts, Accompagnements
 - Gestion des extras/suppléments avec prix additionnels
 - Upload d'images pour chaque produit
-- Statut de disponibilité en temps réel
+- Statut de disponibilité persistant (conservé après rafraîchissement)
 - Filtrage par catégorie
+- Dialogues de confirmation personnalisés (sans popups navigateur)
 
 ### 💳 Point de vente (POS)
 - Interface de caisse intuitive et rapide
@@ -87,11 +102,14 @@
 - Bouton pour nouvelle commande
 
 ### 📦 Historique des commandes
+- **Persistance complète dans Supabase** - Toutes les commandes sont sauvegardées
 - Liste complète des commandes avec filtres
 - Statuts : En attente, En préparation, Prêt, Terminé, Annulé
 - Détails : Numéro, heure, type (sur place/à emporter), montant
 - Actions : Accepter, Refuser, Marquer comme prêt/terminé
 - Compteurs par statut en temps réel
+- Synchronisation automatique entre les onglets
+- Conservation des données après rafraîchissement de la page
 
 ---
 
@@ -104,13 +122,20 @@
 - **Tailwind CSS 3.4.17** - Framework CSS utilitaire
 - **shadcn-ui** - Composants UI modernes et accessibles
 
+### Backend & Base de données
+- **Supabase** - Backend as a Service (BaaS)
+- **PostgreSQL** - Base de données relationnelle
+- **Row Level Security (RLS)** - Sécurité au niveau des lignes
+- **Real-time subscriptions** - Mises à jour en temps réel
+
 ### Bibliothèques
+- **@supabase/supabase-js** - Client Supabase pour JavaScript
 - **Lucide React** - Icônes modernes (500+ icônes)
-- **Recharts** - Graphiques et visualisations
+- **Recharts 2.15.4** - Graphiques et visualisations
+- **jsPDF** - Génération de PDF pour les reçus
 - **React Hook Form** - Gestion de formulaires
 - **Zod** - Validation de schémas
 - **date-fns** - Manipulation de dates
-- **TanStack Query** - Gestion de l'état serveur
 - **Radix UI** - Primitives UI accessibles
 
 ### Développement
@@ -129,6 +154,7 @@
 - **Node.js** v16+ ([Télécharger](https://nodejs.org/))
 - **npm** v7+ ou **yarn** v1.22+
 - **Git** ([Télécharger](https://git-scm.com/))
+- **Compte Supabase** (gratuit) - [Créer un compte](https://supabase.com/)
 
 ### Étapes d'installation
 
@@ -144,13 +170,62 @@ npm install
 # ou
 yarn install
 
-# 4. Lancer le serveur de développement
+# 4. Configurer les variables d'environnement
+cp .env.example .env.local
+# Éditez .env.local avec vos identifiants Supabase
+
+# 5. Lancer le serveur de développement
 npm run dev
 # ou
 yarn dev
 ```
 
 L'application sera accessible à l'adresse : **http://localhost:8080**
+
+---
+
+## 🔧 Configuration Supabase
+
+### 1. Créer un projet Supabase
+
+1. Allez sur [supabase.com](https://supabase.com/) et créez un compte
+2. Créez un nouveau projet
+3. Notez votre **URL** et **anon key** du projet
+
+### 2. Configurer les variables d'environnement
+
+Créez un fichier `.env.local` à la racine du projet :
+
+```env
+VITE_SUPABASE_URL=votre_url_supabase
+VITE_SUPABASE_ANON_KEY=votre_cle_anon_supabase
+```
+
+### 3. Initialiser la base de données
+
+1. Ouvrez le **SQL Editor** dans votre dashboard Supabase
+2. Copiez le contenu du fichier `supabase-setup.sql`
+3. Exécutez le script pour créer les tables
+
+Le script crée automatiquement :
+- Table `users` (utilisateurs avec rôles)
+- Table `orders` (commandes avec tous les champs)
+- Table `products` (produits avec disponibilité)
+- Politiques RLS (Row Level Security)
+- Index pour optimiser les performances
+- Comptes par défaut (caissier/manager)
+
+### 4. Vérifier l'installation
+
+Lancez l'application et connectez-vous avec :
+
+**Caissier** :
+- Username: `caissier`
+- Password: `caissier123`
+
+**Manager** :
+- Username: `manager`
+- Password: `manager123`
 
 ---
 
@@ -196,25 +271,39 @@ miam-street-food/
 │   └── robots.txt
 ├── src/
 │   ├── components/         # Composants réutilisables
-│   │   ├── layout/        # Composants de layout (Sidebar)
-│   │   └── ui/            # Composants UI shadcn-ui
-│   ├── data/              # Données mock et fixtures
-│   │   └── mockData.ts    # Produits et commandes de test
+│   │   ├── ConfirmDialog.tsx  # Dialog de confirmation personnalisé
+│   │   ├── NavLink.tsx        # Lien de navigation
+│   │   ├── layout/            # Composants de layout
+│   │   │   └── Sidebar.tsx    # Menu latéral avec gestion de rôles
+│   │   └── ui/                # Composants UI shadcn-ui (40+ composants)
+│   ├── context/            # Contextes React (gestion d'état global)
+│   │   ├── AppContext.tsx     # Gestion des commandes + Supabase
+│   │   ├── AuthContext.tsx    # Authentification + SessionStorage
+│   │   └── ProductContext.tsx # Gestion des produits + Supabase
+│   ├── data/              # Données initiales
+│   │   └── mockData.ts    # Produits par défaut (initialisés dans Supabase)
 │   ├── hooks/             # Hooks personnalisés
-│   ├── lib/               # Utilitaires et helpers
+│   │   ├── use-mobile.tsx
+│   │   └── use-toast.ts
+│   ├── lib/               # Utilitaires et configuration
+│   │   ├── supabase.ts    # Client Supabase + Types Database
 │   │   └── utils.ts       # Fonctions utilitaires (FCFA, formatage)
 │   ├── pages/             # Pages de l'application
-│   │   ├── Dashboard.tsx
-│   │   ├── MenuManagement.tsx
-│   │   ├── POSPage.tsx
-│   │   ├── PaymentPage.tsx
-│   │   ├── ReceiptPage.tsx
-│   │   └── OrderHistoryPage.tsx
+│   │   ├── Dashboard.tsx          # Statistiques (Manager uniquement)
+│   │   ├── LoginPage.tsx          # Page de connexion
+│   │   ├── MenuManagement.tsx     # Gestion du menu
+│   │   ├── OrderHistoryPage.tsx   # Historique des commandes
+│   │   ├── PaymentPage.tsx        # Page de paiement
+│   │   ├── POSPage.tsx            # Point de vente
+│   │   ├── ProfilePage.tsx        # Profil utilisateur
+│   │   └── ReceiptPage.tsx        # Reçu de caisse
 │   ├── types/             # Définitions TypeScript
-│   │   └── menu.ts
-│   ├── App.tsx            # Composant racine
+│   │   └── menu.ts        # Types Product, Order, CartItem, etc.
+│   ├── App.tsx            # Composant racine avec Providers
 │   ├── main.tsx           # Point d'entrée
-│   └── index.css          # Styles globaux
+│   └── index.css          # Styles globaux + animations
+├── supabase-setup.sql     # Script de création des tables Supabase
+├── .env.local             # Variables d'environnement (à créer)
 ├── package.json           # Dépendances et scripts
 ├── tsconfig.json          # Configuration TypeScript
 ├── vite.config.ts         # Configuration Vite
@@ -264,6 +353,68 @@ export const categories = [
   // Ajoutez vos catégories ici
 ];
 ```
+
+### Configuration Supabase
+
+Les types de base de données sont définis dans `src/lib/supabase.ts` :
+
+```typescript
+export interface Database {
+  public: {
+    Tables: {
+      orders: { /* ... */ },
+      products: { /* ... */ },
+      users: { /* ... */ },
+    };
+  };
+}
+```
+
+Si vous modifiez le schéma de la base de données, mettez à jour ces types.
+
+---
+
+## 🔐 Authentification
+
+### Système de rôles
+
+**Caissier** (`role: 'caissier'`) :
+- ✅ Menu (consultation)
+- ✅ Point de vente (POS)
+- ✅ Historique des commandes
+- ✅ Profil utilisateur
+- ❌ Dashboard
+- ❌ Gestion du menu (modification)
+
+**Manager** (`role: 'manager'`) :
+- ✅ Accès complet à toutes les fonctionnalités
+- ✅ Dashboard avec statistiques
+- ✅ Gestion complète du menu
+- ✅ Réinitialisation des données
+- ✅ Téléchargement de rapports PDF
+
+### Identifiants par défaut
+
+Ces comptes sont créés automatiquement par le script `supabase-setup.sql` :
+
+```
+Caissier:
+  Username: caissier
+  Password: caissier123
+
+Manager:
+  Username: manager
+  Password: manager123
+```
+
+⚠️ **Important** : Changez ces mots de passe par défaut en production !
+
+### Gestion des sessions
+
+- Les sessions utilisent `sessionStorage` (temporaire)
+- Expiration à la fermeture du navigateur
+- Connexion via Supabase (table `users`)
+- Changement de mot de passe sécurisé
 
 ---
 

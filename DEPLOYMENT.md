@@ -6,6 +6,36 @@ Ce guide explique comment déployer **Miam Street Food** sur Netlify.
 
 - Compte GitHub avec le dépôt `miam-street-food`
 - Compte Netlify (gratuit) : https://app.netlify.com/signup
+- **Compte Supabase** (gratuit) : https://supabase.com/
+- **Base de données Supabase configurée** (voir section ci-dessous)
+
+## 🗄️ Configuration Supabase (REQUIS)
+
+**⚠️ IMPORTANT** : L'application nécessite Supabase pour fonctionner.
+
+### 1. Créer un projet Supabase
+
+1. Allez sur https://supabase.com/ et créez un compte
+2. Créez un nouveau projet
+3. Notez votre **Project URL** et **anon public key**
+
+### 2. Initialiser la base de données
+
+1. Dans votre dashboard Supabase, ouvrez le **SQL Editor**
+2. Copiez le contenu du fichier `supabase-setup.sql` du dépôt
+3. Exécutez le script pour créer :
+   - Table `users` (comptes utilisateurs)
+   - Table `orders` (commandes)
+   - Table `products` (produits)
+   - Politiques RLS et index
+
+### 3. Noter les identifiants
+
+Vous aurez besoin de ces 2 valeurs pour Netlify :
+- **VITE_SUPABASE_URL** : L'URL de votre projet (ex: `https://xxxxx.supabase.co`)
+- **VITE_SUPABASE_ANON_KEY** : La clé publique anon
+
+Trouvez-les dans **Settings** > **API** de votre dashboard Supabase.
 
 ## 🌐 Déploiement automatique (recommandé)
 
@@ -25,7 +55,37 @@ Ce guide explique comment déployer **Miam Street Food** sur Netlify.
    - **Publish directory** : `dist`
 3. Cliquez sur **"Deploy site"**
 
-### 3. Configuration personnalisée (optionnel)
+### 3. Configuration des variables d'environnement (OBLIGATOIRE)
+
+**⚠️ L'application ne fonctionnera pas sans ces variables !**
+
+1. Allez dans **Site settings** → **Environment variables**
+2. Cliquez sur **"Add a variable"**
+3. Ajoutez ces 2 variables :
+
+| Clé | Valeur | Exemple |
+|-----|--------|---------|
+| `VITE_SUPABASE_URL` | URL de votre projet Supabase | `https://xxxxx.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | Clé anon publique de Supabase | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
+
+4. Cliquez sur **"Save"**
+5. **Redéployez le site** pour appliquer les variables
+
+### 4. Déploiement final
+
+1. Cliquez sur **"Deploy site"**
+2. Attendez la fin du build (2-3 minutes)
+3. Le site est en ligne ! 🎉
+
+### 5. Vérification
+
+1. Ouvrez votre site déployé
+2. Essayez de vous connecter avec :
+   - Username: `manager`
+   - Password: `manager123`
+3. Si la connexion fonctionne, tout est bon !
+
+### 6. Configuration personnalisée (optionnel)
 
 #### Nom de domaine personnalisé
 
@@ -33,11 +93,9 @@ Ce guide explique comment déployer **Miam Street Food** sur Netlify.
 2. Cliquez sur **"Add custom domain"**
 3. Suivez les instructions pour configurer votre DNS
 
-#### Variables d'environnement
-
-Si nécessaire, ajoutez des variables dans **Site settings** → **Environment variables**
-
 ## 🔧 Déploiement manuel
+
+**⚠️ IMPORTANT** : N'oubliez pas de configurer les variables d'environnement Supabase dans Netlify avant le déploiement manuel !
 
 ### Via Netlify CLI
 
@@ -48,12 +106,18 @@ npm install -g netlify-cli
 # Se connecter
 netlify login
 
+# Créer un fichier .env.local avec vos clés Supabase
+echo "VITE_SUPABASE_URL=votre_url" > .env.local
+echo "VITE_SUPABASE_ANON_KEY=votre_cle" >> .env.local
+
 # Build du projet
 npm run build
 
 # Déployer
 netlify deploy --prod
 ```
+
+**Note** : Les variables d'environnement doivent être configurées dans les paramètres Netlify (voir section précédente).
 
 ### Via glisser-déposer
 

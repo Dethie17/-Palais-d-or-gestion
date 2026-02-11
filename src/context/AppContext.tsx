@@ -1,6 +1,6 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useEffect, useState } from 'react';
 import { Order } from '@/types/menu';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { supabase } from '@/lib/supabase';
 
 interface AppContextType {
   orders: Order[];
@@ -8,29 +8,174 @@ interface AppContextType {
   updateOrder: (id: string, updates: Partial<Order>) => void;
   deleteOrder: (id: string) => void;
   clearAllOrders: () => void;
+  loading: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [orders, setOrders] = useLocalStorage<Order[]>('fooddash-orders', []);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const addOrder = (order: Order) => {
-    setOrders((prev) => [order, ...prev]);
+  // Charger les commandes depuis Supabase au démarrage
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  const loadOrders = async () => {
+    try {
+      console.log('🔄 Chargement des commandes depuis Supabase...');
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ Erreur lors du chargement des commandes:', error);
+        console.error('❌ Message:', error.message);
+        // Si erreur de connexion, commencer avec une liste vide
+        setOrders([]);
+      } else if (data && data.length > 0) {
+        console.log(`✅ ${data.length} commande(s) chargée(s) depuis Supabase`);
+        console.log('📦 Données:', data);
+        // Convertir les données Supabase en Orders
+        const ordersFromDB = data.map((row) => ({
+          id: row.id,
+          number: row.number,
+          items: row.items,
+          extras: row.extras || undefined,
+          subtotal: row.subtotal,
+          tax: row.tax,
+          total: row.total,
+          status: row.status as Order['status'],
+          type: row.type as Order['type'],
+          createdAt: new Date(row.created_at),
+          customerName: row.customer_name || undefined,
+          paymentMethod: row.payment_method || undefined,
+          amountReceived: row.amount_received || undefined,
+          change: row.change || undefined,
+        }));
+        setOrders(ordersFromDB);
+      } else {
+        console.log('ℹ️ Aucune commande dans Supabase - Liste vide');
+        // Base vide, commencer sans commandes
+        setOrders([]);
+      }
+    } catch (error) {
+      console.error('❌ ERREUR critique chargement:', error);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const updateOrder = (id: string, updates: Partial<Order>) => {
-    setOrders((prev) =>
-      prev.map((order) => (order.id === id ? { ...order, ...updates } : order))
-    );
+  const addOrder = async (order: Order) => {
+    try {
+      console.log('🔵 Ajout commande - Début:', order.number);
+      
+      // Mettre à jour l'état local immédiatement pour une meilleure réactivité
+      setOrders((prev) => [order, ...prev]);
+
+      const orderToInsert = {
+        id: order.id,
+        number: order.number,
+        items: order.items,
+        extras: order.extras,
+        subtotal: order.subtotal,
+        tax: order.tax,
+        total: order.total,
+        status: order.status,
+        type: order.type,
+        created_at: order.createdAt.toISOString(),
+        customer_name: order.customerName,
+        payment_method: order.paymentMethod,
+        amount_received: order.amountReceived,
+        change: order.change,
+      };
+
+      console.log('🔵 Données à insérer:', orderToInsert);
+
+      const { data, error } = await supabase.from('orders').insert([orderToInsert]).select();
+      
+      if (error) {
+        console.error('❌ ERREUR Supabase lors de l\'ajout:', error);
+        console.error('❌ Message:', error.message);
+        console.error('❌ Détails:', error.details);
+        // En cas d'erreur, on garde quand même l'ajout local
+      } else {
+        console.log('✅ Commande sauvegardée dans Supabase:', data);
+      }
+    } catch (error) {
+      console.error('❌ ERREUR critique ajout commande:', error);
+      // En cas d'erreur, on garde quand même l'ajout local
+    }
   };
 
-  const deleteOrder = (id: string) => {
-    setOrders((prev) => prev.filter((order) => order.id !== id));
+  const updateOrder = async (id: string, updates: Partial<Order>) => {
+    try {
+      // Mettre à jour l'état local immédiatement pour une meilleure réactivité
+      setOrders((prev) =>
+        prev.map((order) => (order.id === id ? { ...order, ...updates } : order))
+      );
+
+      const updateData: any = {};
+      
+      if (updates.status) updateData.status = updates.status;
+      if (updates.paymentMethod) updateData.payment_method = updates.paymentMethod;
+      if (updates.customerName) updateData.customer_name = updates.customerName;
+      if (updates.items) updateData.items = updates.items;
+      if (updates.extras !== undefined) updateData.extras = updates.extras;
+      if (updates.subtotal !== undefined) updateData.subtotal = updates.subtotal;
+      if (updates.tax !== undefined) updateData.tax = updates.tax;
+      if (updates.total !== undefined) updateData.total = updates.total;
+      if (updates.amountReceived !== undefined) updateData.amount_received = updates.amountReceived;
+      if (updates.change !== undefined) updateData.change = updates.change;
+
+      const { error } = await supabase
+        .from('orders')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) {
+        console.error('Erreur mise à jour Supabase:', error);
+        // En cas d'erreur, on garde quand même la mise à jour locale
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour:', error);
+      // En cas d'erreur, on garde quand même la mise à jour locale
+    }
   };
 
-  const clearAllOrders = () => {
-    setOrders([]);
+  const deleteOrder = async (id: string) => {
+    try {
+      // Mettre à jour l'état local immédiatement pour une meilleure réactivité
+      setOrders((prev) => prev.filter((order) => order.id !== id));
+
+      const { error } = await supabase.from('orders').delete().eq('id', id);
+
+      if (error) {
+        console.error('Erreur suppression Supabase:', error);
+        // En cas d'erreur, on garde quand même la suppression locale
+      }
+    } catch (error) {
+      console.error('Erreur suppression:', error);
+      // En cas d'erreur, on garde quand même la suppression locale
+    }
+  };
+
+  const clearAllOrders = async () => {
+    try {
+      const { error } = await supabase.from('orders').delete().neq('id', '');
+
+      if (error) {
+        console.error('Erreur suppression totale:', error);
+      } else {
+        setOrders([]);
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+    }
   };
 
   return (
@@ -41,6 +186,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updateOrder,
         deleteOrder,
         clearAllOrders,
+        loading,
       }}
     >
       {children}
@@ -185,10 +331,41 @@ export function getWeeklySales(orders: Order[]) {
   return salesByDay;
 }
 
-export function getChartData(orders: Order[], period: 'day' | 'week' | 'month') {
+export function getChartData(orders: Order[], period: 'realtime' | 'day' | 'week' | 'month') {
   const completedOrders = orders.filter((order) => order.status === 'completed');
   
-  if (period === 'day') {
+  if (period === 'realtime') {
+    // Afficher les 12 dernières heures en temps réel
+    const now = new Date();
+    const data = [];
+    
+    for (let i = 11; i >= 0; i--) {
+      const endDate = new Date(now);
+      endDate.setHours(now.getHours() - i);
+      endDate.setMinutes(59, 59, 999);
+      
+      const startDate = new Date(endDate);
+      startDate.setMinutes(0, 0, 0);
+      
+      const hourOrders = completedOrders.filter(
+        (order) => order.createdAt >= startDate && order.createdAt <= endDate
+      );
+      
+      const revenue = hourOrders.reduce((sum, order) => sum + order.total, 0);
+      const orderCount = hourOrders.length;
+      const customers = hourOrders.length;
+      
+      const hour = startDate.getHours();
+      data.push({
+        label: `${hour}h`,
+        revenue,
+        orders: orderCount,
+        customers
+      });
+    }
+    
+    return data;
+  } else if (period === 'day') {
     // Afficher les 7 derniers jours
     const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
     const now = new Date();

@@ -8,19 +8,23 @@ import {
   Package, 
   ArrowRight,
   Clock,
-  Calendar
+  Calendar,
+  RotateCcw,
+  FileDown
 } from 'lucide-react';
 import { useApp, getOrderStats, getTopProducts, getWeeklySales, getChartData } from '@/context/AppContext';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 interface DashboardProps {
   onNavigate: (page: PageName) => void;
 }
 
-type PeriodFilter = 'day' | 'week' | 'month';
+type PeriodFilter = 'realtime' | 'day' | 'week' | 'month';
 
 const getStatCards = (orders: any[], period: PeriodFilter) => {
-  const stats = getOrderStats(orders, period);
-  const periodLabel = period === 'day' ? 'du jour' : period === 'week' ? 'de la semaine' : 'du mois';
+  const stats = getOrderStats(orders, period === 'realtime' ? 'day' : period);
+  const periodLabel = period === 'realtime' ? 'en temps réel' : period === 'day' ? 'du jour' : period === 'week' ? 'de la semaine' : 'du mois';
 
   return [
     { 
@@ -84,22 +88,106 @@ const statusLabels: Record<string, string> = {
 };
 
 const Dashboard = ({ onNavigate }: DashboardProps) => {
-  const { orders } = useApp();
-  const [period, setPeriod] = useState<PeriodFilter>('day');
+  const { orders, clearAllOrders } = useApp();
+  const [period, setPeriod] = useState<PeriodFilter>('realtime');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   
   const chartData = getChartData(orders, period);
   const topProducts = getTopProducts(orders);
   const recentOrders = orders.slice(0, 6);
   
-  // Trouver la valeur max pour normaliser les barres
-  const maxRevenue = Math.max(...chartData.map((d) => d.revenue), 1);
-  const maxOrders = Math.max(...chartData.map((d) => d.orders), 1);
-  const maxCustomers = Math.max(...chartData.map((d) => d.customers), 1);
-  const globalMax = Math.max(maxRevenue, maxOrders * 1000, maxCustomers * 1000);
-  
   const statCards = getStatCards(orders, period);
 
+  const handleResetData = () => {
+    setShowResetConfirm(true);
+  };
+
+  const confirmResetData = () => {
+    clearAllOrders();
+  };
+
+  const handleDownloadReport = async () => {
+    try {
+      // Dynamically import jsPDF
+      const { jsPDF } = await import('jspdf');
+      
+      const doc = new jsPDF();
+      const stats = getOrderStats(orders, 'month');
+      const now = new Date();
+      const monthName = now.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+      // Titre
+      doc.setFontSize(20);
+      doc.setTextColor(234, 88, 12); // Orange
+      doc.text('MIAM STREETFOOD', 105, 20, { align: 'center' });
+      
+      doc.setFontSize(16);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`Rapport Mensuel - ${monthName}`, 105, 30, { align: 'center' });
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Généré le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR')}`, 105, 37, { align: 'center' });
+      
+      // Ligne de séparation
+      doc.setDrawColor(234, 88, 12);
+      doc.setLineWidth(0.5);
+      doc.line(20, 42, 190, 42);
+      
+      // Statistiques principales
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Statistiques du Mois', 20, 52);
+      
+      doc.setFontSize(11);
+      const statsY = 60;
+      doc.text(`Total Revenus: ${formatCurrency(stats.revenue)}`, 20, statsY);
+      doc.text(`Total Commandes: ${stats.orders}`, 20, statsY + 7);
+      doc.text(`Total Clients: ${stats.customers}`, 20, statsY + 14);
+      
+      // Top produits
+      doc.setFontSize(14);
+      doc.text('Top 5 Produits', 20, statsY + 28);
+      
+      doc.setFontSize(10);
+      topProducts.forEach((product, i) => {
+        const y = statsY + 36 + (i * 7);
+        doc.text(`${i + 1}. ${product.name}`, 25, y);
+        doc.text(`${product.sold} vendus`, 120, y);
+        doc.text(formatCurrency(product.revenue), 160, y);
+      });
+      
+      // Commandes récentes
+      doc.setFontSize(14);
+      doc.text('Dernières Commandes', 20, statsY + 78);
+      
+      doc.setFontSize(9);
+      recentOrders.slice(0, 10).forEach((order, i) => {
+        const y = statsY + 86 + (i * 6);
+        const date = order.createdAt.toLocaleDateString('fr-FR');
+        doc.text(`${order.number}`, 25, y);
+        doc.text(`${order.status}`, 60, y);
+        doc.text(formatCurrency(order.total), 100, y);
+        doc.text(date, 140, y);
+      });
+      
+      // Footer
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text('Miam streetfood - Système de gestion de restaurant', 105, 285, { align: 'center' });
+      
+      // Télécharger
+      doc.save(`rapport-${monthName.replace(' ', '-')}.pdf`);
+      
+      console.log('✓ Rapport PDF téléchargé avec succès !');
+    } catch (error) {
+      console.error('Erreur lors de la génération du PDF:', error);
+      console.error('❌ Erreur: Installez jsPDF avec "npm install jspdf"');
+    }
+  };
+
   const periodOptions: { value: PeriodFilter; label: string }[] = [
+    { value: 'realtime', label: 'Temps réel' },
     { value: 'day', label: 'Jour' },
     { value: 'week', label: 'Semaine' },
     { value: 'month', label: 'Mois' }
@@ -107,6 +195,16 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
 
   return (
     <div className="p-3 sm:p-4 lg:p-8 space-y-4 sm:space-y-6 lg:space-y-8 animate-fade-in">
+      <ConfirmDialog
+        isOpen={showResetConfirm}
+        onClose={() => setShowResetConfirm(false)}
+        onConfirm={confirmResetData}
+        title="Réinitialiser les données"
+        message="⚠️ Voulez-vous vraiment réinitialiser toutes les données du dashboard ? Cette action est irréversible et supprimera toutes les commandes."
+        type="danger"
+        confirmText="Réinitialiser"
+        cancelText="Annuler"
+      />
       {/* Header avec filtres de période */}
       <div className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
@@ -116,6 +214,24 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
               <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
             </h1>
             <p className="text-xs sm:text-sm text-slate-600 mt-1">Vue d'ensemble de votre restaurant</p>
+          </div>
+          
+          {/* Boutons d'action */}
+          <div className="flex gap-2">
+            <button
+              onClick={handleDownloadReport}
+              className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-blue-500/50 transition-all hover:scale-105"
+            >
+              <FileDown className="w-4 h-4" />
+              <span className="hidden sm:inline">Rapport PDF</span>
+            </button>
+            <button
+              onClick={handleResetData}
+              className="flex items-center gap-2 bg-gradient-to-r from-red-500 to-pink-600 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-red-500/50 transition-all hover:scale-105"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span className="hidden sm:inline">Réinitialiser</span>
+            </button>
           </div>
         </div>
 
@@ -127,13 +243,19 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
               <button
                 key={option.value}
                 onClick={() => setPeriod(option.value)}
-                className={`flex-1 sm:flex-none px-3 sm:px-6 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                className={`relative flex-1 sm:flex-none px-3 sm:px-6 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
                   period === option.value
                     ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-md'
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 {option.label}
+                {option.value === 'realtime' && period === 'realtime' && (
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -184,74 +306,107 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
         <div className="lg:col-span-2 bg-white rounded-xl sm:rounded-2xl p-4 sm:p-5 lg:p-7 shadow-sm border border-slate-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
             <div>
-              <h2 className="text-base sm:text-lg lg:text-xl font-bold text-slate-800">
-                Performance {period === 'day' ? 'journalière' : period === 'week' ? 'hebdomadaire' : 'mensuelle'}
+              <h2 className="text-base sm:text-lg lg:text-xl font-bold text-slate-800 flex items-center gap-2">
+                Performance {period === 'realtime' ? 'en temps réel' : period === 'day' ? 'journalière' : period === 'week' ? 'hebdomadaire' : 'mensuelle'}
+                {period === 'realtime' && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-100 text-red-600 text-xs font-semibold">
+                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                    LIVE
+                  </span>
+                )}
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-                Évolution des ventes au fil du temps
+                {period === 'realtime' ? 'Dernières 12 heures - Mise à jour instantanée' : 'Évolution des ventes au fil du temps'}
               </p>
             </div>
-            <div className="flex gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-[10px] sm:text-xs font-semibold">
-                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                Revenus
-              </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-100 text-blue-700 text-[10px] sm:text-xs font-semibold">
-                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                Commandes
-              </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-100 text-purple-700 text-[10px] sm:text-xs font-semibold">
-                <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                Clients
-              </div>
-            </div>
           </div>
-          <div className="flex items-end gap-2 sm:gap-3 lg:gap-6 h-40 sm:h-48 lg:h-64">
-            {chartData.map((d, index) => (
-              <div key={index} className="flex-1 flex flex-col items-center gap-2 group">
-                <div className="flex items-end gap-0.5 sm:gap-1 w-full h-full">
-                  {/* Barre Revenus */}
-                  <div className="relative flex-1 group/bar">
-                    <div
-                      className="w-full bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t hover:from-emerald-600 hover:to-emerald-500 transition-all shadow-md relative overflow-hidden"
-                      style={{ height: `${d.revenue > 0 ? Math.max((d.revenue / globalMax) * 100, 2) : 0}%` }}
-                    >
-                      <div className="absolute inset-0 bg-white/20 group-hover/bar:bg-white/40 transition-colors"></div>
-                    </div>
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover/bar:opacity-100 transition-opacity bg-slate-800 text-white text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap z-10">
-                      {formatCurrency(d.revenue)}
-                    </div>
-                  </div>
-                  
-                  {/* Barre Commandes */}
-                  <div className="relative flex-1 group/bar">
-                    <div
-                      className="w-full bg-gradient-to-t from-blue-500 to-blue-400 rounded-t hover:from-blue-600 hover:to-blue-500 transition-all shadow-md relative overflow-hidden"
-                      style={{ height: `${d.orders > 0 ? Math.max((d.orders * 1000 / globalMax) * 100, 2) : 0}%` }}
-                    >
-                      <div className="absolute inset-0 bg-white/20 group-hover/bar:bg-white/40 transition-colors"></div>
-                    </div>
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover/bar:opacity-100 transition-opacity bg-slate-800 text-white text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap z-10">
-                      {d.orders} cmd
-                    </div>
-                  </div>
-                  
-                  {/* Barre Clients */}
-                  <div className="relative flex-1 group/bar">
-                    <div
-                      className="w-full bg-gradient-to-t from-purple-500 to-purple-400 rounded-t hover:from-purple-600 hover:to-purple-500 transition-all shadow-md relative overflow-hidden"
-                      style={{ height: `${d.customers > 0 ? Math.max((d.customers * 1000 / globalMax) * 100, 2) : 0}%` }}
-                    >
-                      <div className="absolute inset-0 bg-white/20 group-hover/bar:bg-white/40 transition-colors"></div>
-                    </div>
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover/bar:opacity-100 transition-opacity bg-slate-800 text-white text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap z-10">
-                      {d.customers} clients
-                    </div>
-                  </div>
-                </div>
-                <span className="text-[10px] sm:text-xs lg:text-sm font-bold text-slate-700 mt-1">{d.label}</span>
-              </div>
-            ))}
+          <div className="h-64 sm:h-72 lg:h-80 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={chartData}
+                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} />
+                <XAxis 
+                  dataKey="label" 
+                  stroke="#64748b"
+                  style={{ fontSize: '12px', fontWeight: '600' }}
+                  tick={{ fill: '#475569' }}
+                />
+                <YAxis 
+                  stroke="#64748b"
+                  style={{ fontSize: '11px' }}
+                  tick={{ fill: '#475569' }}
+                  width={60}
+                  tickFormatter={(value) => {
+                    if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
+                    return value;
+                  }}
+                />
+                <Tooltip 
+                  contentStyle={{
+                    backgroundColor: '#1e293b',
+                    border: 'none',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                    color: '#fff'
+                  }}
+                  labelStyle={{ color: '#fff', fontWeight: 'bold', marginBottom: '8px' }}
+                  itemStyle={{ color: '#fff', padding: '4px 0' }}
+                  cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '5 5' }}
+                  formatter={(value: any, name: string) => {
+                    if (name === 'Revenus') return [formatCurrency(value), name];
+                    if (name === 'Commandes') return [`${value} cmd`, name];
+                    if (name === 'Clients') return [`${value} clients`, name];
+                    return [value, name];
+                  }}
+                />
+                <Legend 
+                  wrapperStyle={{ paddingTop: '20px' }}
+                  iconType="circle"
+                  formatter={(value) => (
+                    <span style={{ color: '#475569', fontWeight: '600', fontSize: '13px' }}>{value}</span>
+                  )}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="revenue" 
+                  name="Revenus"
+                  stroke="#10b981" 
+                  strokeWidth={3}
+                  dot={{ fill: '#10b981', strokeWidth: 2, r: 5 }}
+                  activeDot={{ r: 7, fill: '#059669', stroke: '#fff', strokeWidth: 2 }}
+                  animationDuration={1500}
+                  animationBegin={0}
+                  animationEasing="ease-in-out"
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="orders" 
+                  name="Commandes"
+                  stroke="#3b82f6" 
+                  strokeWidth={3}
+                  dot={{ fill: '#3b82f6', strokeWidth: 2, r: 5 }}
+                  activeDot={{ r: 7, fill: '#2563eb', stroke: '#fff', strokeWidth: 2 }}
+                  animationDuration={1500}
+                  animationBegin={200}
+                  animationEasing="ease-in-out"
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="customers" 
+                  name="Clients"
+                  stroke="#a855f7" 
+                  strokeWidth={3}
+                  dot={{ fill: '#a855f7', strokeWidth: 2, r: 5 }}
+                  activeDot={{ r: 7, fill: '#9333ea', stroke: '#fff', strokeWidth: 2 }}
+                  animationDuration={1500}
+                  animationBegin={400}
+                  animationEasing="ease-in-out"
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </div>
 

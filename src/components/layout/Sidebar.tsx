@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { PageName } from '@/types/menu';
+import { useAuth } from '@/context/AuthContext';
 import { 
   LayoutDashboard, 
   UtensilsCrossed, 
@@ -7,7 +8,8 @@ import {
   Receipt, 
   UserCircle,
   X,
-  ChefHat
+  ChefHat,
+  User
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -17,14 +19,19 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-const navItems: { page: PageName; label: string; icon: React.ReactNode }[] = [
-  { page: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard className="w-5 h-5" /> },
-  { page: 'menu', label: 'Menu', icon: <UtensilsCrossed className="w-5 h-5" /> },
-  { page: 'pos', label: 'Caisse (POS)', icon: <ShoppingCart className="w-5 h-5" /> },
-  { page: 'orders', label: 'Commandes', icon: <Receipt className="w-5 h-5" /> },
+const allNavItems: { page: PageName; label: string; icon: React.ReactNode; roles: ('caissier' | 'manager')[] }[] = [
+  { page: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard className="w-5 h-5" />, roles: ['manager'] },
+  { page: 'menu', label: 'Gestion Menu', icon: <UtensilsCrossed className="w-5 h-5" />, roles: ['caissier', 'manager'] },
+  { page: 'pos', label: 'Caisse (POS)', icon: <ShoppingCart className="w-5 h-5" />, roles: ['caissier', 'manager'] },
+  { page: 'orders', label: 'Commandes', icon: <Receipt className="w-5 h-5" />, roles: ['caissier', 'manager'] },
 ];
 
 const Sidebar = ({ currentPage, onNavigate, open, onClose }: SidebarProps) => {
+  const { user } = useAuth();
+
+  // Filtrer les items selon le rôle de l'utilisateur
+  const navItems = user ? allNavItems.filter(item => item.roles.includes(user.role)) : [];
+
   const handleNav = (page: PageName) => {
     onNavigate(page);
     onClose();
@@ -75,15 +82,30 @@ const Sidebar = ({ currentPage, onNavigate, open, onClose }: SidebarProps) => {
 
         {/* Footer */}
         <div className="p-4 border-t border-white/10">
-          <div className="flex items-center gap-3 px-2 py-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center flex-shrink-0 shadow-lg">
-              <UserCircle className="w-6 h-6 text-white" />
+          <button
+            onClick={() => handleNav('profile')}
+            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 ${
+              currentPage === 'profile'
+                ? 'bg-gradient-to-r from-orange-500 to-red-600 shadow-lg'
+                : 'bg-white/5 hover:bg-white/10'
+            }`}
+          >
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg ${
+              currentPage === 'profile'
+                ? 'bg-white/20'
+                : 'bg-gradient-to-br from-orange-500 to-red-600'
+            }`}>
+              <User className="w-6 h-6 text-white" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white truncate">Administrateur</p>
-              <p className="text-xs text-slate-400 truncate">Gérant principal</p>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-semibold text-white truncate capitalize">
+                {user?.username || 'Utilisateur'}
+              </p>
+              <p className="text-xs text-slate-300 truncate">
+                {user?.role === 'manager' ? '👑 Manager' : '👤 Caissier'}
+              </p>
             </div>
-          </div>
+          </button>
         </div>
       </aside>
     </>

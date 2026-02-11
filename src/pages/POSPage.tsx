@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { CartItem, Product } from '@/types/menu';
-import { mockProducts, categories, categoryIcons } from '@/data/mockData';
+import { categories, categoryIcons } from '@/data/mockData';
 import { formatCurrency } from '@/lib/utils';
+import { useProducts } from '@/context/ProductContext';
 import { 
   ShoppingCart, 
   X, 
@@ -30,12 +31,13 @@ const categoryIconsMap: Record<string, React.ReactNode> = {
 };
 
 const POSPage = ({ onProceedToPayment }: POSPageProps) => {
+  const { products } = useProducts();
   const [activeCategory, setActiveCategory] = useState('Tous');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [animatingId, setAnimatingId] = useState<string | null>(null);
   const [showCart, setShowCart] = useState(false);
 
-  const availableProducts = mockProducts.filter((p) => p.available);
+  const availableProducts = products.filter((p) => p.available);
   const filtered = activeCategory === 'Tous' ? availableProducts : availableProducts.filter((p) => p.category === activeCategory);
 
   const addToCart = (product: Product) => {

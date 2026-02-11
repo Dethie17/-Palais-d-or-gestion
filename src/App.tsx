@@ -7,15 +7,37 @@ import POSPage from './pages/POSPage';
 import PaymentPage from './pages/PaymentPage';
 import ReceiptPage from './pages/ReceiptPage';
 import OrderHistoryPage from './pages/OrderHistoryPage';
+import ProfilePage from './pages/ProfilePage';
+import LoginPage from './pages/LoginPage';
 import { PageName, CartItem, Order } from './types/menu';
 import { AppProvider, useApp } from './context/AppContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { ProductProvider } from './context/ProductContext';
 
 function AppContent() {
   const { addOrder } = useApp();
+  const { isAuthenticated, loading } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageName>('dashboard');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Afficher un loader pendant le chargement initial
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-orange-50/20 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600 font-medium">Chargement...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Si non authentifié, afficher la page de login
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
 
   const navigateTo = (page: PageName) => setCurrentPage(page);
 
@@ -25,7 +47,7 @@ function AppContent() {
   };
 
   const handlePaymentComplete = (order: Order) => {
-    // Save order to localStorage
+    // Sauvegarde de la commande dans Supabase
     addOrder(order);
     setCurrentOrder(order);
     setCart([]);
@@ -52,6 +74,8 @@ function AppContent() {
         return <ReceiptPage order={currentOrder} onNewOrder={handleNewOrder} />;
       case 'orders':
         return <OrderHistoryPage />;
+      case 'profile':
+        return <ProfilePage />;
       default:
         return <Dashboard onNavigate={navigateTo} />;
     }
@@ -83,9 +107,13 @@ function AppContent() {
 
 const App = () => {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <AuthProvider>
+      <ProductProvider>
+        <AppProvider>
+          <AppContent />
+        </AppProvider>
+      </ProductProvider>
+    </AuthProvider>
   );
 };
 

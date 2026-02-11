@@ -50,4 +50,4 @@ export interface Order {
   change?: number;
 }
 
-export type PageName = 'dashboard' | 'menu' | 'pos' | 'payment' | 'receipt' | 'orders';
+export type PageName = 'dashboard' | 'menu' | 'pos' | 'payment' | 'receipt' | 'orders' | 'profile';

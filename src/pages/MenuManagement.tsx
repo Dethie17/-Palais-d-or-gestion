@@ -1,25 +1,39 @@
 import { useState } from 'react';
 import { Product, ProductExtra } from '@/types/menu';
-import { mockProducts, categories } from '@/data/mockData';
+import { categories } from '@/data/mockData';
 import { formatCurrency } from '@/lib/utils';
 import { Plus, Edit2, Trash2, X, Check } from 'lucide-react';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { useProducts } from '@/context/ProductContext';
 
 const MenuManagement = () => {
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const { products, updateProduct, addProduct, deleteProduct: deleteProductFromContext } = useProducts();
   const [activeCategory, setActiveCategory] = useState('Tous');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<string | null>(null);
 
   const filtered = activeCategory === 'Tous' ? products : products.filter((p) => p.category === activeCategory);
 
   const toggleAvailability = (id: string) => {
-    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, available: !p.available } : p)));
+    const product = products.find((p) => p.id === id);
+    if (product) {
+      updateProduct(id, { available: !product.available });
+    }
   };
 
-  const deleteProduct = (id: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) {
-      setProducts((prev) => prev.filter((p) => p.id !== id));
+  const handleDeleteProduct = (id: string) => {
+    setProductToDelete(id);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = () => {
+    if (productToDelete) {
+      deleteProductFromContext(productToDelete);
+      setProductToDelete(null);
     }
+    setShowDeleteConfirm(false);
   };
 
   const openEdit = (product: Product) => {
@@ -108,7 +122,7 @@ const MenuManagement = () => {
                   <button onClick={() => openEdit(product)} className="p-2.5 rounded-lg hover:bg-blue-50 transition-colors text-slate-600 hover:text-blue-600 group/edit">
                     <Edit2 className="w-4.5 h-4.5" />
                   </button>
-                  <button onClick={() => deleteProduct(product.id)} className="p-2.5 rounded-lg hover:bg-red-50 transition-colors text-slate-600 hover:text-red-600 group/delete">
+                  <button onClick={() => handleDeleteProduct(product.id)} className="p-2.5 rounded-lg hover:bg-red-50 transition-colors text-slate-600 hover:text-red-600 group/delete">
                     <Trash2 className="w-4.5 h-4.5" />
                   </button>
                 </div>
@@ -121,12 +135,24 @@ const MenuManagement = () => {
       {/* Modal */}
       {showModal && <ProductModal product={editingProduct} onClose={() => setShowModal(false)} onSave={(p) => {
         if (editingProduct) {
-          setProducts((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+          updateProduct(p.id, p);
         } else {
-          setProducts((prev) => [...prev, { ...p, id: Date.now().toString() }]);
+          addProduct({ ...p, id: Date.now().toString() });
         }
         setShowModal(false);
       }} />}
+
+      {/* Confirmation de suppression */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Supprimer le produit ?"
+        message="Êtes-vous sûr de vouloir supprimer ce produit ? Cette action est irréversible."
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        type="danger"
+        onConfirm={confirmDelete}
+        onClose={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 };

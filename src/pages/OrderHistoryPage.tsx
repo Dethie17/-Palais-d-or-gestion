@@ -3,6 +3,7 @@ import { formatCurrency } from '@/lib/utils';
 import { Clock, ShoppingBag, Search, Trash2, XCircle, CheckCircle, Receipt } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Order } from '@/types/menu';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 interface ReceiptModalProps {
   order: Order;
@@ -113,21 +114,36 @@ const OrderHistoryPage = () => {
   const { orders, updateOrder, deleteOrder } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'danger' | 'warning' | 'info';
+    onConfirm: () => void;
+  }>({ isOpen: false, title: '', message: '', type: 'warning', onConfirm: () => {} });
 
   const filteredOrders = orders.filter((order) =>
     order.number.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleCancelOrder = (orderId: string) => {
-    if (confirm('Voulez-vous vraiment annuler cette commande ?')) {
-      updateOrder(orderId, { status: 'cancelled' });
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Annuler la commande',
+      message: 'Voulez-vous vraiment annuler cette commande ?',
+      type: 'warning',
+      onConfirm: () => updateOrder(orderId, { status: 'cancelled' }),
+    });
   };
 
   const handleDeleteOrder = (orderId: string) => {
-    if (confirm('Voulez-vous vraiment supprimer cette commande ? Cette action est irréversible.')) {
-      deleteOrder(orderId);
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Supprimer la commande',
+      message: 'Voulez-vous vraiment supprimer cette commande ? Cette action est irréversible.',
+      type: 'danger',
+      onConfirm: () => deleteOrder(orderId),
+    });
   };
 
   const handleMarkAsSold = (orderId: string) => {
@@ -163,6 +179,16 @@ const OrderHistoryPage = () => {
   return (
     <div className="p-3 sm:p-4 lg:p-8 space-y-4 sm:space-y-6 animate-fade-in">
       {selectedOrder && <ReceiptModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+        confirmText="Confirmer"
+        cancelText="Annuler"
+      />
       
       <div className="flex flex-col gap-4">
         <div>
