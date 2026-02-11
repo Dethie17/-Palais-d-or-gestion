@@ -99,11 +99,7 @@ const LoginPage = () => {
             </button>
           </div>
 
-          <div className="mt-8 text-center text-white/80 text-sm">
-            <p>Identifiants par défaut :</p>
-            <p className="mt-2">Caissier : <span className="font-mono bg-white/20 px-2 py-1 rounded">caissier / caissier123</span></p>
-            <p className="mt-1">Manager : <span className="font-mono bg-white/20 px-2 py-1 rounded">manager / manager123</span></p>
-          </div>
+          
         </div>
       </div>
     );
