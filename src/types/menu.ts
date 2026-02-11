@@ -28,10 +28,16 @@ export interface CartItem extends Product {
   selectedExtras?: ProductExtra[];
 }
 
+export interface OrderExtra {
+  extra: ProductExtra;
+  quantity: number;
+}
+
 export interface Order {
   id: string;
   number: string;
   items: CartItem[];
+  extras?: OrderExtra[];
   subtotal: number;
   tax: number;
   total: number;
@@ -40,6 +46,8 @@ export interface Order {
   createdAt: Date;
   paymentMethod?: string;
   customerName?: string;
+  amountReceived?: number;
+  change?: number;
 }
 
 export type PageName = 'dashboard' | 'menu' | 'pos' | 'payment' | 'receipt' | 'orders';

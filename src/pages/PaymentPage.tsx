@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CartItem, Order } from '@/types/menu';
+import { CartItem, Order, ProductExtra } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
 import { 
   ArrowLeft, 
@@ -8,7 +8,9 @@ import {
   Smartphone, 
   Receipt, 
   CheckCircle,
-  Delete
+  Delete,
+  Plus,
+  Minus
 } from 'lucide-react';
 
 interface PaymentPageProps {
@@ -24,13 +26,31 @@ const paymentMethods = [
   { id: 'voucher', label: 'Chèque resto', icon: Receipt, gradient: 'from-purple-500 to-pink-600' },
 ];
 
+const availableExtras: ProductExtra[] = [
+  { id: 'frites', name: 'Frites', price: 500 },
+  { id: 'eau', name: 'Eau', price: 300 },
+  { id: 'boisson', name: 'Boisson', price: 500 },
+  { id: 'fromage', name: 'Fromage', price: 400 },
+];
+
+const extraImages: Record<string, string> = {
+  frites: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=150&h=150&fit=crop',
+  eau: 'https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=150&h=150&fit=crop',
+  boisson: 'https://images.unsplash.com/photo-1546173159-315724a31696?w=150&h=150&fit=crop',
+  fromage: 'https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=150&h=150&fit=crop',
+};
+
 const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
   const [selectedMethod, setSelectedMethod] = useState('mobile');
   const [amountReceived, setAmountReceived] = useState('');
+  const [selectedExtras, setSelectedExtras] = useState<{ [key: string]: number }>({});
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = subtotal * 0.1;
-  const total = subtotal + tax;
+  const extrasTotal = Object.entries(selectedExtras).reduce((sum, [extraId, quantity]) => {
+    const extra = availableExtras.find(e => e.id === extraId);
+    return sum + (extra ? extra.price * quantity : 0);
+  }, 0);
+  const total = subtotal + extrasTotal;
   const received = parseFloat(amountReceived) || 0;
   const change = received - total;
 
@@ -42,18 +62,46 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
     }
   };
 
+  const handleIncreaseExtra = (extraId: string) => {
+    setSelectedExtras(prev => ({
+      ...prev,
+      [extraId]: (prev[extraId] || 0) + 1
+    }));
+  };
+
+  const handleDecreaseExtra = (extraId: string) => {
+    setSelectedExtras(prev => {
+      const newQuantity = (prev[extraId] || 0) - 1;
+      if (newQuantity <= 0) {
+        const { [extraId]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [extraId]: newQuantity };
+    });
+  };
+
   const handleConfirmPayment = () => {
+    const orderExtras = Object.entries(selectedExtras)
+      .filter(([_, quantity]) => quantity > 0)
+      .map(([extraId, quantity]) => ({
+        extra: availableExtras.find(e => e.id === extraId)!,
+        quantity
+      }));
+
     const order: Order = {
       id: Date.now().toString(),
       number: `CMD-${String(Math.floor(Math.random() * 900) + 100)}`,
       items: cart,
+      extras: orderExtras.length > 0 ? orderExtras : undefined,
       subtotal,
-      tax,
+      tax: 0,
       total,
-      status: 'completed',
+      status: 'pending',
       type: 'dine-in',
       createdAt: new Date(),
       paymentMethod: paymentMethods.find((m) => m.id === selectedMethod)?.label,
+      amountReceived: selectedMethod === 'cash' ? received : undefined,
+      change: selectedMethod === 'cash' && received >= total ? change : undefined,
     };
     onPaymentComplete(order);
   };
@@ -71,28 +119,73 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 max-w-6xl">
         {/* Order Summary */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 lg:p-8 shadow-sm">
-          <h2 className="text-xl font-bold text-slate-800 mb-5">Récapitulatif</h2>
-          <div className="space-y-3 mb-6">
-            {cart.map((item) => (
-              <div key={item.id} className="flex justify-between items-start pb-3 border-b border-slate-100 last:border-0">
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-slate-800">{item.name}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Quantité: {item.quantity}</p>
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 lg:p-8 shadow-sm space-y-6">
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 mb-5">Récapitulatif</h2>
+            <div className="space-y-3 mb-6">
+              {cart.map((item) => (
+                <div key={item.id} className="flex justify-between items-start pb-3 border-b border-slate-100 last:border-0">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Quantité: {item.quantity}</p>
+                  </div>
+                  <span className="font-bold text-slate-800">{formatCurrency(item.price * item.quantity)}</span>
                 </div>
-                <span className="font-bold text-slate-800">{formatCurrency(item.price * item.quantity)}</span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
+
+          {/* Suppléments */}
+          <div className="border-t-2 border-slate-200 pt-4">
+            <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Plus className="w-5 h-5 text-orange-600" />
+              Ajouter des suppléments
+            </h3>
+            <div className="space-y-3">
+              {availableExtras.map((extra) => (
+                <div key={extra.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-orange-300 transition-colors">
+                  <img 
+                    src={extraImages[extra.id]} 
+                    alt={extra.name}
+                    className="w-12 h-12 rounded-lg object-cover shadow-md flex-shrink-0"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-slate-800">{extra.name}</p>
+                    <p className="text-xs text-slate-500">{formatCurrency(extra.price)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleDecreaseExtra(extra.id)}
+                      disabled={!selectedExtras[extra.id]}
+                      className="w-8 h-8 rounded-lg bg-white border-2 border-slate-200 flex items-center justify-center hover:border-orange-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
+                    >
+                      <Minus className="w-4 h-4 text-slate-700" />
+                    </button>
+                    <span className="w-8 text-center font-bold text-slate-800">{selectedExtras[extra.id] || 0}</span>
+                    <button
+                      onClick={() => handleIncreaseExtra(extra.id)}
+                      className="w-8 h-8 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 text-white flex items-center justify-center hover:shadow-lg hover:shadow-orange-500/50 transition-all active:scale-95"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Totals */}
           <div className="border-t-2 border-slate-200 pt-4 space-y-3">
             <div className="flex justify-between text-sm text-slate-600">
-              <span>Sous-total</span>
+              <span>Sous-total commande</span>
               <span className="font-semibold">{formatCurrency(subtotal)}</span>
             </div>
-            <div className="flex justify-between text-sm text-slate-600">
-              <span>TVA (10%)</span>
-              <span className="font-semibold">{formatCurrency(tax)}</span>
-            </div>
+            {extrasTotal > 0 && (
+              <div className="flex justify-between text-sm text-orange-600">
+                <span>Suppléments</span>
+                <span className="font-semibold">{formatCurrency(extrasTotal)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-2xl lg:text-3xl font-bold text-slate-800 pt-4 border-t-2 border-slate-200">
               <span>Total</span>
               <span className="bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">

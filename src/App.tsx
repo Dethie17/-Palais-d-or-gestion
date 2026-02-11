@@ -8,8 +8,10 @@ import PaymentPage from './pages/PaymentPage';
 import ReceiptPage from './pages/ReceiptPage';
 import OrderHistoryPage from './pages/OrderHistoryPage';
 import { PageName, CartItem, Order } from './types/menu';
+import { AppProvider, useApp } from './context/AppContext';
 
-const App = () => {
+function AppContent() {
+  const { addOrder } = useApp();
   const [currentPage, setCurrentPage] = useState<PageName>('dashboard');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
@@ -23,6 +25,8 @@ const App = () => {
   };
 
   const handlePaymentComplete = (order: Order) => {
+    // Save order to localStorage
+    addOrder(order);
     setCurrentOrder(order);
     setCart([]);
     setCurrentPage('receipt');
@@ -66,7 +70,7 @@ const App = () => {
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-lg shadow-orange-500/30">
             <ChefHat className="w-5 h-5 text-white" strokeWidth={2.5} />
           </div>
-          <span className="font-bold text-slate-800 text-base">FoodDash Hub</span>
+          <span className="font-bold text-slate-800 text-base">Miam streetfood 🍔</span>
         </div>
       </header>
 
@@ -74,6 +78,14 @@ const App = () => {
         {renderPage()}
       </main>
     </div>
+  );
+}
+
+const App = () => {
+  return (
+    <AppProvider>
+      <AppContent />
+    </AppProvider>
   );
 };
 

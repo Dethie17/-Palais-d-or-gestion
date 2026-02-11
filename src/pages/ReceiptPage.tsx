@@ -66,6 +66,22 @@ const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
                 <span className="font-bold text-slate-800">{formatCurrency(item.price * item.quantity)}</span>
               </div>
             ))}
+            {order.extras && order.extras.length > 0 && (
+              <>
+                <div className="border-t border-dashed border-slate-300 pt-3 mt-3">
+                  <p className="text-xs font-semibold text-orange-600 mb-3 uppercase">Suppléments</p>
+                  {order.extras.map((orderExtra, index) => (
+                    <div key={index} className="flex justify-between text-sm pb-2 border-b border-slate-100 last:border-0">
+                      <div className="flex gap-3 flex-1">
+                        <span className="text-orange-500 font-bold w-6">{orderExtra.quantity}×</span>
+                        <span className="text-slate-800 font-medium">{orderExtra.extra.name}</span>
+                      </div>
+                      <span className="font-bold text-slate-800">{formatCurrency(orderExtra.extra.price * orderExtra.quantity)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Totals */}
@@ -73,13 +89,24 @@ const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
             <div className="flex justify-between text-sm text-slate-600">
               <span>Sous-total</span><span className="font-semibold">{formatCurrency(order.subtotal)}</span>
             </div>
-            <div className="flex justify-between text-sm text-slate-600">
-              <span>TVA (10%)</span><span className="font-semibold">{formatCurrency(order.tax)}</span>
-            </div>
             <div className="flex justify-between text-2xl font-bold text-slate-800 pt-3 border-t-2 border-slate-300">
               <span>TOTAL</span>
               <span className="bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">{formatCurrency(order.total)}</span>
             </div>
+            {order.amountReceived && (
+              <>
+                <div className="flex justify-between text-sm text-green-700 pt-3 border-t border-dashed border-slate-300">
+                  <span className="font-semibold">Montant reçu</span>
+                  <span className="font-bold">{formatCurrency(order.amountReceived)}</span>
+                </div>
+                {order.change !== undefined && order.change > 0 && (
+                  <div className="flex justify-between text-sm text-green-700">
+                    <span className="font-semibold">Monnaie rendue</span>
+                    <span className="font-bold">{formatCurrency(order.change)}</span>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Payment info */}

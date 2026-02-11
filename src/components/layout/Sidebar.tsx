@@ -44,7 +44,7 @@ const Sidebar = ({ currentPage, onNavigate, open, onClose }: SidebarProps) => {
             <ChefHat className="w-7 h-7 text-white" strokeWidth={2.5} />
           </div>
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-white tracking-tight">FoodDash Hub</h1>
+            <h1 className="text-xl font-bold text-white tracking-tight">Miam streetfood 🍔</h1>
             <p className="text-xs text-slate-400">Gestion Restaurant Pro</p>
           </div>
           <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-white transition-colors p-1">
