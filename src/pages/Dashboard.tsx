@@ -13,6 +13,7 @@ import {
   FileDown
 } from 'lucide-react';
 import { useApp, getOrderStats, getTopProducts, getWeeklySales, getChartData } from '@/context/AppContext';
+import { useProducts } from '@/context/ProductContext';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
@@ -22,9 +23,13 @@ interface DashboardProps {
 
 type PeriodFilter = 'realtime' | 'day' | 'week' | 'month';
 
-const getStatCards = (orders: any[], period: PeriodFilter) => {
+const getStatCards = (orders: any[], period: PeriodFilter, activeProductCount: number, previousProductCount: number) => {
   const stats = getOrderStats(orders, period === 'realtime' ? 'day' : period);
   const periodLabel = period === 'realtime' ? 'en temps réel' : period === 'day' ? 'du jour' : period === 'week' ? 'de la semaine' : 'du mois';
+
+  // Calcul de la variation du nombre de produits
+  const productChange = activeProductCount - previousProductCount;
+  const productChangeStr = productChange > 0 ? `+${productChange}` : productChange < 0 ? `${productChange}` : '0';
 
   return [
     { 
@@ -60,9 +65,9 @@ const getStatCards = (orders: any[], period: PeriodFilter) => {
     },
     { 
       label: 'Produits actifs', 
-      value: '21', 
-      change: '+6', 
-      positive: true, 
+      value: activeProductCount.toString(), 
+      change: productChangeStr, 
+      positive: productChange >= 0, 
       icon: Package,
       gradient: 'from-orange-500 to-red-600',
       iconBg: 'bg-orange-100',
@@ -89,14 +94,21 @@ const statusLabels: Record<string, string> = {
 
 const Dashboard = ({ onNavigate }: DashboardProps) => {
   const { orders, clearAllOrders } = useApp();
+  const { products } = useProducts();
   const [period, setPeriod] = useState<PeriodFilter>('realtime');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  
+  // Compter les produits actifs (disponibles)
+  const activeProductCount = products.filter(p => p.available).length;
+  // Pour la variation, on peut utiliser le nombre total comme référence (ou stocker l'historique)
+  // Pour l'instant, on suppose une référence de 15 produits (à ajuster selon vos besoins)
+  const previousProductCount = 15; // Vous pouvez stocker cette valeur dans un state ou localStorage
   
   const chartData = getChartData(orders, period);
   const topProducts = getTopProducts(orders);
   const recentOrders = orders.slice(0, 6);
   
-  const statCards = getStatCards(orders, period);
+  const statCards = getStatCards(orders, period, activeProductCount, previousProductCount);
 
   const handleResetData = () => {
     setShowResetConfirm(true);
