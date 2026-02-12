@@ -8,7 +8,6 @@ import {
   Receipt, 
   UserCircle,
   X,
-  ChefHat,
   User
 } from 'lucide-react';
 
@@ -47,11 +46,11 @@ const Sidebar = ({ currentPage, onNavigate, open, onClose }: SidebarProps) => {
       <aside className={`fixed left-0 top-0 bottom-0 w-72 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex flex-col z-50 transition-transform duration-300 lg:translate-x-0 shadow-2xl border-r border-white/10 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         {/* Logo */}
         <div className="p-6 flex items-center gap-3 border-b border-white/10">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-500/50">
-            <ChefHat className="w-7 h-7 text-white" strokeWidth={2.5} />
+          <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center flex-shrink-0 shadow-lg p-1">
+            <img src="/logo.png" alt="Miam" className="w-full h-full object-contain" />
           </div>
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-white tracking-tight">Miam streetfood 🍔</h1>
+            <h1 className="text-xl font-bold text-white tracking-tight">Miam streetfood</h1>
             <p className="text-xs text-slate-400">Gestion Restaurant Pro</p>
           </div>
           <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-white transition-colors p-1">
@@ -86,15 +85,11 @@ const Sidebar = ({ currentPage, onNavigate, open, onClose }: SidebarProps) => {
             onClick={() => handleNav('profile')}
             className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 ${
               currentPage === 'profile'
-                ? 'bg-gradient-to-r from-orange-500 to-red-600 shadow-lg'
+                ? 'bg-white/10 shadow-lg'
                 : 'bg-white/5 hover:bg-white/10'
             }`}
           >
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg ${
-              currentPage === 'profile'
-                ? 'bg-white/20'
-                : 'bg-gradient-to-br from-orange-500 to-red-600'
-            }`}>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-white/10">
               <User className="w-6 h-6 text-white" />
             </div>
             <div className="flex-1 min-w-0 text-left">

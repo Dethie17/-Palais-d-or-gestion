@@ -1,6 +1,6 @@
 import { Order } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
-import { Receipt, Printer, Download, ShoppingCart, ChefHat, CheckCircle } from 'lucide-react';
+import { Receipt, Printer, Download, ShoppingCart, CheckCircle } from 'lucide-react';
 
 interface ReceiptPageProps {
   order: Order | null;
@@ -38,13 +38,13 @@ const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
         <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
           {/* Header */}
           <div className="p-6 text-center border-b-2 border-dashed border-slate-300 bg-gradient-to-b from-orange-50 to-white">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 mx-auto mb-3 flex items-center justify-center shadow-lg shadow-orange-500/30">
-              <ChefHat className="w-8 h-8 text-white" strokeWidth={2.5} />
+            <div className="w-24 h-24 mx-auto mb-3 rounded-xl bg-white shadow-lg p-2 border border-slate-200">
+              <img src="/logo.png" alt="Miam Streetfood" className="w-full h-full object-contain" />
             </div>
-            <h2 className="text-xl font-bold text-slate-800">FoodDash Hub</h2>
-            <p className="text-xs text-slate-600 mt-1">12 Rue de la Gastronomie</p>
-            <p className="text-xs text-slate-600">Douala, Cameroun</p>
-            <p className="text-xs text-slate-600">Tél: +237 6 XX XX XX XX</p>
+            <h2 className="text-xl font-bold text-slate-800">Miam Streetfood</h2>
+            <p className="text-xs text-slate-600 mt-1">10ème ISM thiès</p>
+            <p className="text-xs text-slate-600">Thiès, Sénégal</p>
+            <p className="text-xs text-slate-600">Tél: +221  XX XX XX XX</p>
             <div className="mt-4 pt-3 border-t border-dashed border-slate-300">
               <div className="inline-block px-4 py-2 bg-slate-800 rounded-lg mb-2">
                 <p className="text-sm font-bold text-white">{order.number}</p>
@@ -116,7 +116,7 @@ const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
               <span className="text-sm font-semibold text-green-800">Payé par {order.paymentMethod}</span>
             </div>
             <p className="text-slate-600 mt-4 text-sm font-medium">Merci pour votre visite !</p>
-            <p className="text-slate-500 text-xs">À bientôt chez FoodDash Hub 🍔</p>
+            <p className="text-slate-500 text-xs">À bientôt Miam streetfood 🍔</p>
           </div>
         </div>
 

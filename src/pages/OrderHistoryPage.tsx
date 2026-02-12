@@ -24,10 +24,10 @@ const ReceiptModal = ({ order, onClose }: ReceiptModalProps) => {
             >
               <XCircle className="w-5 h-5 text-slate-600" />
             </button>
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 mx-auto mb-3 flex items-center justify-center shadow-lg shadow-orange-500/30">
-              <Receipt className="w-8 h-8 text-white" strokeWidth={2.5} />
+            <div className="w-24 h-24 mx-auto mb-3 rounded-xl bg-white shadow-lg p-2 border border-slate-200">
+              <img src="/logo.png" alt="Miam Streetfood" className="w-full h-full object-contain" />
             </div>
-            <h2 className="text-xl font-bold text-slate-800">Miam streetfood 🍔</h2>
+            <h2 className="text-xl font-bold text-slate-800">Miam streetfood</h2>
             <p className="text-xs text-slate-600 mt-1">10ème ISM thiès</p>
             <p className="text-xs text-slate-600">Thiès, Sénégal</p>
             <p className="text-xs text-slate-600">Tél: +221 XX XX XX XX</p>
@@ -102,7 +102,7 @@ const ReceiptModal = ({ order, onClose }: ReceiptModalProps) => {
               </div>
             )}
             <p className="text-slate-600 mt-4 text-sm font-medium">Merci pour votre visite !</p>
-            <p className="text-slate-500 text-xs">À bientôt Miam streetfood 🍔</p>
+            <p className="text-slate-500 text-xs">À bientôt chez Miam streetfood</p>
           </div>
         </div>
       </div>

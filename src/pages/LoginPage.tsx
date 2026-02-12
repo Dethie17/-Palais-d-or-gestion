@@ -36,8 +36,15 @@ const LoginPage = () => {
       <div className="min-h-screen bg-gradient-to-br from-orange-500 via-red-500 to-pink-600 flex items-center justify-center p-4">
         <div className="w-full max-w-4xl">
           <div className="text-center mb-12 animate-fade-in">
+            <div className="w-24 h-24 mx-auto mb-4 rounded-xl bg-white shadow-2xl p-2">
+              <img 
+                src="/logo.png" 
+                alt="Miam Streetfood" 
+                className="w-full h-full object-contain"
+              />
+            </div>
             <h1 className="text-5xl font-bold text-white mb-4 drop-shadow-lg">
-              🍔 Miam streetfood
+              Miam streetfood
             </h1>
             <p className="text-xl text-white/90 font-medium">
               Système de gestion de restaurant
