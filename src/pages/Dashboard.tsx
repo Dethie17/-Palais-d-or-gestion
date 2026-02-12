@@ -60,8 +60,8 @@ const getStatCards = (orders: any[], period: PeriodFilter) => {
     },
     { 
       label: 'Produits actifs', 
-      value: '22', 
-      change: '+2', 
+      value: '21', 
+      change: '+6', 
       positive: true, 
       icon: Package,
       gradient: 'from-orange-500 to-red-600',

@@ -14,7 +14,11 @@ import {
   Pizza,
   Coffee,
   IceCream,
-  Salad
+  Salad,
+  Sandwich,
+  Cookie,
+  ChefHat,
+  Croissant
 } from 'lucide-react';
 
 interface POSPageProps {
@@ -23,11 +27,15 @@ interface POSPageProps {
 
 const categoryIconsMap: Record<string, React.ReactNode> = {
   'Tous': <Utensils className="w-5 h-5" />,
+  'Tacos': <ChefHat className="w-5 h-5" />,
+  'Sandwichs': <Sandwich className="w-5 h-5" />,
   'Burgers': <Utensils className="w-5 h-5" />,
-  'Pizzas': <Pizza className="w-5 h-5" />,
+  'Fataya': <Cookie className="w-5 h-5" />,
+  'Crépes': <Croissant className="w-5 h-5" />,
+  'Pizza': <Pizza className="w-5 h-5" />,
+  'Accompagnements': <Salad className="w-5 h-5" />,
   'Boissons': <Coffee className="w-5 h-5" />,
   'Desserts': <IceCream className="w-5 h-5" />,
-  'Accompagnements': <Salad className="w-5 h-5" />,
 };
 
 const POSPage = ({ onProceedToPayment }: POSPageProps) => {
@@ -68,8 +76,7 @@ const POSPage = ({ onProceedToPayment }: POSPageProps) => {
   };
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = subtotal * 0.1;
-  const total = subtotal + tax;
+  const total = subtotal;
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
@@ -191,9 +198,6 @@ const POSPage = ({ onProceedToPayment }: POSPageProps) => {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between text-slate-600">
                   <span>Sous-total</span><span className="font-semibold">{formatCurrency(subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>TVA (10%)</span><span className="font-semibold">{formatCurrency(tax)}</span>
                 </div>
                 <div className="flex justify-between text-xl font-bold text-slate-800 pt-3 border-t-2 border-slate-200">
                   <span>Total</span>

@@ -20,10 +20,10 @@ interface PaymentPageProps {
 }
 
 const paymentMethods = [
-  { id: 'cash', label: 'Espèces', icon: Banknote, gradient: 'from-green-500 to-emerald-600' },
-  { id: 'card', label: 'Carte bancaire', icon: CreditCard, gradient: 'from-blue-500 to-indigo-600' },
-  { id: 'mobile', label: 'Mobile Money', icon: Smartphone, gradient: 'from-orange-500 to-red-600' },
-  { id: 'voucher', label: 'Chèque resto', icon: Receipt, gradient: 'from-purple-500 to-pink-600' },
+  { id: 'cash', label: 'Espèces', icon: Banknote, gradient: 'from-green-500 to-emerald-600', available: true },
+  { id: 'card', label: 'Carte bancaire', icon: CreditCard, gradient: 'from-blue-500 to-indigo-600', available: false },
+  { id: 'mobile', label: 'Mobile Money', icon: Smartphone, gradient: 'from-orange-500 to-red-600', available: true },
+  { id: 'voucher', label: 'Chèque resto', icon: Receipt, gradient: 'from-purple-500 to-pink-600', available: false },
 ];
 
 const availableExtras: ProductExtra[] = [
@@ -203,24 +203,45 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
               {paymentMethods.map((method) => {
                 const Icon = method.icon;
                 const isSelected = selectedMethod === method.id;
+                const isAvailable = method.available;
                 return (
                   <button
                     key={method.id}
-                    onClick={() => setSelectedMethod(method.id)}
-                    className={`flex flex-col items-center gap-3 p-4 lg:p-5 rounded-2xl border-2 transition-all ${
-                      isSelected
+                    onClick={() => isAvailable && setSelectedMethod(method.id)}
+                    disabled={!isAvailable}
+                    className={`relative flex flex-col items-center gap-3 p-4 lg:p-5 rounded-2xl border-2 transition-all ${
+                      !isAvailable
+                        ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
+                        : isSelected
                         ? 'border-orange-500 bg-orange-50 shadow-lg shadow-orange-500/20 scale-105'
                         : 'border-slate-200 bg-white hover:border-orange-300 hover:shadow-md'
                     }`}
                   >
+                    {!isAvailable && (
+                      <div className="absolute top-2 right-2">
+                        <span className="text-[10px] font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded-full">
+                          Indisponible
+                        </span>
+                      </div>
+                    )}
                     <div className={`w-12 h-12 lg:w-14 lg:h-14 rounded-xl flex items-center justify-center ${
-                      isSelected 
+                      !isAvailable
+                        ? 'bg-slate-200'
+                        : isSelected 
                         ? `bg-gradient-to-br ${method.gradient}` 
                         : 'bg-slate-100'
                     }`}>
-                      <Icon className={`w-6 h-6 lg:w-7 lg:h-7 ${isSelected ? 'text-white' : 'text-slate-600'}`} strokeWidth={2.5} />
+                      <Icon className={`w-6 h-6 lg:w-7 lg:h-7 ${
+                        !isAvailable 
+                          ? 'text-slate-400'
+                          : isSelected ? 'text-white' : 'text-slate-600'
+                      }`} strokeWidth={2.5} />
                     </div>
-                    <span className={`text-sm font-semibold ${isSelected ? 'text-slate-800' : 'text-slate-600'}`}>
+                    <span className={`text-sm font-semibold ${
+                      !isAvailable
+                        ? 'text-slate-400'
+                        : isSelected ? 'text-slate-800' : 'text-slate-600'
+                    }`}>
                       {method.label}
                     </span>
                   </button>

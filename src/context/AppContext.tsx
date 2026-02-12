@@ -40,22 +40,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.log(`✅ ${data.length} commande(s) chargée(s) depuis Supabase`);
         console.log('📦 Données:', data);
         // Convertir les données Supabase en Orders
-        const ordersFromDB = data.map((row) => ({
-          id: row.id,
-          number: row.number,
-          items: row.items,
-          extras: row.extras || undefined,
-          subtotal: row.subtotal,
-          tax: row.tax,
-          total: row.total,
-          status: row.status as Order['status'],
-          type: row.type as Order['type'],
-          createdAt: new Date(row.created_at),
-          customerName: row.customer_name || undefined,
-          paymentMethod: row.payment_method || undefined,
-          amountReceived: row.amount_received || undefined,
-          change: row.change || undefined,
-        }));
+        const ordersFromDB = data.map((row) => {
+          // 🔧 FIX TIMEZONE: Parser la date UTC et garder le VRAI jour
+          // Au lieu de convertir en heure locale, on garde la date UTC telle quelle
+          const utcDateString = row.created_at;
+          const utcDate = new Date(utcDateString);
+          
+          // Extraire le VRAI jour depuis la chaîne UTC (avant conversion)
+          // Format: "2026-02-11T23:12:37.598+00:00" → on veut le 11, pas le 12
+          const utcDateOnly = utcDateString.split('T')[0]; // "2026-02-11"
+          const [year, month, day] = utcDateOnly.split('-').map(Number);
+          
+          // Créer une date en heure locale MAIS avec le jour UTC correct
+          const correctedDate = new Date(year, month - 1, day, 
+            utcDate.getHours(), utcDate.getMinutes(), utcDate.getSeconds(), utcDate.getMilliseconds());
+          
+          console.log(`🔧 ${row.number}: UTC "${utcDateString}" → Jour UTC=${utcDateOnly} → Date corrigée="${correctedDate.toLocaleString('fr-FR')}"`);
+          
+          return {
+            id: row.id,
+            number: row.number,
+            items: row.items,
+            extras: row.extras || undefined,
+            subtotal: row.subtotal,
+            tax: row.tax,
+            total: row.total,
+            status: row.status as Order['status'],
+            type: row.type as Order['type'],
+            createdAt: correctedDate,
+            customerName: row.customer_name || undefined,
+            paymentMethod: row.payment_method || undefined,
+            amountReceived: row.amount_received || undefined,
+            change: row.change || undefined,
+          };
+        });
         setOrders(ordersFromDB);
       } else {
         console.log('ℹ️ Aucune commande dans Supabase - Liste vide');
@@ -73,9 +91,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addOrder = async (order: Order) => {
     try {
       console.log('🔵 Ajout commande - Début:', order.number);
+      console.log('🔵 Date locale:', order.createdAt.toLocaleString('fr-FR'));
       
       // Mettre à jour l'état local immédiatement pour une meilleure réactivité
       setOrders((prev) => [order, ...prev]);
+
+      // 🔧 FIX: Forcer la date en UTC pour éviter les décalages timezone
+      const utcDate = order.createdAt.toISOString();
+      console.log('🔧 Date UTC pour Supabase:', utcDate);
 
       const orderToInsert = {
         id: order.id,
@@ -87,7 +110,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         total: order.total,
         status: order.status,
         type: order.type,
-        created_at: order.createdAt.toISOString(),
+        created_at: utcDate,
         customer_name: order.customerName,
         payment_method: order.paymentMethod,
         amount_received: order.amountReceived,
@@ -206,18 +229,50 @@ export function useApp() {
 export function getOrderStats(orders: Order[], period: 'day' | 'week' | 'month') {
   const now = new Date();
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  startOfDay.setHours(0, 0, 0, 0);
   const startOfWeek = new Date(startOfDay);
   startOfWeek.setDate(startOfDay.getDate() - startOfDay.getDay());
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  startOfMonth.setHours(0, 0, 0, 0);
 
   let startDate: Date;
   if (period === 'day') startDate = startOfDay;
   else if (period === 'week') startDate = startOfWeek;
   else startDate = startOfMonth;
 
-  const filteredOrders = orders.filter(
-    (order) => order.createdAt >= startDate && order.status === 'completed'
-  );
+  // 🔧 DEBUG
+  console.log('📅 DEBUG Filtre:', {
+    maintenant: now.toLocaleString('fr-FR'),
+    debutPeriode: startDate.toLocaleString('fr-FR'),
+    periode: period,
+    totalCommandes: orders.length
+  });
+
+  // 🔧 FIX COMPLET: Comparer uniquement les JOURS, pas les heures
+  const filteredOrders = orders.filter((order) => {
+    const orderYear = order.createdAt.getFullYear();
+    const orderMonth = order.createdAt.getMonth();
+    const orderDate = order.createdAt.getDate();
+    
+    const startYear = startDate.getFullYear();
+    const startMonth = startDate.getMonth();
+    const startDateNum = startDate.getDate();
+    
+    // Créer des timestamps à minuit pile pour comparaison exacte
+    const orderDayTimestamp = new Date(orderYear, orderMonth, orderDate, 0, 0, 0, 0).getTime();
+    const startDayTimestamp = new Date(startYear, startMonth, startDateNum, 0, 0, 0, 0).getTime();
+    
+    const isInPeriod = orderDayTimestamp >= startDayTimestamp && order.status === 'completed';
+    
+    // 🔧 DEBUG: Afficher chaque commande avec jour exact
+    if (order.status === 'completed') {
+      const orderDayStr = `${orderDate}/${orderMonth + 1}/${orderYear}`;
+      const startDayStr = `${startDateNum}/${startMonth + 1}/${startYear}`;
+      console.log(`  📦 ${order.number}: Jour=${orderDayStr} (${order.createdAt.toLocaleString('fr-FR')}) | Filtre≥${startDayStr} → ${isInPeriod ? '✅ Incluse' : '❌ Exclue'}`);
+    }
+    
+    return isInPeriod;
+  });
 
   const revenue = filteredOrders.reduce((sum, order) => sum + order.total, 0);
   const orderCount = filteredOrders.length;
@@ -311,17 +366,23 @@ export function getWeeklySales(orders: Order[]) {
   startOfWeek.setHours(0, 0, 0, 0);
 
   const salesByDay = days.map((day, index) => {
-    const date = new Date(startOfWeek);
-    date.setDate(startOfWeek.getDate() + index);
-    const nextDate = new Date(date);
-    nextDate.setDate(date.getDate() + 1);
+    const targetDate = new Date(startOfWeek);
+    targetDate.setDate(startOfWeek.getDate() + index);
+    
+    // 🔧 FIX: Comparer par jour uniquement
+    const targetYear = targetDate.getFullYear();
+    const targetMonth = targetDate.getMonth();
+    const targetDay = targetDate.getDate();
 
-    const dayOrders = orders.filter(
-      (order) =>
-        order.status === 'completed' &&
-        order.createdAt >= date &&
-        order.createdAt < nextDate
-    );
+    const dayOrders = orders.filter((order) => {
+      if (order.status !== 'completed') return false;
+      
+      const orderYear = order.createdAt.getFullYear();
+      const orderMonth = order.createdAt.getMonth();
+      const orderDay = order.createdAt.getDate();
+      
+      return orderYear === targetYear && orderMonth === targetMonth && orderDay === targetDay;
+    });
 
     const amount = dayOrders.reduce((sum, order) => sum + order.total, 0);
 
@@ -372,22 +433,28 @@ export function getChartData(orders: Order[], period: 'realtime' | 'day' | 'week
     const data = [];
     
     for (let i = 6; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(now.getDate() - i);
-      date.setHours(0, 0, 0, 0);
-      const nextDate = new Date(date);
-      nextDate.setDate(date.getDate() + 1);
+      const targetDate = new Date(now);
+      targetDate.setDate(now.getDate() - i);
       
-      const dayOrders = completedOrders.filter(
-        (order) => order.createdAt >= date && order.createdAt < nextDate
-      );
+      // 🔧 FIX: Comparer par jour uniquement
+      const targetYear = targetDate.getFullYear();
+      const targetMonth = targetDate.getMonth();
+      const targetDay = targetDate.getDate();
+      
+      const dayOrders = completedOrders.filter((order) => {
+        const orderYear = order.createdAt.getFullYear();
+        const orderMonth = order.createdAt.getMonth();
+        const orderDay = order.createdAt.getDate();
+        
+        return orderYear === targetYear && orderMonth === targetMonth && orderDay === targetDay;
+      });
       
       const revenue = dayOrders.reduce((sum, order) => sum + order.total, 0);
       const orderCount = dayOrders.length;
       const customers = dayOrders.length; // Chaque commande = 1 client
       
       data.push({
-        label: days[date.getDay()],
+        label: days[targetDate.getDay()],
         revenue,
         orders: orderCount,
         customers

@@ -1,7 +1,6 @@
 import React, { createContext, useContext, ReactNode, useEffect, useState } from 'react';
 import { Product } from '@/types/menu';
 import { supabase } from '@/lib/supabase';
-import { mockProducts } from '@/data/mockData';
 
 interface ProductContextType {
   products: Product[];
@@ -33,11 +32,8 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error('❌ Erreur lors du chargement des produits:', error);
-        // Si erreur, utiliser les produits mock et les insérer dans Supabase
-        console.log('ℹ️  Initialisation avec les produits mock...');
-        await initializeMockProducts();
-        setProducts(mockProducts);
-      } else if (data && data.length > 0) {
+        setProducts([]);
+      } else if (data) {
         console.log(`✅ ${data.length} produit(s) chargé(s) depuis Supabase`);
         // Convertir les données Supabase en Products
         const productsFromDB = data.map((row) => ({
@@ -53,44 +49,14 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         }));
         setProducts(productsFromDB);
       } else {
-        console.log('ℹ️  Aucun produit en base, initialisation avec les produits mock...');
-        await initializeMockProducts();
-        setProducts(mockProducts);
+        console.log('ℹ️  Aucun produit trouvé dans Supabase');
+        setProducts([]);
       }
     } catch (error) {
       console.error('❌ Erreur fatale lors du chargement des produits:', error);
-      setProducts(mockProducts);
+      setProducts([]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const initializeMockProducts = async () => {
-    try {
-      // Insérer les produits mock dans Supabase
-      const productsToInsert = mockProducts.map((p) => ({
-        id: p.id,
-        name: p.name,
-        category: p.category,
-        price: p.price,
-        description: p.description || null,
-        image: p.image || null,
-        available: p.available ?? true,
-        extras: p.extras || [],
-      }));
-
-      const { error } = await supabase.from('products').upsert(productsToInsert, { 
-        onConflict: 'id',
-        ignoreDuplicates: false 
-      });
-
-      if (error) {
-        console.error('❌ Erreur lors de l\'insertion des produits mock:', error);
-      } else {
-        console.log('✅ Produits mock insérés dans Supabase');
-      }
-    } catch (error) {
-      console.error('❌ Erreur lors de l\'initialisation des produits mock:', error);
     }
   };
 

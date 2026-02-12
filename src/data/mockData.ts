@@ -1,78 +1,63 @@
-import { Product, Order } from '@/types/menu';
+import { Product } from '@/types/menu';
 
-export const categories = ['Tous', 'Burgers', 'Pizzas', 'Boissons', 'Desserts', 'Accompagnements'];
+// VRAIS PRODUITS DU MENU MIAM STREETFOOD
+// Ces produits servent à initialiser la base de données Supabase si elle est vide
+export const categories = ['Tous', 'Tacos', 'Sandwichs', 'Burgers', 'Fataya', 'Crépes', 'Pizza', 'Accompagnements', 'Boissons', 'Desserts'];
 
 export const categoryIcons: Record<string, string> = {
   'Tous': 'restaurant_menu',
+  'Tacos': 'lunch_dining',
+  'Sandwichs': 'fastfood',
   'Burgers': 'lunch_dining',
-  'Pizzas': 'local_pizza',
+  'Fataya': 'bakery_dining',
+  'Crépes': 'breakfast_dining',
+  'Pizza': 'local_pizza',
+  'Accompagnements': 'tapas',
   'Boissons': 'local_cafe',
   'Desserts': 'cake',
-  'Accompagnements': 'tapas',
 };
 
+// Liste complète des produits (21 produits)
 export const mockProducts: Product[] = [
-  { id: '1', name: 'Classic Burger', category: 'Burgers', price: 5575, description: 'Boeuf, salade, tomate, oignon, sauce maison', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&h=300&fit=crop', available: true, extras: [{ id: 'e1', name: 'Fromage', price: 655 }, { id: 'e2', name: 'Bacon', price: 985 }] },
-  { id: '2', name: 'Cheese Burger', category: 'Burgers', price: 6230, description: 'Boeuf, double cheddar, cornichons, sauce spéciale', image: 'https://images.unsplash.com/photo-1553979459-d2229ba7433b?w=300&h=300&fit=crop', available: true },
-  { id: '3', name: 'Chicken Burger', category: 'Burgers', price: 5900, description: 'Poulet croustillant, salade, mayo maison', image: 'https://images.unsplash.com/photo-1606755962773-d324e0a13086?w=300&h=300&fit=crop', available: true },
-  { id: '4', name: 'Double Smash', category: 'Burgers', price: 7870, description: 'Double steak smashé, cheddar fondu, oignons caramélisés', image: 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=300&h=300&fit=crop', available: true },
-  { id: '5', name: 'Margherita', category: 'Pizzas', price: 6560, description: 'Tomate, mozzarella, basilic frais', image: 'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=300&h=300&fit=crop', available: true },
-  { id: '6', name: 'Pepperoni', category: 'Pizzas', price: 7870, description: 'Sauce tomate, mozzarella, pepperoni', image: 'https://images.unsplash.com/photo-1628840042765-356cda07504e?w=300&h=300&fit=crop', available: true },
-  { id: '7', name: '4 Fromages', category: 'Pizzas', price: 8525, description: 'Mozzarella, gorgonzola, parmesan, chèvre', image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=300&h=300&fit=crop', available: true },
-  { id: '8', name: 'Végétarienne', category: 'Pizzas', price: 7540, description: 'Poivrons, champignons, olives, oignons', image: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=300&h=300&fit=crop', available: false },
-  { id: '9', name: 'Coca-Cola', category: 'Boissons', price: 1640, description: 'Canette 33cl', image: 'https://images.unsplash.com/photo-1629203851122-3726ecdf080e?w=300&h=300&fit=crop', available: true },
-  { id: '10', name: 'Jus d\'Orange', category: 'Boissons', price: 1970, description: 'Jus pressé maison', image: 'https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=300&h=300&fit=crop', available: true },
-  { id: '11', name: 'Eau Minérale', category: 'Boissons', price: 985, description: 'Bouteille 50cl', image: 'https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=300&h=300&fit=crop', available: true },
-  { id: '12', name: 'Limonade Maison', category: 'Boissons', price: 2295, description: 'Citron frais, menthe, sucre de canne', image: 'https://images.unsplash.com/photo-1523677011781-c91d1bbe2f9e?w=300&h=300&fit=crop', available: true },
-  { id: '13', name: 'Ice Tea', category: 'Boissons', price: 1640, description: 'Thé glacé pêche', image: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=300&h=300&fit=crop', available: true },
-  { id: '14', name: 'Tiramisu', category: 'Desserts', price: 3935, description: 'Mascarpone, café, cacao', image: 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=300&h=300&fit=crop', available: true },
-  { id: '15', name: 'Fondant Chocolat', category: 'Desserts', price: 4265, description: 'Coeur coulant au chocolat noir', image: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=300&h=300&fit=crop', available: true },
-  { id: '16', name: 'Crème Brûlée', category: 'Desserts', price: 3605, description: 'Vanille de Madagascar', image: 'https://images.unsplash.com/photo-1470124182917-cc6e71b22ecc?w=300&h=300&fit=crop', available: true },
-  { id: '17', name: 'Frites Maison', category: 'Accompagnements', price: 2295, description: 'Frites fraîches, sel de Guérande', image: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=300&h=300&fit=crop', available: true },
-  { id: '18', name: 'Onion Rings', category: 'Accompagnements', price: 2625, description: 'Beignets d\'oignons croustillants', image: 'https://images.unsplash.com/photo-1639024471283-03518883512d?w=300&h=300&fit=crop', available: true },
-  { id: '19', name: 'Salade César', category: 'Accompagnements', price: 3280, description: 'Laitue, parmesan, croûtons, sauce César', image: 'https://images.unsplash.com/photo-1550304943-4f24f54ddde9?w=300&h=300&fit=crop', available: true },
-  { id: '20', name: 'Nuggets Poulet', category: 'Accompagnements', price: 2950, description: '6 nuggets croustillants, sauce au choix', image: 'https://images.unsplash.com/photo-1562967914-608f82629710?w=300&h=300&fit=crop', available: true },
-  { id: '21', name: 'BBQ Burger', category: 'Burgers', price: 6885, description: 'Boeuf, sauce BBQ, oignons frits, cheddar', image: 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?w=300&h=300&fit=crop', available: true },
-  { id: '22', name: 'Panna Cotta', category: 'Desserts', price: 3280, description: 'Coulis de fruits rouges', image: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=300&h=300&fit=crop', available: true },
+  // TACOS
+  { id: 'M01', name: 'Mini Tacos', category: 'Tacos', price: 500, description: 'Délicieux mini tacos croustillants', image: 'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=300&h=300&fit=crop', available: true },
+  { id: 'M02', name: 'Tacos', category: 'Tacos', price: 1500, description: 'Tacos généreux garni à votre goût', image: '/images/products/tacos.jfif', available: true },
+  
+  // SANDWICHS
+  { id: 'M06', name: 'Chandwitch Poulet', category: 'Sandwichs', price: 500, description: 'Sandwich chaud au poulet tendre', image: 'https://images.unsplash.com/photo-1619096252214-ef06c45683e3?w=300&h=300&fit=crop', available: true },
+  { id: 'M07', name: 'Chandwitch Viande', category: 'Sandwichs', price: 500, description: 'Sandwich chaud à la viande savoureuse', image: 'https://images.unsplash.com/photo-1567234669003-dce7a7a88821?w=300&h=300&fit=crop', available: true },
+  { id: 'M20', name: 'Pain Omlette', category: 'Sandwichs', price: 500, description: 'Pain garni d\'omelette moelleuse', image: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?w=300&h=300&fit=crop', available: true },
+  
+  // BURGERS
+  { id: 'M08', name: 'Burger', category: 'Burgers', price: 1200, description: 'Burger gourmand avec garniture complète', image: '/images/products/burger.jfif', available: true },
+  { id: 'M09', name: 'Mini Burger', category: 'Burgers', price: 300, description: 'Mini burger parfait pour petite faim', image: '/images/products/mini burger.jfif', available: true },
+  
+  // FATAYA
+  { id: 'M03', name: 'Fataya Complet', category: 'Fataya', price: 600, description: 'Fataya garni, croustillant et savoureux', image: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=300&h=300&fit=crop', available: true },
+  { id: 'M10', name: 'Mini Fataya', category: 'Fataya', price: 100, description: 'Petit fataya croustillant', image: 'https://images.unsplash.com/photo-1623428187969-5da2dcea5ebf?w=300&h=300&fit=crop', available: true },
+  
+  // CRÉPES
+  { id: 'M04', name: 'Crépe Salé', category: 'Crépes', price: 500, description: 'Crépe salée garnie selon vos goûts', image: 'https://images.unsplash.com/photo-1519676867240-f03562e64548?w=300&h=300&fit=crop', available: true },
+  { id: 'M05', name: 'Crépe Sucré', category: 'Crépes', price: 300, description: 'Crépe sucrée pour les gourmands', image: '/images/products/crepe sucré.jfif', available: true },
+  
+  // PIZZA
+  { id: 'M19', name: 'Mini Pizza', category: 'Pizza', price: 200, description: 'Mini pizza savoureuse', image: '/images/products/mini pizza.jfif', available: true },
+  
+  // ACCOMPAGNEMENTS
+  { id: 'M11', name: 'Fondé', category: 'Accompagnements', price: 250, description: 'Accompagnement traditionnel fondant', image: 'https://images.unsplash.com/photo-1582169296194-e4d644c48063?w=300&h=300&fit=crop', available: true },
+  { id: 'M18', name: 'Nems', category: 'Accompagnements', price: 150, description: 'Nems croustillants et savoureux', image: '/images/products/Nems.jfif', available: true },
+  
+  // BOISSONS
+  { id: 'M12', name: 'Lakh', category: 'Boissons', price: 300, description: 'Boisson rafraîchissante traditionnelle', image: 'https://images.unsplash.com/photo-1623065422902-30a2d299bbe4?w=300&h=300&fit=crop', available: true },
+  { id: 'M13', name: 'Boisson Gazeuse', category: 'Boissons', price: 400, description: 'Boisson gazeuse fraîche', image: 'https://images.unsplash.com/photo-1629203851122-3726ecdf080e?w=300&h=300&fit=crop', available: true },
+  { id: 'M14', name: 'Jus Naturel', category: 'Boissons', price: 300, description: 'Jus de fruits frais 100% naturel', image: 'https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=300&h=300&fit=crop', available: true },
+  { id: 'M21', name: 'Eau', category: 'Boissons', price: 150, description: 'Eau minérale fraîche', image: 'https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=300&h=300&fit=crop', available: true },
+  
+  // DESSERTS
+  { id: 'M15', name: 'Mini Cake', category: 'Desserts', price: 50, description: 'Petit gâteau moelleux', image: '/images/products/mini cake.jfif', available: true },
+  { id: 'M16', name: 'Cake', category: 'Desserts', price: 300, description: 'Gâteau moelleux et savoureux', image: '/images/products/cake.jfif', available: true },
+  { id: 'M17', name: 'Pain Au Lait', category: 'Desserts', price: 150, description: 'Pain au lait moelleux et doux', image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=300&h=300&fit=crop', available: true },
 ];
 
-const now = new Date();
-const h = (hoursAgo: number) => new Date(now.getTime() - hoursAgo * 3600000);
-
-export const mockOrders: Order[] = [
-  { id: 'o1', number: 'CMD-001', items: [{ ...mockProducts[0], quantity: 2 }, { ...mockProducts[8], quantity: 2 }], subtotal: 14430, tax: 1443, total: 15873, status: 'pending', type: 'dine-in', createdAt: h(0.1), customerName: 'Table 3' },
-  { id: 'o2', number: 'CMD-002', items: [{ ...mockProducts[5], quantity: 1 }, { ...mockProducts[11], quantity: 1 }], subtotal: 10165, tax: 1016, total: 11181, status: 'preparing', type: 'takeaway', createdAt: h(0.3), customerName: 'Sophie M.' },
-  { id: 'o3', number: 'CMD-003', items: [{ ...mockProducts[2], quantity: 1 }, { ...mockProducts[16], quantity: 1 }, { ...mockProducts[9], quantity: 1 }], subtotal: 11145, tax: 1114, total: 12259, status: 'ready', type: 'dine-in', createdAt: h(0.5), customerName: 'Table 7' },
-  { id: 'o3b', number: 'CMD-003B', items: [{ ...mockProducts[1], quantity: 1 }], subtotal: 6230, tax: 623, total: 6853, status: 'pending', type: 'takeaway', createdAt: h(0.7), customerName: 'Ahmed S.' },
-  { id: 'o4', number: 'CMD-004', items: [{ ...mockProducts[4], quantity: 2 }, { ...mockProducts[13], quantity: 2 }], subtotal: 16400, tax: 1640, total: 18040, status: 'completed', type: 'dine-in', createdAt: h(1), customerName: 'Table 1', paymentMethod: 'Carte bancaire' },
-  { id: 'o5', number: 'CMD-005', items: [{ ...mockProducts[20], quantity: 1 }, { ...mockProducts[17], quantity: 1 }, { ...mockProducts[10], quantity: 1 }], subtotal: 11160, tax: 1116, total: 12276, status: 'completed', type: 'takeaway', createdAt: h(1.5), customerName: 'Marc D.', paymentMethod: 'Espèces' },
-  { id: 'o6', number: 'CMD-006', items: [{ ...mockProducts[6], quantity: 1 }], subtotal: 8525, tax: 852, total: 9377, status: 'completed', type: 'takeaway', createdAt: h(2.2), customerName: 'Lucas P.', paymentMethod: 'Espèces' },
-  { id: 'o7', number: 'CMD-007', items: [{ ...mockProducts[1], quantity: 2 }, { ...mockProducts[16], quantity: 2 }, { ...mockProducts[8], quantity: 2 }], subtotal: 23950, tax: 2395, total: 26345, status: 'completed', type: 'dine-in', createdAt: h(2.8), customerName: 'Table 5', paymentMethod: 'Carte bancaire' },
-  { id: 'o8', number: 'CMD-008', items: [{ ...mockProducts[14], quantity: 1 }, { ...mockProducts[12], quantity: 1 }], subtotal: 6230, tax: 623, total: 6853, status: 'completed', type: 'dine-in', createdAt: h(3.5), customerName: 'Table 2', paymentMethod: 'Carte bancaire' },
-  { id: 'o9', number: 'CMD-009', items: [{ ...mockProducts[3], quantity: 1 }, { ...mockProducts[18], quantity: 1 }, { ...mockProducts[11], quantity: 1 }], subtotal: 11480, tax: 1148, total: 12628, status: 'completed', type: 'takeaway', createdAt: h(4.3), customerName: 'Ali K.', paymentMethod: 'Mobile Money' },
-  { id: 'o10', number: 'CMD-010', items: [{ ...mockProducts[7], quantity: 1 }, { ...mockProducts[15], quantity: 1 }, { ...mockProducts[9], quantity: 2 }], subtotal: 15825, tax: 1582, total: 17407, status: 'completed', type: 'dine-in', createdAt: h(5.2), customerName: 'Table 9', paymentMethod: 'Espèces' },
-  { id: 'o11', number: 'CMD-011', items: [{ ...mockProducts[0], quantity: 3 }, { ...mockProducts[16], quantity: 3 }], subtotal: 27540, tax: 2754, total: 30294, status: 'completed', type: 'takeaway', createdAt: h(6.5), customerName: 'Julie R.', paymentMethod: 'Carte bancaire' },
-  { id: 'o12', number: 'CMD-012', items: [{ ...mockProducts[5], quantity: 2 }, { ...mockProducts[8], quantity: 2 }], subtotal: 19020, tax: 1902, total: 20922, status: 'completed', type: 'dine-in', createdAt: h(7.1), customerName: 'Table 4', paymentMethod: 'Mobile Money' },
-  { id: 'o13', number: 'CMD-013', items: [{ ...mockProducts[1], quantity: 1 }, { ...mockProducts[9], quantity: 1 }], subtotal: 7870, tax: 787, total: 8657, status: 'completed', type: 'takeaway', createdAt: h(8.3), customerName: 'Emma L.', paymentMethod: 'Espèces' },
-  { id: 'o14', number: 'CMD-014', items: [{ ...mockProducts[4], quantity: 1 }, { ...mockProducts[17], quantity: 1 }], subtotal: 8855, tax: 885, total: 9740, status: 'completed', type: 'dine-in', createdAt: h(9.2), customerName: 'Table 6', paymentMethod: 'Carte bancaire' },
-  { id: 'o15', number: 'CMD-015', items: [{ ...mockProducts[6], quantity: 1 }, { ...mockProducts[10], quantity: 2 }], subtotal: 10495, tax: 1049, total: 11544, status: 'completed', type: 'takeaway', createdAt: h(10.5), customerName: 'Tom B.', paymentMethod: 'Mobile Money' },
-  { id: 'o16', number: 'CMD-016', items: [{ ...mockProducts[3], quantity: 2 }, { ...mockProducts[19], quantity: 1 }], subtotal: 14750, tax: 1475, total: 16225, status: 'completed', type: 'dine-in', createdAt: h(11.8), customerName: 'Table 8', paymentMethod: 'Carte bancaire' },
-];
-
-export const salesData = [
-  { day: 'Lun', amount: 819945 },
-  { day: 'Mar', amount: 642835 },
-  { day: 'Mer', amount: 970815 },
-  { day: 'Jeu', amount: 721550 },
-  { day: 'Ven', amount: 1147925 },
-  { day: 'Sam', amount: 1377510 },
-  { day: 'Dim', amount: 1082330 },
-];
-
-export const topProducts = [
-  { ...mockProducts[0], sold: 145, revenue: 808350 },
-  { ...mockProducts[5], sold: 120, revenue: 944400 },
-  { ...mockProducts[2], sold: 98, revenue: 578200 },
-  { ...mockProducts[16], sold: 210, revenue: 757050 },
-  { ...mockProducts[8], sold: 185, revenue: 303140 },
-];
+// Les commandes et statistiques viennent de votre base de données Supabase
+// Plus besoin de données mockées !
