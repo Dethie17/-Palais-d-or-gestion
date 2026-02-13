@@ -44,7 +44,7 @@ const LoginPage = () => {
               />
             </div>
             <h1 className="text-5xl font-bold text-slate-800 mb-4 drop-shadow-lg">
-              Palais d'Or
+              PALAIS D'OR
             </h1>
             <p className="text-xl text-slate-600 font-medium">
               Système de gestion de restaurant
