@@ -1,4 +1,4 @@
-# 🍔 Menu Miam Streetfood - Liste Complète
+# 🍔 Menu Palais d'Or - Liste Complète
 
 > Menu mis à jour avec les vrais produits et prix en FCFA
 
@@ -200,7 +200,7 @@ Pour l'instant, l'application utilise des images de stock d'Unsplash. Vous pourr
 
 Pour toute question concernant le menu ou l'application:
 
-- **Restaurant**: Miam Streetfood 🍔
+- **Restaurant**: Palais d'Or 🍔
 - **Application**: FoodDash Hub
 - **Support**: Contactez votre administrateur système
 

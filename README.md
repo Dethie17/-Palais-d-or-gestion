@@ -1,8 +1,8 @@
 <div align="center">
 
-# 🍔 Miam Street Food
+# 🍔 Palais d'Or
 
-### Application de gestion complète pour restaurant et street food
+### Application de gestion complète pour restaurant
 
 [![React](https://img.shields.io/badge/React-18.3.1-61dafb?logo=react&logoColor=white)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -35,7 +35,7 @@
 
 ## 🎯 À propos
 
-**Miam Street Food** est une application web moderne de gestion complète pour restaurants et street food. Développée avec React et TypeScript, elle offre une interface intuitive et élégante pour gérer tous les aspects d'un établissement de restauration rapide.
+**Palais d'Or** est une application web moderne de gestion complète pour restaurants. Développée avec React et TypeScript, elle offre une interface intuitive et élégante pour gérer tous les aspects d'un établissement de restauration rapide.
 
 ### ✨ Points forts
 
@@ -53,6 +53,7 @@
 ## 🚀 Fonctionnalités
 
 ### � Authentification et Rôles
+
 - **Rôle Caissier** : Accès Menu, POS, Commandes, Profil
 - **Rôle Manager** : Accès complet + Dashboard, Gestion menu, Statistiques
 - Changement de mot de passe sécurisé
@@ -60,6 +61,7 @@
 - Déconnexion avec confirmation personnalisée
 
 ### �📊 Dashboard
+
 - Vue d'ensemble des statistiques en temps réel
 - Indicateurs de performance (revenus, commandes, clients)
 - Graphiques de ventes avec Recharts
@@ -67,6 +69,7 @@
 - Design avec cartes gradient et icônes Lucide React
 
 ### 🍕 Gestion du menu
+
 - CRUD complet des produits (Créer, Lire, Modifier, Supprimer)
 - **Persistance automatique dans Supabase** - Les modifications sont sauvegardées en temps réel
 - Catégories : Burgers, Pizzas, Boissons, Desserts, Accompagnements
@@ -77,6 +80,7 @@
 - Dialogues de confirmation personnalisés (sans popups navigateur)
 
 ### 💳 Point de vente (POS)
+
 - Interface de caisse intuitive et rapide
 - Système de panier avec ajout/modification/suppression
 - Gestion des quantités en temps réel
@@ -85,6 +89,7 @@
 - Navigation fluide vers le paiement
 
 ### 💰 Gestion des paiements
+
 - Méthodes de paiement multiples :
   - 💵 Espèces (avec calcul de monnaie)
   - 💳 Carte bancaire
@@ -95,6 +100,7 @@
 - Génération de ticket de caisse
 
 ### 🧾 Reçu de caisse
+
 - Ticket professionnel avec logo
 - Détails de la commande et articles
 - Animation de succès
@@ -102,6 +108,7 @@
 - Bouton pour nouvelle commande
 
 ### 📦 Historique des commandes
+
 - **Persistance complète dans Supabase** - Toutes les commandes sont sauvegardées
 - Liste complète des commandes avec filtres
 - Statuts : En attente, En préparation, Prêt, Terminé, Annulé
@@ -116,6 +123,7 @@
 ## 🛠️ Technologies
 
 ### Frontend
+
 - **React 18.3.1** - Bibliothèque UI
 - **TypeScript 5.8.3** - Typage statique
 - **Vite 5.4.19** - Build tool ultra-rapide
@@ -123,12 +131,14 @@
 - **shadcn-ui** - Composants UI modernes et accessibles
 
 ### Backend & Base de données
+
 - **Supabase** - Backend as a Service (BaaS)
 - **PostgreSQL** - Base de données relationnelle
 - **Row Level Security (RLS)** - Sécurité au niveau des lignes
 - **Real-time subscriptions** - Mises à jour en temps réel
 
 ### Bibliothèques
+
 - **@supabase/supabase-js** - Client Supabase pour JavaScript
 - **Lucide React** - Icônes modernes (500+ icônes)
 - **Recharts 2.15.4** - Graphiques et visualisations
@@ -139,6 +149,7 @@
 - **Radix UI** - Primitives UI accessibles
 
 ### Développement
+
 - **ESLint** - Linting JavaScript/TypeScript
 - **Vitest** - Framework de tests unitaires
 - **Testing Library** - Tests de composants React
@@ -159,13 +170,10 @@
 ### Étapes d'installation
 
 ```bash
-# 1. Cloner le dépôt
-git clone https://github.com/etudiantcisse/miam-street-food.git
+# 1. Accéder au répertoire du projet
+cd votre-projet
 
-# 2. Accéder au répertoire
-cd miam-street-food
-
-# 3. Installer les dépendances
+# 2. Installer les dépendances
 npm install
 # ou
 yarn install
@@ -208,6 +216,7 @@ VITE_SUPABASE_ANON_KEY=votre_cle_anon_supabase
 3. Exécutez le script pour créer les tables
 
 Le script crée automatiquement :
+
 - Table `users` (utilisateurs avec rôles)
 - Table `orders` (commandes avec tous les champs)
 - Table `products` (produits avec disponibilité)
@@ -220,10 +229,12 @@ Le script crée automatiquement :
 Lancez l'application et connectez-vous avec :
 
 **Caissier** :
+
 - Username: `caissier`
 - Password: `caissier123`
 
 **Manager** :
+
 - Username: `manager`
 - Password: `manager123`
 
@@ -266,7 +277,7 @@ npm run lint             # Vérifie le code avec ESLint
 ## 📁 Structure du projet
 
 ```
-miam-street-food/
+palais-d-or/
 ├── public/                 # Fichiers statiques
 │   └── robots.txt
 ├── src/
@@ -323,10 +334,10 @@ Le projet utilise le **Franc CFA (FCFA)** comme devise principale. Les fonctions
 const EUR_TO_FCFA = 655.957;
 
 // Formater un montant en FCFA
-formatCurrency(5000) // "5 000 FCFA"
+formatCurrency(5000); // "5 000 FCFA"
 
 // Convertir EUR vers FCFA
-eurToFcfa(10) // 6559.57
+eurToFcfa(10); // 6559.57
 ```
 
 ### Personnalisation des couleurs
@@ -347,9 +358,9 @@ Ajoutez ou modifiez les catégories dans `src/data/mockData.ts` :
 
 ```typescript
 export const categories = [
-  'Tous',
-  'Burgers',
-  'Pizzas',
+  "Tous",
+  "Burgers",
+  "Pizzas",
   // Ajoutez vos catégories ici
 ];
 ```
@@ -362,9 +373,15 @@ Les types de base de données sont définis dans `src/lib/supabase.ts` :
 export interface Database {
   public: {
     Tables: {
-      orders: { /* ... */ },
-      products: { /* ... */ },
-      users: { /* ... */ },
+      orders: {
+        /* ... */
+      };
+      products: {
+        /* ... */
+      };
+      users: {
+        /* ... */
+      };
     };
   };
 }
@@ -379,6 +396,7 @@ Si vous modifiez le schéma de la base de données, mettez à jour ces types.
 ### Système de rôles
 
 **Caissier** (`role: 'caissier'`) :
+
 - ✅ Menu (consultation)
 - ✅ Point de vente (POS)
 - ✅ Historique des commandes
@@ -387,6 +405,7 @@ Si vous modifiez le schéma de la base de données, mettez à jour ces types.
 - ❌ Gestion du menu (modification)
 
 **Manager** (`role: 'manager'`) :
+
 - ✅ Accès complet à toutes les fonctionnalités
 - ✅ Dashboard avec statistiques
 - ✅ Gestion complète du menu
@@ -422,21 +441,15 @@ Manager:
 
 Les contributions sont les bienvenues ! Voici comment participer :
 
-### 1. Fork et clone
+### 1. Créer une branche
 
-```bash
-# Forker le dépôt sur GitHub puis :
-git clone https://github.com/VOTRE_USERNAME/miam-street-food.git
-cd miam-street-food
-```
-
-### 2. Créer une branche
+Assurez-vous d'être dans le répertoire du projet, puis :
 
 ```bash
 git checkout -b feature/ma-nouvelle-fonctionnalite
 ```
 
-### 3. Développer et tester
+### 2. Développer et tester
 
 ```bash
 # Faire vos modifications puis :
@@ -445,7 +458,7 @@ npm run test        # Lancer les tests
 npm run build       # Tester le build
 ```
 
-### 4. Commit et Push
+### 3. Commit et Push
 
 ```bash
 git add .
@@ -453,9 +466,9 @@ git commit -m "✨ Ajout d'une nouvelle fonctionnalité"
 git push origin feature/ma-nouvelle-fonctionnalite
 ```
 
-### 5. Pull Request
+### 4. Pull Request
 
-Créez une Pull Request sur GitHub avec une description détaillée.
+Créez une Pull Request avec une description détaillée.
 
 ### Convention de commits
 
@@ -477,13 +490,6 @@ Ce projet est sous licence **MIT**. Voir le fichier [LICENSE](LICENSE) pour plus
 
 ---
 
-## 👨‍💻 Auteur
-
-**Babacar Cissé**
-
-- GitHub: [@etudiantcisse](https://github.com/etudiantcisse)
-- Dépôt: [miam-street-food](https://github.com/etudiantcisse/miam-street-food)
-
 ---
 
 ## 🙏 Remerciements
@@ -496,8 +502,6 @@ Ce projet est sous licence **MIT**. Voir le fichier [LICENSE](LICENSE) pour plus
 ---
 
 <div align="center">
-
-**⭐ Si ce projet vous plaît, n'oubliez pas de lui donner une étoile sur GitHub ! ⭐**
 
 Fait avec ❤️ pour la communauté de la restauration rapide
 

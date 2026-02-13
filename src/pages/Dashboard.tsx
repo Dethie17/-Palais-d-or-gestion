@@ -131,7 +131,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
       // Titre
       doc.setFontSize(20);
       doc.setTextColor(234, 88, 12); // Orange
-      doc.text('MIAM STREETFOOD', 105, 20, { align: 'center' });
+      doc.text('PALAIS D\'OR', 105, 20, { align: 'center' });
       
       doc.setFontSize(16);
       doc.setTextColor(0, 0, 0);
@@ -186,7 +186,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
       // Footer
       doc.setFontSize(8);
       doc.setTextColor(150, 150, 150);
-      doc.text('Miam streetfood - Système de gestion de restaurant', 105, 285, { align: 'center' });
+      doc.text('Palais d\'Or - Système de gestion de restaurant', 105, 285, { align: 'center' });
       
       // Télécharger
       doc.save(`rapport-${monthName.replace(' ', '-')}.pdf`);

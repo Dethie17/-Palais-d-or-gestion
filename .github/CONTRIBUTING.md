@@ -1,12 +1,12 @@
 # Guide de contribution
 
-Merci de votre intérêt pour contribuer à **Miam Street Food** ! 🎉
+Merci de votre intérêt pour contribuer à **Palais d'Or** ! 🎉
 
 ## Comment contribuer
 
 ### 🐛 Signaler un bug
 
-1. Vérifiez que le bug n'a pas déjà été signalé dans les [Issues](https://github.com/etudiantcisse/miam-street-food/issues)
+1. Vérifiez que le bug n'a pas déjà été signalé dans les Issues
 2. Créez une nouvelle issue avec le label `bug`
 3. Décrivez le problème de manière détaillée :
    - Comportement attendu

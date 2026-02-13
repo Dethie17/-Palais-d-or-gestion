@@ -94,7 +94,7 @@ function AppContent() {
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-lg shadow-orange-500/30">
             <ChefHat className="w-5 h-5 text-white" strokeWidth={2.5} />
           </div>
-          <span className="font-bold text-slate-800 text-base">Miam streetfood 🍔</span>
+          <span className="font-bold text-slate-800 text-base">Palais d'Or 🍔</span>
         </div>
       </header>
 

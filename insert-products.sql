@@ -1,5 +1,5 @@
 -- =====================================================
--- INSERTION DES 22 PRODUITS DU MENU MIAM STREETFOOD
+-- INSERTION DES 22 PRODUITS DU MENU PALAIS D'OR
 -- =====================================================
 -- Exécutez ce script dans l'éditeur SQL de Supabase
 -- pour insérer tous vos produits dans la base de données

@@ -1,10 +1,10 @@
 # 🚀 Guide de déploiement Netlify
 
-Ce guide explique comment déployer **Miam Street Food** sur Netlify.
+Ce guide explique comment déployer **Palais d'Or** sur Netlify.
 
 ## 📋 Prérequis
 
-- Compte GitHub avec le dépôt `miam-street-food`
+- Code source du projet
 - Compte Netlify (gratuit) : https://app.netlify.com/signup
 - **Compte Supabase** (gratuit) : https://supabase.com/
 - **Base de données Supabase configurée** (voir section ci-dessous)
@@ -32,6 +32,7 @@ Ce guide explique comment déployer **Miam Street Food** sur Netlify.
 ### 3. Noter les identifiants
 
 Vous aurez besoin de ces 2 valeurs pour Netlify :
+
 - **VITE_SUPABASE_URL** : L'URL de votre projet (ex: `https://xxxxx.supabase.co`)
 - **VITE_SUPABASE_ANON_KEY** : La clé publique anon
 
@@ -48,7 +49,7 @@ Trouvez-les dans **Settings** > **API** de votre dashboard Supabase.
 
 ### 2. Configuration du site
 
-1. Sélectionnez le dépôt `etudiantcisse/miam-street-food`
+1. Sélectionnez votre dépôt
 2. Netlify détecte automatiquement les paramètres :
    - **Branch to deploy** : `main`
    - **Build command** : `npm run build`
@@ -63,9 +64,9 @@ Trouvez-les dans **Settings** > **API** de votre dashboard Supabase.
 2. Cliquez sur **"Add a variable"**
 3. Ajoutez ces 2 variables :
 
-| Clé | Valeur | Exemple |
-|-----|--------|---------|
-| `VITE_SUPABASE_URL` | URL de votre projet Supabase | `https://xxxxx.supabase.co` |
+| Clé                      | Valeur                        | Exemple                                   |
+| ------------------------ | ----------------------------- | ----------------------------------------- |
+| `VITE_SUPABASE_URL`      | URL de votre projet Supabase  | `https://xxxxx.supabase.co`               |
 | `VITE_SUPABASE_ANON_KEY` | Clé anon publique de Supabase | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
 
 4. Cliquez sur **"Save"**
@@ -148,13 +149,14 @@ Netlify redéploie automatiquement à chaque push sur `main` :
 ## 🌍 URL du site
 
 Après déploiement, votre site sera disponible à :
-- **URL Netlify** : `https://[nom-aleatoire].netlify.app`
-- **URL personnalisée** (recommandé) : `https://miam-street-food.netlify.app`
 
-Pour changer le nom :
+- **URL Netlify** : `https://[nom-aleatoire].netlify.app`
+
+Pour personnaliser le nom :
+
 1. **Site settings** → **General** → **Site details**
 2. Cliquez sur **"Change site name"**
-3. Entrez `miam-street-food`
+3. Entrez le nom de votre choix
 
 ## 📊 Fonctionnalités Netlify gratuites
 
@@ -202,15 +204,18 @@ npm run build
 ## 🚀 Optimisations post-déploiement
 
 ### Performance
+
 - [ ] Activer la compression Brotli (automatique)
 - [ ] Vérifier les scores Lighthouse
 - [ ] Optimiser les images si nécessaire
 
 ### Analytics
+
 - [ ] Activer Netlify Analytics (payant)
 - [ ] Ou intégrer Google Analytics
 
 ### Sécurité
+
 - [ ] Vérifier les headers de sécurité
 - [ ] Activer les notifications de déploiement
 - [ ] Configurer les notifications d'erreur

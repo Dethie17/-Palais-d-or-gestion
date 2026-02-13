@@ -2,7 +2,7 @@
 
 ## 🔒 Versions supportées
 
-Actuellement, seule la dernière version de **Miam Street Food** reçoit des mises à jour de sécurité.
+Actuellement, seule la dernière version de **Palais d'Or** reçoit des mises à jour de sécurité.
 
 | Version | Support          |
 | ------- | ---------------- |
@@ -69,6 +69,7 @@ En retour, nous nous engageons à :
 Si vous déployez cette application en production :
 
 ### Configuration
+
 - [ ] Utiliser HTTPS uniquement
 - [ ] Configurer les en-têtes de sécurité (CSP, HSTS, etc.)
 - [ ] Mettre en place un WAF (Web Application Firewall)
@@ -76,24 +77,28 @@ Si vous déployez cette application en production :
 - [ ] Limiter les tentatives de connexion
 
 ### Données
+
 - [ ] Ne jamais stocker de données sensibles en clair
 - [ ] Utiliser des variables d'environnement pour les secrets
 - [ ] Sauvegarder régulièrement les données
 - [ ] Anonymiser les données de test
 
 ### Dépendances
+
 - [ ] Mettre à jour régulièrement les dépendances
 - [ ] Auditer avec `npm audit` ou `yarn audit`
 - [ ] Utiliser Dependabot pour les alertes
 - [ ] Vérifier les licences des dépendances
 
 ### Accès
+
 - [ ] Implémenter une authentification forte
 - [ ] Utiliser des rôles et permissions
 - [ ] Logger les actions sensibles
 - [ ] Mettre en place une détection d'intrusion
 
 ### Monitoring
+
 - [ ] Surveiller les logs d'erreur
 - [ ] Alerter sur les activités suspectes
 - [ ] Avoir un plan de réponse aux incidents
@@ -114,6 +119,6 @@ Nous remercions les chercheurs en sécurité qui ont contribué à améliorer la
 
 ---
 
-**Merci de contribuer à la sécurité de Miam Street Food ! 🙏**
+**Merci de contribuer à la sécurité de Palais d'Or ! 🙏**
 
-*Dernière mise à jour : 10 février 2026*
+_Dernière mise à jour : 10 février 2026_

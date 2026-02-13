@@ -39,12 +39,12 @@ const LoginPage = () => {
             <div className="w-24 h-24 mx-auto mb-4 rounded-xl bg-white shadow-2xl p-2">
               <img 
                 src="/logo.png" 
-                alt="Miam Streetfood" 
+                alt="Palais d'Or" 
                 className="w-full h-full object-contain"
               />
             </div>
             <h1 className="text-5xl font-bold text-white mb-4 drop-shadow-lg">
-              Miam streetfood
+              Palais d'Or
             </h1>
             <p className="text-xl text-white/90 font-medium">
               Système de gestion de restaurant

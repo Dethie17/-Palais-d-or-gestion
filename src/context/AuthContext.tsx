@@ -26,13 +26,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Charger l'utilisateur depuis sessionStorage au démarrage
-    const savedUser = sessionStorage.getItem('miam-current-user');
+    const savedUser = sessionStorage.getItem('palais-d-or-current-user');
     if (savedUser) {
       try {
         setUser(JSON.parse(savedUser));
       } catch (error) {
         console.error('Erreur chargement session:', error);
-        sessionStorage.removeItem('miam-current-user');
+        sessionStorage.removeItem('palais-d-or-current-user');
       }
     }
     setLoading(false);
@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
 
       setUser(authenticatedUser);
-      sessionStorage.setItem('miam-current-user', JSON.stringify(authenticatedUser));
+      sessionStorage.setItem('palais-d-or-current-user', JSON.stringify(authenticatedUser));
       return true;
     } catch (error) {
       console.error('Erreur login:', error);
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
-    sessionStorage.removeItem('miam-current-user');
+    sessionStorage.removeItem('palais-d-or-current-user');
   };
 
   const changePassword = async (currentPassword: string, newPassword: string): Promise<boolean> => {

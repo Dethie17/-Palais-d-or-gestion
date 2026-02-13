@@ -1,6 +1,6 @@
 import { Product } from '@/types/menu';
 
-// VRAIS PRODUITS DU MENU MIAM STREETFOOD
+// VRAIS PRODUITS DU MENU PALAIS D'OR
 // Ces produits servent à initialiser la base de données Supabase si elle est vide
 export const categories = ['Tous', 'Tacos', 'Sandwichs', 'Burgers', 'Fataya', 'Crépes', 'Pizza', 'Accompagnements', 'Boissons', 'Desserts'];
 

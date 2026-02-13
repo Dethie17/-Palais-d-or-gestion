@@ -47,10 +47,10 @@ const Sidebar = ({ currentPage, onNavigate, open, onClose }: SidebarProps) => {
         {/* Logo */}
         <div className="p-6 flex items-center gap-3 border-b border-white/10">
           <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center flex-shrink-0 shadow-lg p-1">
-            <img src="/logo.png" alt="Miam" className="w-full h-full object-contain" />
+            <img src="/logo.png" alt="Palais d'Or" className="w-full h-full object-contain" />
           </div>
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-white tracking-tight">Miam streetfood</h1>
+            <h1 className="text-xl font-bold text-white tracking-tight">Palais d'Or</h1>
             <p className="text-xs text-slate-400">Gestion Restaurant Pro</p>
           </div>
           <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-white transition-colors p-1">

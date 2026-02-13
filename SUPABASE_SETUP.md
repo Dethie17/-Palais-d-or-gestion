@@ -1,18 +1,19 @@
-# 🗄️ Configuration Supabase - Miam streetfood
+# 🗄️ Configuration Supabase - Palais d'Or
 
 Ce guide vous explique comment configurer la base de données Supabase pour synchroniser vos données entre tous vos appareils.
 
 ## 📋 Prérequis
 
 Vous avez déjà :
-- ✅ URL du projet Supabase : `https://cwrsxofgehsjyztyyhlt.supabase.co`
+
+- ✅ URL du projet Supabase : `https://mvocfxfxwmalyxuqwqcb.supabase.co`
 - ✅ Clé publique configurée dans `.env.local`
 
 ## 🚀 Étapes d'installation
 
 ### 1️⃣ Créer les tables dans Supabase
 
-1. Connectez-vous à votre projet Supabase : https://cwrsxofgehsjyztyyhlt.supabase.co
+1. Connectez-vous à votre projet Supabase : https://mvocfxfxwmalyxuqwqcb.supabase.co
 2. Dans le menu latéral, cliquez sur **"SQL Editor"**
 3. Cliquez sur **"New query"**
 4. Ouvrez le fichier `supabase-setup.sql` de ce projet
@@ -21,6 +22,7 @@ Vous avez déjà :
 7. Cliquez sur **"Run"** pour exécuter le script
 
 Le script va créer :
+
 - ✅ Table `orders` (commandes)
 - ✅ Table `products` (produits du menu)
 - ✅ Index pour optimiser les performances
@@ -39,8 +41,8 @@ Note: `jspdf` est nécessaire pour générer les rapports PDF mensuels depuis le
 Assurez-vous que le fichier `.env.local` existe à la racine du projet avec :
 
 ```env
-VITE_SUPABASE_URL=https://cwrsxofgehsjyztyyhlt.supabase.co
-VITE_SUPABASE_ANON_KEY=votre_clé_ici
+VITE_SUPABASE_URL=https://mvocfxfxwmalyxuqwqcb.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12b2NmeGZ4d21hbHl4dXF3cWNiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTQ3NTUsImV4cCI6MjA4NjU3MDc1NX0.FvaJa8owqkgzSvdr93nJvC-78-5IP27kOwqwHXjxiMU
 ```
 
 ⚠️ **Important** : Ce fichier est déjà dans `.gitignore` et ne sera pas partagé sur GitHub.
@@ -59,11 +61,12 @@ Maintenant votre application :
 ✅ **Synchronisation multi-appareils** en temps réel  
 ✅ **Données persistantes** (ne se perdent plus)  
 ✅ **Accessible partout** avec connexion internet  
-✅ **Backup automatique** par Supabase  
+✅ **Backup automatique** par Supabase
 
 ## 🔧 Structure des données
 
 ### Table `orders`
+
 - `id` : Identifiant unique
 - `number` : Numéro de commande (CMD-XXX)
 - `items` : Produits de la commande (JSON)
@@ -78,6 +81,7 @@ Maintenant votre application :
 - `updated_at` : Date de modification
 
 ### Table `products`
+
 - `id` : Identifiant unique
 - `name` : Nom du produit
 - `category` : Catégorie
@@ -92,6 +96,7 @@ Maintenant votre application :
 ## 🔐 Sécurité
 
 Les politiques RLS (Row Level Security) sont configurées pour :
+
 - Autoriser la lecture publique des données
 - Autoriser la création/modification/suppression des données
 
@@ -120,6 +125,7 @@ Cela signifie que vous n'avez pas exécuté le script SQL. Suivez l'étape 1 ci-
 ## 📞 Support
 
 Si vous rencontrez des problèmes, vérifiez :
+
 - Les logs dans la console du navigateur (F12)
 - Les logs dans Supabase Dashboard → Logs
 - Que votre clé API est valide
