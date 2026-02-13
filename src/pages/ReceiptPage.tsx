@@ -44,7 +44,7 @@ const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
             <h2 className="text-xl font-bold text-slate-800">Palais d'Or</h2>
             <p className="text-xs text-slate-600 mt-1">10ème ISM thiès</p>
             <p className="text-xs text-slate-600">Thiès, Sénégal</p>
-            <p className="text-xs text-slate-600">Tél: +221  XX XX XX XX</p>
+            <p className="text-xs text-slate-600">Tél: +221 +221 78 473 35 35</p>
             <div className="mt-4 pt-3 border-t border-dashed border-slate-300">
               <div className="inline-block px-4 py-2 bg-slate-800 rounded-lg mb-2">
                 <p className="text-sm font-bold text-white">{order.number}</p>
