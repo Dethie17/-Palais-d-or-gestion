@@ -43,7 +43,7 @@ const LoginPage = () => {
                 className="w-full h-full object-contain"
               />
             </div>
-            <h1 className="text-5xl font-bold text-slate-600 mb-4 drop-shadow-lg">
+            <h1 className="text-5xl font-bold text-slate-800 mb-4 drop-shadow-lg">
               Palais d'Or
             </h1>
             <p className="text-xl text-slate-600 font-medium">
