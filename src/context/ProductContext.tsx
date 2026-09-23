@@ -1,6 +1,7 @@
 import React, { createContext, useContext, ReactNode, useEffect, useState } from 'react';
 import { Product } from '@/types/menu';
 import { supabase } from '@/lib/supabase';
+import { mockProducts } from '@/data/mockData';
 
 interface ProductContextType {
   products: Product[];
@@ -15,6 +16,8 @@ const ProductContext = createContext<ProductContextType | undefined>(undefined);
 export function ProductProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  // Mode hors-ligne : Supabase injoignable → catalogue local Miam's, modifs locales conservées
+  const [offline, setOffline] = useState(false);
 
   // Charger les produits depuis Supabase au démarrage
   useEffect(() => {
@@ -32,9 +35,13 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error('❌ Erreur lors du chargement des produits:', error);
-        setProducts([]);
-      } else if (data) {
+        // Repli hors-ligne : catalogue local Miam's pour que POS et Gestion Menu marchent toujours
+        console.log('📦 Repli sur le catalogue local Miam\'s');
+        setOffline(true);
+        setProducts(mockProducts);
+      } else if (data && data.length > 0) {
         console.log(`✅ ${data.length} produit(s) chargé(s) depuis Supabase`);
+        setOffline(false);
         // Convertir les données Supabase en Products
         const productsFromDB = data.map((row) => ({
           id: row.id,
@@ -49,12 +56,31 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         }));
         setProducts(productsFromDB);
       } else {
-        console.log('ℹ️  Aucun produit trouvé dans Supabase');
-        setProducts([]);
+        // Table vide : initialiser Supabase avec le catalogue Miam's (best-effort)
+        console.log('ℹ️  Table vide : initialisation avec le catalogue Miam\'s...');
+        try {
+          await supabase.from('products').insert(
+            mockProducts.map((p) => ({
+              id: p.id,
+              name: p.name,
+              category: p.category,
+              price: p.price,
+              description: p.description || null,
+              image: p.image || null,
+              available: p.available ?? true,
+              extras: p.extras || [],
+            })),
+          );
+        } catch {
+          /* pas bloquant : on affiche quand même le catalogue local */
+        }
+        setProducts(mockProducts);
       }
     } catch (error) {
       console.error('❌ Erreur fatale lors du chargement des produits:', error);
-      setProducts([]);
+      console.log('📦 Repli sur le catalogue local Miam\'s');
+      setOffline(true);
+      setProducts(mockProducts);
     } finally {
       setLoading(false);
     }
@@ -81,14 +107,20 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       if (error) {
         console.error('❌ ERREUR Supabase lors de l\'ajout du produit:', error);
         console.error('❌ Message:', error.message);
-        // Rollback en cas d'erreur
-        setProducts((prev) => prev.filter((p) => p.id !== product.id));
+        if (offline) {
+          console.log('📦 Mode hors-ligne : ajout conservé localement');
+        } else {
+          // Rollback en cas d'erreur
+          setProducts((prev) => prev.filter((p) => p.id !== product.id));
+        }
       } else {
         console.log('✅ Produit ajouté avec succès dans Supabase');
       }
     } catch (error) {
       console.error('❌ Erreur fatale lors de l\'ajout du produit:', error);
-      setProducts((prev) => prev.filter((p) => p.id !== product.id));
+      if (!offline) {
+        setProducts((prev) => prev.filter((p) => p.id !== product.id));
+      }
     }
   };
 
@@ -99,7 +131,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
 
       // Préparer les données pour Supabase
-      const supabaseUpdates: any = {};
+      const supabaseUpdates: Record<string, unknown> = {};
       if (updates.name !== undefined) supabaseUpdates.name = updates.name;
       if (updates.category !== undefined) supabaseUpdates.category = updates.category;
       if (updates.price !== undefined) supabaseUpdates.price = updates.price;
@@ -117,14 +149,20 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       if (error) {
         console.error('❌ ERREUR Supabase lors de la mise à jour du produit:', error);
         console.error('❌ Message:', error.message);
-        // Rollback: recharger les produits
-        await loadProducts();
+        if (offline) {
+          console.log('📦 Mode hors-ligne : modification conservée localement');
+        } else {
+          // Rollback: recharger les produits
+          await loadProducts();
+        }
       } else {
         console.log('✅ Produit mis à jour avec succès dans Supabase');
       }
     } catch (error) {
       console.error('❌ Erreur fatale lors de la mise à jour du produit:', error);
-      await loadProducts();
+      if (!offline) {
+        await loadProducts();
+      }
     }
   };
 
@@ -142,8 +180,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       if (error) {
         console.error('❌ ERREUR Supabase lors de la suppression du produit:', error);
         console.error('❌ Message:', error.message);
-        // Rollback en cas d'erreur
-        if (productToDelete) {
+        if (offline) {
+          console.log('📦 Mode hors-ligne : suppression conservée localement');
+        } else if (productToDelete) {
+          // Rollback en cas d'erreur
           setProducts((prev) => [...prev, productToDelete]);
         }
       } else {
@@ -151,7 +191,9 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('❌ Erreur fatale lors de la suppression du produit:', error);
-      await loadProducts();
+      if (!offline) {
+        await loadProducts();
+      }
     }
   };
 

@@ -88,7 +88,11 @@ const MenuManagement = () => {
                   ? 'bg-green-500 text-white' 
                   : 'bg-slate-900 text-white'
               }`}>
-                {product.available ? '✓ Disponible' : 'Indisponible'}
+                {product.available ? (
+                  <span className="flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Disponible</span>
+                ) : (
+                  'Indisponible'
+                )}
               </span>
             </div>
             <div className="p-5 space-y-3">

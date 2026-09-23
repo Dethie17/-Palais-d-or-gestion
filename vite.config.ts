@@ -12,10 +12,30 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
+  preview: {
+    port: 4173,
+    host: true,
+  },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  build: {
+    target: "es2020",
+    sourcemap: false,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ["react", "react-dom"],
+          supabase: ["@supabase/supabase-js"],
+          charts: ["recharts"],
+          pdf: ["jspdf"],
+          qr: ["qrcode.react", "html5-qrcode"],
+        },
+      },
     },
   },
 }));

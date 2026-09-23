@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PageName } from '@/types/menu';
+import { PageName, Order } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
 import { 
   TrendingUp, 
@@ -10,10 +10,16 @@ import {
   Clock,
   Calendar,
   RotateCcw,
-  FileDown
+  FileDown,
+  FileSpreadsheet,
+  Crown,
+  AlertTriangle,
+  UtensilsCrossed
 } from 'lucide-react';
 import { useApp, getOrderStats, getTopProducts, getWeeklySales, getChartData } from '@/context/AppContext';
 import { useProducts } from '@/context/ProductContext';
+import { useResto } from '@/context/RestoContext';
+import { useAuth } from '@/context/AuthContext';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
@@ -23,7 +29,7 @@ interface DashboardProps {
 
 type PeriodFilter = 'realtime' | 'day' | 'week' | 'month';
 
-const getStatCards = (orders: any[], period: PeriodFilter, activeProductCount: number, previousProductCount: number) => {
+const getStatCards = (orders: Order[], period: PeriodFilter, activeProductCount: number, previousProductCount: number) => {
   const stats = getOrderStats(orders, period === 'realtime' ? 'day' : period);
   const periodLabel = period === 'realtime' ? 'en temps réel' : period === 'day' ? 'du jour' : period === 'week' ? 'de la semaine' : 'du mois';
 
@@ -95,8 +101,23 @@ const statusLabels: Record<string, string> = {
 const Dashboard = ({ onNavigate }: DashboardProps) => {
   const { orders, clearAllOrders } = useApp();
   const { products } = useProducts();
+  const { subscriptions, payments, validations, stats: restoStats } = useResto();
+  const { user } = useAuth();
   const [period, setPeriod] = useState<PeriodFilter>('realtime');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
+  const pendingCash = payments.filter((p) => p.status === 'pending');
+  const expiringSoon = subscriptions.filter((s) => {
+    if (s.status !== 'active') return false;
+    const days = Math.ceil((new Date(s.endDate).getTime() - Date.now()) / 86400000);
+    return days <= 2 && days >= 0;
+  });
+  const lowMeals = subscriptions.filter((s) => s.status === 'active' && s.mealsRemaining <= 2 && s.mealsRemaining > 0);
+  const todayAccepted = validations.filter((v) => {
+    const d = new Date(v.validatedAt); const n = new Date();
+    return v.status === 'accepted' && d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  });
   
   // Compter les produits actifs (disponibles)
   const activeProductCount = products.filter(p => p.available).length;
@@ -109,6 +130,27 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
   const recentOrders = orders.slice(0, 6);
   
   const statCards = getStatCards(orders, period, activeProductCount, previousProductCount);
+
+  // ---- Chiffre d'affaires DG : caisse (commandes vendues) + abonnements (paiements encaissés)
+  const nowRef = new Date();
+  const startOfDay = new Date(nowRef.getFullYear(), nowRef.getMonth(), nowRef.getDate(), 0, 0, 0, 0);
+  const startOfWeek = new Date(startOfDay);
+  startOfWeek.setDate(startOfDay.getDate() - startOfDay.getDay());
+  const startOfMonth = new Date(nowRef.getFullYear(), nowRef.getMonth(), 1, 0, 0, 0, 0);
+
+  const paidPayments = payments.filter((p) => p.status === 'paid');
+  const sumSubsSince = (d: Date) =>
+    paidPayments.filter((p) => new Date(p.createdAt).getTime() >= d.getTime())
+      .reduce((sum, p) => sum + p.amount, 0);
+
+  const caDay = { orders: getOrderStats(orders, 'day').revenue, subs: sumSubsSince(startOfDay) };
+  const caWeek = { orders: getOrderStats(orders, 'week').revenue, subs: sumSubsSince(startOfWeek) };
+  const caMonth = { orders: getOrderStats(orders, 'month').revenue, subs: sumSubsSince(startOfMonth) };
+  const caCards = [
+    { label: 'CA du jour', ...caDay },
+    { label: 'CA de la semaine', ...caWeek },
+    { label: 'CA du mois', ...caMonth },
+  ];
 
   const handleResetData = () => {
     setShowResetConfirm(true);
@@ -131,7 +173,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
       // Titre
       doc.setFontSize(20);
       doc.setTextColor(234, 88, 12); // Orange
-      doc.text('PALAIS D\'OR', 105, 20, { align: 'center' });
+      doc.text('O RESTO', 105, 20, { align: 'center' });
       
       doc.setFontSize(16);
       doc.setTextColor(0, 0, 0);
@@ -149,21 +191,30 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
       // Statistiques principales
       doc.setFontSize(14);
       doc.setTextColor(0, 0, 0);
-      doc.text('Statistiques du Mois', 20, 52);
+      doc.text('Statistiques du Mois (caisse)', 20, 52);
       
       doc.setFontSize(11);
       const statsY = 60;
       doc.text(`Total Revenus: ${formatCurrency(stats.revenue)}`, 20, statsY);
       doc.text(`Total Commandes: ${stats.orders}`, 20, statsY + 7);
       doc.text(`Total Clients: ${stats.customers}`, 20, statsY + 14);
+
+      // Chiffre d'affaires global DG (caisse + abonnements)
+      doc.setFontSize(14);
+      doc.text("Chiffre d'affaires global (caisse + abonnements)", 20, statsY + 28);
+      doc.setFontSize(11);
+      doc.text(`CA du jour: ${formatCurrency(caDay.orders + caDay.subs)} (caisse ${formatCurrency(caDay.orders)} + abos ${formatCurrency(caDay.subs)})`, 20, statsY + 36);
+      doc.text(`CA de la semaine: ${formatCurrency(caWeek.orders + caWeek.subs)} (caisse ${formatCurrency(caWeek.orders)} + abos ${formatCurrency(caWeek.subs)})`, 20, statsY + 43);
+      doc.text(`CA du mois: ${formatCurrency(caMonth.orders + caMonth.subs)} (caisse ${formatCurrency(caMonth.orders)} + abos ${formatCurrency(caMonth.subs)})`, 20, statsY + 50);
+      doc.text(`Abonnes actifs: ${restoStats.activeClients} - Repas valides aujourd'hui: ${todayAccepted.length}`, 20, statsY + 57);
       
       // Top produits
       doc.setFontSize(14);
-      doc.text('Top 5 Produits', 20, statsY + 28);
+      doc.text('Top 5 Produits', 20, statsY + 71);
       
       doc.setFontSize(10);
       topProducts.forEach((product, i) => {
-        const y = statsY + 36 + (i * 7);
+        const y = statsY + 79 + (i * 7);
         doc.text(`${i + 1}. ${product.name}`, 25, y);
         doc.text(`${product.sold} vendus`, 120, y);
         doc.text(formatCurrency(product.revenue), 160, y);
@@ -171,11 +222,11 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
       
       // Commandes récentes
       doc.setFontSize(14);
-      doc.text('Dernières Commandes', 20, statsY + 78);
+      doc.text('Dernières Commandes', 20, statsY + 121);
       
       doc.setFontSize(9);
       recentOrders.slice(0, 10).forEach((order, i) => {
-        const y = statsY + 86 + (i * 6);
+        const y = statsY + 129 + (i * 6);
         const date = order.createdAt.toLocaleDateString('fr-FR');
         doc.text(`${order.number}`, 25, y);
         doc.text(`${order.status}`, 60, y);
@@ -186,7 +237,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
       // Footer
       doc.setFontSize(8);
       doc.setTextColor(150, 150, 150);
-      doc.text('Palais d\'Or - Système de gestion de restaurant', 105, 285, { align: 'center' });
+      doc.text('O RESTO - Repas, Menus & Abonnements', 105, 285, { align: 'center' });
       
       // Télécharger
       doc.save(`rapport-${monthName.replace(' ', '-')}.pdf`);
@@ -195,6 +246,51 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
     } catch (error) {
       console.error('Erreur lors de la génération du PDF:', error);
       console.error('❌ Erreur: Installez jsPDF avec "npm install jspdf"');
+    }
+  };
+
+  const handleDownloadExcel = () => {
+    try {
+      const now = new Date();
+      const rows: string[][] = [];
+      rows.push(['O RESTO — Rapport Direction']);
+      rows.push([`Généré le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR')}`]);
+      rows.push([]);
+      rows.push(['CHIFFRE D\'AFFAIRES', 'Caisse', 'Abonnements', 'Total']);
+      rows.push(['CA du jour', String(caDay.orders), String(caDay.subs), String(caDay.orders + caDay.subs)]);
+      rows.push(['CA de la semaine', String(caWeek.orders), String(caWeek.subs), String(caWeek.orders + caWeek.subs)]);
+      rows.push(['CA du mois', String(caMonth.orders), String(caMonth.subs), String(caMonth.orders + caMonth.subs)]);
+      rows.push([]);
+      rows.push(['Abonnés actifs', String(restoStats.activeClients)]);
+      rows.push(['Repas validés aujourd\'hui', String(todayAccepted.length)]);
+      rows.push([]);
+      rows.push(['TOP PRODUITS', 'Vendus', 'Revenus']);
+      topProducts.forEach((p) => rows.push([p.name, String(p.sold), String(p.revenue)]));
+      rows.push([]);
+      rows.push(['PAIEMENTS ABONNEMENTS', 'Client', 'Montant', 'Moyen', 'Statut', 'Date']);
+      payments.forEach((p) => rows.push([
+        p.reference,
+        subscriptions.find((s) => s.id === p.subscriptionId)?.clientUsername ?? '',
+        String(p.amount), p.method, p.status,
+        new Date(p.createdAt).toLocaleDateString('fr-FR'),
+      ]));
+      rows.push([]);
+      rows.push(['COMMANDES CAISSE', 'Client', 'Total', 'Statut', 'Date']);
+      orders.forEach((o) => rows.push([
+        o.number, o.customerName ?? '', String(o.total), o.status,
+        o.createdAt.toLocaleDateString('fr-FR'),
+      ]));
+
+      const csv = '﻿' + rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rapport-dg-${now.toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erreur lors de la génération du fichier Excel:', error);
     }
   };
 
@@ -225,25 +321,36 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
               Tableau de bord
               <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
             </h1>
-            <p className="text-xs sm:text-sm text-slate-600 mt-1">Vue d'ensemble de votre restaurant</p>
+            <p className="text-xs sm:text-sm text-slate-600 mt-1">{isAdmin ? 'Pilotage global O RESTO — Caisse + Abonnements + QR' : 'Pilotage de votre site — Repas, abonnés, alertes'}</p>
           </div>
           
-          {/* Boutons d'action */}
-          <div className="flex gap-2">
-            <button
-              onClick={handleDownloadReport}
-              className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-blue-500/50 transition-all hover:scale-105"
-            >
-              <FileDown className="w-4 h-4" />
-              <span className="hidden sm:inline">Rapport PDF</span>
-            </button>
-            <button
-              onClick={handleResetData}
-              className="flex items-center gap-2 bg-gradient-to-r from-red-500 to-pink-600 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-red-500/50 transition-all hover:scale-105"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span className="hidden sm:inline">Réinitialiser</span>
-            </button>
+          {/* Boutons d'action — rapports réservés au Directeur */}
+          <div className="flex gap-2 flex-wrap">
+            {isAdmin && (
+              <>
+                <button
+                  onClick={handleDownloadReport}
+                  className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-blue-500/50 transition-all hover:scale-105"
+                >
+                  <FileDown className="w-4 h-4" />
+                  <span className="hidden sm:inline">Rapport PDF</span>
+                </button>
+                <button
+                  onClick={handleDownloadExcel}
+                  className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-emerald-500/50 transition-all hover:scale-105"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span className="hidden sm:inline">Export Excel</span>
+                </button>
+                <button
+                  onClick={handleResetData}
+                  className="flex items-center gap-2 bg-gradient-to-r from-red-500 to-pink-600 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-red-500/50 transition-all hover:scale-105"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span className="hidden sm:inline">Réinitialiser</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -273,6 +380,45 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
           </div>
         </div>
       </div>
+
+      {/* Chiffre d'affaires DG — caisse + abonnements */}
+      {isAdmin && (
+        <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-4 sm:p-6 text-white shadow-xl">
+          <p className="font-bold flex items-center gap-2"><Crown className="w-5 h-5 text-amber-400" /> Chiffre d’affaires — Direction</p>
+          <div className="mt-3 grid sm:grid-cols-3 gap-3">
+            {caCards.map((c) => (
+              <div key={c.label} className="bg-white/10 rounded-2xl p-4 border border-white/10">
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-300">{c.label}</p>
+                <p className="text-2xl font-black mt-1">{formatCurrency(c.orders + c.subs)}</p>
+                <p className="text-xs text-slate-300 mt-1">Caisse : {formatCurrency(c.orders)} • Abos : {formatCurrency(c.subs)}</p>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400 mt-3">Exports : Rapport PDF et Export Excel (boutons ci-dessus) — CA, top produits, paiements et commandes.</p>
+        </div>
+      )}
+
+      {/* Alertes O RESTO — tâche distinctive Gérant / DG */}
+      {(pendingCash.length > 0 || expiringSoon.length > 0 || lowMeals.length > 0) && (
+        <div className="grid md:grid-cols-3 gap-3">
+          {pendingCash.length > 0 && (
+            <button onClick={() => onNavigate('subscriptions')} className="text-left bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 hover:shadow">
+              <p className="font-bold text-amber-800 flex items-center gap-1.5"><Clock className="w-4 h-4" /> {pendingCash.length} paiement(s) espèces en attente</p>
+              <p className="text-xs text-amber-700 mt-1">À encaisser au comptoir sur la page Abonnés → Paiements.</p>
+            </button>
+          )}
+          {expiringSoon.length > 0 && (
+            <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4">
+              <p className="font-bold text-red-700 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {expiringSoon.length} abonnement(s) expirent ≤ 2 jours</p>
+              <p className="text-xs text-red-600 mt-1">{expiringSoon.slice(0, 3).map((s) => s.clientUsername).join(', ')}{expiringSoon.length > 3 ? '…' : ''}</p>
+            </div>
+          )}
+          <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-4">
+            <p className="font-bold text-green-800 flex items-center gap-1.5"><UtensilsCrossed className="w-4 h-4" /> {todayAccepted.length} repas validés aujourd’hui • {restoStats.activeClients} abonnés actifs</p>
+            <p className="text-xs text-green-700 mt-1">CA abos/tickets : {formatCurrency(restoStats.revenue)}{lowMeals.length > 0 ? ` • ${lowMeals.length} carte(s) ≤ 2 repas` : ''}</p>
+          </div>
+        </div>
+      )}
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
@@ -367,11 +513,12 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                   labelStyle={{ color: '#fff', fontWeight: 'bold', marginBottom: '8px' }}
                   itemStyle={{ color: '#fff', padding: '4px 0' }}
                   cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '5 5' }}
-                  formatter={(value: any, name: string) => {
-                    if (name === 'Revenus') return [formatCurrency(value), name];
-                    if (name === 'Commandes') return [`${value} cmd`, name];
-                    if (name === 'Clients') return [`${value} clients`, name];
-                    return [value, name];
+                  formatter={(value: unknown, name: string) => {
+                    const num = Number(value);
+                    if (name === 'Revenus') return [formatCurrency(num), name];
+                    if (name === 'Commandes') return [`${num} cmd`, name];
+                    if (name === 'Clients') return [`${num} clients`, name];
+                    return [String(value), name];
                   }}
                 />
                 <Legend 
@@ -469,7 +616,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
             <p className="text-xs sm:text-sm text-slate-600 mt-0.5">Dernières activités</p>
           </div>
           <button 
-            onClick={() => onNavigate('orders')} 
+            onClick={() => onNavigate('history')} 
             className="text-xs sm:text-sm font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1 group self-start sm:self-auto"
           >
             Voir tout

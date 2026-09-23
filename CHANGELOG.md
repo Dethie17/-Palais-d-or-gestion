@@ -5,6 +5,80 @@ Tous les changements notables de ce projet seront documentés dans ce fichier.
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [Unreleased]
+
+### 🔐 Rôles & caisse
+- Caisse (POS + encaissement + reçus + commandes) retirée du Directeur Général : **seul le Gérant de cantine** la tient (`permissions.ts`, Sidebar, Accueil).
+- Le DG supervise : suivi des encaissements en lecture (Abonnés & paiements), rapports, paramètres.
+
+### 💳 Paiements Wave fonctionnels
+- Nouveau `src/lib/wave.ts` : initiation marchand, code à 6 chiffres, validation numéro SN, expiration 15 min.
+- Nouveau `WavePaymentModal` : montant, marchand, référence copiable, étapes, compte à rebours, saisie téléphone + code, reçu après confirmation.
+- `RestoContext` : `paySubscription` / `renewSubscription` / `buyTicket` créent une demande mobile `pending` ; `confirmMobilePayment` active la carte ou crédite les repas ; `resumeMobilePayment` reprend un paiement interrompu ; `confirmCashPayment` refuse les paiements mobiles.
+- Config : `VITE_WAVE_MERCHANT_NUMBER`, `VITE_WAVE_MERCHANT_NAME` (repli : numéros démo, aucun argent réel).
+
+### ✨ Pro & icônes
+- Fini les emojis : profils et alertes en icônes Lucide (`roleTasks.icon`, `PAGE_LABEL`).
+- Fini « Mes tâches » : Sidebar « Navigation », Profil « Mon périmètre d’accès » (modules + indicateurs), Accès réservé avec modules autorisés, Utilisateurs avec modules.
+
+### 🖼️ Tickets en images
+- `composedMenus` avec photo par jour ; `TicketCard` avec en-tête photo ; Menus, Abonnement et Accueil affichent les visuels.
+
+### 🧷 QR personnel stable par client
+- Nouveau `src/lib/clientQr.ts` : token `ORESTO-XXXXXX` unique, généré une fois, conservé à vie (renouvellements inclus).
+- Connexion, réservations et tickets utilisent ce QR ; le contrôle accepte anciens et nouveaux QR ; page « Mon QR Code » labellisée personnelle et permanente.
+
+### 🔑 Connexion 100 % icônes
+- Cartes profils avec points forts illustrés, champs avec icônes utilisateur/cadenas, affichage du mot de passe, flèches et badges Lucide (fini « ← » et « 👇 » texte).
+
+### 👋 Écran d'ouverture animé
+- Nouveau `SplashScreen` : logo O RESTO avec pop-in, barre de progression, halos vert/orange, fermeture auto en fondu (~2,2 s, clic pour passer, `prefers-reduced-motion` respecté).
+
+### 🔑 Connexion plus pro
+- Formulaire repensé : bandeau dégradé aux couleurs du profil, section « Identifiants », `autoComplete`, bouton avec état de chargement (spinner + désactivation), pied de carte sécurisé.
+
+### 🧑‍💼 Comptes créés toujours connectables (correctif)
+- Nouveau registre local (`o-resto-local-users`) : les comptes créés depuis Paramètres sont enregistrés localement ET sur Supabase (si joignable). Leurs utilisateurs peuvent **toujours se connecter**, même base injoignable — synchronisés dès que la base répond.
+- Liste des comptes = fusion distant + local ; suppression et réinitialisation mot de passe mirrored ; noms démo réservés ; changement de mot de passe supporté hors-ligne.
+- Prouvé par test navigateur automatisé : création `eleve1` par le DG puis connexion `eleve1` OK sans backend.
+
+### 🎟️ Tickets en carrousel défilant
+- Section tickets : défilement horizontal tactile (snap) + flèches desktop + barre de défilement fine ; cartes à largeur fixe (`TicketCard.className`).
+
+### ➖ Retrait d'Orange Money
+- Moyens restants : **Wave, Espèces** (+ Mobile Money / Carte en lecture historique). Type `ORestoPaymentMethod`, `wave.ts`, `SubscriptionPage`, `PaymentPage`, textes, `index.html`, `package.json`, `O_RESTO.md`, `.env.example`, migration SQL (nouvelles installations) et logo SVG nettoyés : 0 référence restante.
+
+### 🎟️ Tickets & formules côté staff + vente au comptoir
+- Nouvelle page `TicketsPage` : formules d’abonnement complètes (prix, prix/repas, règles) + tickets semaine en carrousel photo.
+- **Gérant** : bouton « Vendre au comptoir » sur chaque offre (client nommé avec suggestions, Espèces = activation/crédit immédiat + reçu imprimable, Wave = demande à confirmer par le client avec panneau de relai).
+- **Personnel / DG** : même catalogue en lecture seule (annonce des plats, supervision) — conforme CDC §5.
+- Nouveau `RestoContext.counterSale`, nouveau `PaymentReceiptModal` partagé (client + comptoir + back-office) ; bouton « Reçu » ajouté aux paiements payés du back-office ; raccourci d’accueil Gérant.
+
+## [2.1.0] - 2026-09-23
+
+### 🚀 Version production — clean, pro, prête à héberger
+
+### ✨ Ajouté
+- `ErrorBoundary` global : plus jamais de page blanche, écran d'erreur pro avec rechargement
+- `Toaster` global + `ThemeProvider` : notifications propres partout
+- Lazy-loading des 17 pages (`React.lazy` + `Suspense`) : premier affichage rapide
+- Code-splitting Vite (`vendor / supabase / charts / pdf / qr`) : fini le bundle unique de 953 Ko
+- `public/_redirects` + `vercel.json` : SPA fonctionnelle sur Netlify ET Vercel
+- `src/lib/supabase.ts` : mode démo local si clés absentes (l'app démarre toujours)
+- `isSupabaseConfigured` exporté pour afficher l'état backend dans l'UI si besoin
+
+### 🔧 Corrigé
+- Crash au démarrage sans `.env` (le `throw` bloquait tout l'hébergement)
+- 13 erreurs ESLint → 0 erreur (types `any` → `Record/Order/unknown`, `require` → `import`, interfaces vides)
+- `Permissions-Policy` : `camera=(self)` pour autoriser le scan QR en production
+- Package renommé `o-resto@2.1.0` + scripts `typecheck` séparé (le build Netlify ne casse plus)
+
+### 📦 Hébergement
+- Build vérifié : `npm run build` OK, chunks par page (2–25 Ko), vendor 141 Ko
+- Lint vérifié : 0 erreur, 15 warnings (shadcn-ui, normaux)
+- Tests vérifiés : `npm run test` OK
+- Déploiement : Netlify (`netlify.toml` + `_redirects`) ou Vercel (`vercel.json`), avec les 2 variables `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`
+
 ## [2.0.0] - 2026-02-12
 
 ### 🚀 Migration majeure vers Supabase

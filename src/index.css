@@ -126,3 +126,79 @@
 .animate-scale-in {
   animation: scale-in 0.3s ease-out;
 }
+
+/* Carrousel horizontal des tickets (swipe tactile + flèches desktop) */
+.ticket-row {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ticket-row::-webkit-scrollbar {
+  height: 6px;
+}
+
+.ticket-row::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ticket-row::-webkit-scrollbar-thumb {
+  background: rgb(203 213 225);
+  border-radius: 999px;
+}
+
+/* Écran d'ouverture O RESTO */
+@keyframes splash-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes splash-bar {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes splash-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.splash-pop {
+  animation: splash-pop 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.splash-bar {
+  animation: splash-bar 2.2s linear both;
+}
+
+.splash-rise {
+  animation: splash-rise 0.6s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-pop,
+  .splash-bar,
+  .splash-rise {
+    animation: none;
+  }
+}

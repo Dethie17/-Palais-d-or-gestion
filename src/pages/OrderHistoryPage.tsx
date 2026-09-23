@@ -25,9 +25,9 @@ const ReceiptModal = ({ order, onClose }: ReceiptModalProps) => {
               <XCircle className="w-5 h-5 text-slate-600" />
             </button>
             <div className="w-24 h-24 mx-auto mb-3 rounded-xl bg-white shadow-lg p-2 border border-slate-200">
-              <img src="/logo.png" alt="Palais d'Or" className="w-full h-full object-contain" />
+              <img src="/logo.png" alt="O RESTO" className="w-full h-full object-contain" />
             </div>
-            <h2 className="text-xl font-bold text-slate-800">Palais d'Or</h2>
+            <h2 className="text-xl font-bold text-slate-800">O RESTO</h2>
             <p className="text-xs text-slate-600 mt-1">10ème ISM thiès</p>
             <p className="text-xs text-slate-600">Thiès, Sénégal</p>
             <p className="text-xs text-slate-600">Tél: +221 XX XX XX XX</p>
@@ -102,7 +102,7 @@ const ReceiptModal = ({ order, onClose }: ReceiptModalProps) => {
               </div>
             )}
             <p className="text-slate-600 mt-4 text-sm font-medium">Merci pour votre visite !</p>
-            <p className="text-slate-500 text-xs">À bientôt chez Palais d'Or</p>
+            <p className="text-slate-500 text-xs">Merci, à bientôt</p>
           </div>
         </div>
       </div>

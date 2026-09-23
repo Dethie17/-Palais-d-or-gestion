@@ -20,10 +20,9 @@ interface PaymentPageProps {
 }
 
 const paymentMethods = [
-  { id: 'cash', label: 'Espèces', icon: Banknote, gradient: 'from-green-500 to-emerald-600', available: true },
-  { id: 'card', label: 'Carte bancaire', icon: CreditCard, gradient: 'from-blue-500 to-indigo-600', available: false },
-  { id: 'mobile', label: 'Mobile Money', icon: Smartphone, gradient: 'from-orange-500 to-red-600', available: true },
-  { id: 'voucher', label: 'Chèque resto', icon: Receipt, gradient: 'from-purple-500 to-pink-600', available: false },
+  { id: 'wave', label: 'Wave', icon: Smartphone, gradient: 'from-blue-500 to-cyan-600', available: true },
+  { id: 'cash', label: 'Espèces (comptant)', icon: Banknote, gradient: 'from-green-500 to-emerald-600', available: true },
+  { id: 'mobile_money', label: 'Mobile Money', icon: CreditCard, gradient: 'from-purple-500 to-pink-600', available: true },
 ];
 
 const availableExtras: ProductExtra[] = [
@@ -41,7 +40,7 @@ const extraImages: Record<string, string> = {
 };
 
 const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
-  const [selectedMethod, setSelectedMethod] = useState('mobile');
+  const [selectedMethod, setSelectedMethod] = useState('wave');
   const [amountReceived, setAmountReceived] = useState('');
   const [selectedExtras, setSelectedExtras] = useState<{ [key: string]: number }>({});
 

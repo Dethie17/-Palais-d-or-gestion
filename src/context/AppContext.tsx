@@ -142,7 +142,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         prev.map((order) => (order.id === id ? { ...order, ...updates } : order))
       );
 
-      const updateData: any = {};
+      const updateData: Record<string, unknown> = {};
       
       if (updates.status) updateData.status = updates.status;
       if (updates.paymentMethod) updateData.payment_method = updates.paymentMethod;

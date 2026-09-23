@@ -1,6 +1,6 @@
 import { Product } from '@/types/menu';
 
-// VRAIS PRODUITS DU MENU PALAIS D'OR
+// PLATS DU CATALOGUE O RESTO (menus du jour)
 // Ces produits servent à initialiser la base de données Supabase si elle est vide
 export const categories = ['Tous', 'Tacos', 'Sandwichs', 'Burgers', 'Fataya', 'Crépes', 'Pizza', 'Accompagnements', 'Boissons', 'Desserts'];
 
@@ -61,3 +61,93 @@ export const mockProducts: Product[] = [
 
 // Les commandes et statistiques viennent de votre base de données Supabase
 // Plus besoin de données mockées !
+
+// ---------- Menus composés Miam's (menu de la semaine Lun–Ven) ----------
+// Chaque menu est achetable comme "Ticket repas" (1 repas crédité, valable 7 jours).
+export interface ComposedMenuItem {
+  name: string;
+  price: number;
+}
+
+export interface ComposedMenu {
+  id: string;
+  name: string;
+  day: string;
+  description: string;
+  items: ComposedMenuItem[];
+  total: number;
+  formulaId: string;
+  image: string;
+}
+
+export const composedMenus: ComposedMenu[] = [
+  {
+    id: 'CM1',
+    name: 'Menu Élève',
+    day: 'Lundi',
+    description: 'Léger et équilibré pour bien démarrer la semaine',
+    image: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&h=400&fit=crop',
+    items: [
+      { name: 'Mini Fataya', price: 100 },
+      { name: 'Chandwitch Poulet', price: 500 },
+      { name: 'Jus Naturel', price: 300 },
+    ],
+    total: 900,
+    formulaId: 'T1',
+  },
+  {
+    id: 'CM2',
+    name: 'Menu Gourmand',
+    day: 'Mardi',
+    description: 'Le généreux : tacos complet + dessert',
+    image: 'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=600&h=400&fit=crop',
+    items: [
+      { name: 'Tacos', price: 1500 },
+      { name: 'Boisson Gazeuse', price: 400 },
+      { name: 'Cake', price: 300 },
+    ],
+    total: 2200,
+    formulaId: 'T2',
+  },
+  {
+    id: 'CM3',
+    name: 'Menu Petit Budget',
+    day: 'Mercredi',
+    description: 'Le malin : complet à moins de 500 FCFA',
+    image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&h=400&fit=crop',
+    items: [
+      { name: 'Mini Pizza', price: 200 },
+      { name: 'Eau', price: 150 },
+      { name: 'Mini Cake', price: 50 },
+    ],
+    total: 400,
+    formulaId: 'T3',
+  },
+  {
+    id: 'CM4',
+    name: 'Menu Goûter',
+    day: 'Jeudi',
+    description: 'Douceur sucrée de l’après-midi',
+    image: 'https://images.unsplash.com/photo-1519676867240-f03562e64548?w=600&h=400&fit=crop',
+    items: [
+      { name: 'Crépe Sucré', price: 300 },
+      { name: 'Lakh', price: 300 },
+    ],
+    total: 600,
+    formulaId: 'T4',
+  },
+  {
+    id: 'CM5',
+    name: 'Menu Burger',
+    day: 'Vendredi',
+    description: 'On finit la semaine en beauté',
+    image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&h=400&fit=crop',
+    items: [
+      { name: 'Burger', price: 1200 },
+      { name: 'Nems', price: 150 },
+      { name: 'Jus Naturel', price: 300 },
+    ],
+    total: 1650,
+    formulaId: 'T5',
+  },
+];

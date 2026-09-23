@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 760">
+  <defs>
+    <linearGradient id="gCircle" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#065f1f"/>
+    </linearGradient>
+    <linearGradient id="gSwoosh" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#065f1f"/>
+      <stop offset="55%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#fb923c"/>
+    </linearGradient>
+    <linearGradient id="gHat" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#fdba74"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="640" height="760" rx="32" fill="#ffffff"/>
+
+  <!-- MARK -->
+  <g transform="translate(160,20)">
+    <g transform="translate(28,18)">
+      <path d="M10 38 C -6 30 -8 12 8 8 C 10 -2 28 -6 36 4 C 48 -4 68 4 64 22 C 76 26 72 46 56 48 L 18 52 Z" fill="url(#gHat)"/>
+    </g>
+    <circle cx="90" cy="105" r="72" fill="url(#gCircle)"/>
+    <circle cx="90" cy="105" r="44" fill="#ffffff"/>
+    <g fill="#1e293b">
+      <rect x="69" y="82" width="5" height="26" rx="2"/>
+      <rect x="77" y="82" width="5" height="26" rx="2"/>
+      <rect x="85" y="82" width="5" height="26" rx="2"/>
+      <rect x="69" y="102" width="21" height="8" rx="3"/>
+      <rect x="76" y="108" width="7" height="38" rx="3"/>
+      <path d="M95 82 h10 c5 12 5 28 0 40 h-10 z"/>
+      <rect x="97" y="120" width="6" height="26" rx="3"/>
+    </g>
+    <g fill="none" stroke-linecap="round">
+      <path d="M-8 132 C 30 178 160 178 202 108" stroke="url(#gSwoosh)" stroke-width="12"/>
+    </g>
+    <ellipse cx="90" cy="150" rx="88" ry="18" fill="none" stroke="#ffffff" stroke-width="7"/>
+  </g>
+
+  <!-- TITRE O RESTO -->
+  <g font-family="Arial, Helvetica, sans-serif" text-anchor="middle">
+    <text x="320" y="360" font-size="110" font-weight="900" letter-spacing="2">
+      <tspan fill="#15803d">O</tspan><tspan fill="#111827" dx="8">RESTO</tspan>
+    </text>
+    <line x1="60" y1="400" x2="140" y2="400" stroke="#15803d" stroke-width="3"/>
+    <line x1="500" y1="400" x2="580" y2="400" stroke="#15803d" stroke-width="3"/>
+    <text x="320" y="430" font-size="24" fill="#1f2937" font-weight="600">La gestion des repas et abonnements</text>
+    <text x="320" y="460" font-size="24" fill="#1f2937" font-weight="600">pour les écoles et entreprises</text>
+
+    <!-- 5 piliers -->
+    <g font-size="20" font-weight="700" fill="#111827">
+      <text x="100" y="580">Menus</text>
+      <text x="235" y="580">Abonnements</text>
+      <text x="380" y="580">Paiements</text>
+      <text x="500" y="580">QR Code</text>
+      <text x="590" y="580" font-size="18">Stats</text>
+    </g>
+    <g font-size="15" fill="#15803d" font-weight="700">
+      <text x="100" y="605" font-size="28">🍴</text>
+      <text x="235" y="605" font-size="28">📋</text>
+      <text x="380" y="605" font-size="28">📱</text>
+      <text x="500" y="605" font-size="28">🔳</text>
+      <text x="590" y="605" font-size="28">📊</text>
+    </g>
+    <text x="380" y="630" font-size="13" fill="#6b7280">Wave • Cash</text>
+    <line x1="170" y1="550" x2="170" y2="640" stroke="#15803d" stroke-width="2"/>
+    <line x1="310" y1="550" x2="310" y2="640" stroke="#f97316" stroke-width="2"/>
+    <line x1="450" y1="550" x2="450" y2="640" stroke="#15803d" stroke-width="2"/>
+    <line x1="545" y1="550" x2="545" y2="640" stroke="#f97316" stroke-width="2"/>
+  </g>
+
+  <!-- Bandeau bas -->
+  <rect x="0" y="690" width="640" height="70" rx="0" fill="#0f172a"/>
+  <text x="320" y="730" text-anchor="middle" font-family="Arial" font-size="22" font-weight="800" fill="#ffffff" letter-spacing="3">O RESTO • THIÈS • SÉNÉGAL</text>
+</svg>

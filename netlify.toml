@@ -23,7 +23,8 @@
     X-Content-Type-Options = "nosniff"
     X-XSS-Protection = "1; mode=block"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    # Caméra autorisée pour le scan QR (Validation repas) — micro/geoloc bloqués
+    Permissions-Policy = "camera=(self), microphone=(), geolocation=()"
 
 # Cache pour les assets statiques
 [[headers]]

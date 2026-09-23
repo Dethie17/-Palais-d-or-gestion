@@ -58,11 +58,11 @@ Trouvez-les dans **Settings** > **API** de votre dashboard Supabase.
 
 ### 3. Configuration des variables d'environnement (OBLIGATOIRE)
 
-**⚠️ L'application ne fonctionnera pas sans ces variables !**
+**⚠️ L'application fonctionne sans ces variables (mode démo local), mais la persistance partagée nécessite Supabase.**
 
 1. Allez dans **Site settings** → **Environment variables**
 2. Cliquez sur **"Add a variable"**
-3. Ajoutez ces 2 variables :
+3. Ajoutez ces 2 variables (facultatives mais recommandées) :
 
 | Clé                      | Valeur                        | Exemple                                   |
 | ------------------------ | ----------------------------- | ----------------------------------------- |
@@ -81,10 +81,15 @@ Trouvez-les dans **Settings** > **API** de votre dashboard Supabase.
 ### 5. Vérification
 
 1. Ouvrez votre site déployé
-2. Essayez de vous connecter avec :
-   - Username: `manager`
-   - Password: `manager123`
+2. Essayez de vous connecter avec (comptes démo, mot de passe = nom + 123) :
+   - Client : `client` / `client123`
+   - Gérant : `gestionnaire` / `gestionnaire123`
+   - Directeur : `admin` / `admin123`
 3. Si la connexion fonctionne, tout est bon !
+
+> Sans variables Supabase, l'app démarre en **mode démo local** (données dans le navigateur).
+> Avec Supabase configuré + tables créées (`supabase-setup.sql` puis `supabase-oresto-migration.sql`),
+> les données persistent en base et sont partagées entre appareils.
 
 ### 6. Configuration personnalisée (optionnel)
 
@@ -194,6 +199,7 @@ npm run build
 - [ ] Code pushé sur GitHub
 - [ ] `npm run build` fonctionne en local
 - [ ] `netlify.toml` présent à la racine
+- [ ] Variables Supabase ajoutées (ou mode démo local assumé)
 - [ ] Compte Netlify créé
 - [ ] Site connecté au dépôt GitHub
 - [ ] Nom de site personnalisé configuré
