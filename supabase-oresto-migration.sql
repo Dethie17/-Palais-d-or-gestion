@@ -115,3 +115,10 @@ INSERT INTO users (username, password, role, qr_token) VALUES
   ('gestionnaire', 'gestionnaire123', 'gestionnaire', NULL),
   ('admin', 'admin123', 'admin', NULL)
 ON CONFLICT (username) DO NOTHING;
+
+-- 11. Comptes créés depuis l'app (Paramètres DG) : écriture distante
+--     (le schéma d'origine n'autorisait que lecture + mise à jour)
+DROP POLICY IF EXISTS "Création publique des utilisateurs" ON users;
+CREATE POLICY "Création publique des utilisateurs" ON users FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Suppression publique des utilisateurs" ON users;
+CREATE POLICY "Suppression publique des utilisateurs" ON users FOR DELETE USING (true);
