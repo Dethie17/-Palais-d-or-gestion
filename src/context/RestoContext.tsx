@@ -29,6 +29,7 @@ import {
 } from '@/lib/wave';
 import { getClientQrToken, isPersonalQrToken, getChildQrToken } from '@/lib/clientQr';
 import { inferCycleFromClass } from '@/lib/schoolCycles';
+import { composedMenus } from '@/data/mockData';
 
 const LS_KEYS = {
   establishments: 'o-resto-establishments-v1',
@@ -56,15 +57,18 @@ const LEGACY_LS_KEYS: Record<string, string> = {
   'o-resto-ticket-intents-v1': 'o-resto-ticket-intents',
 };
 
-// Menus vierges : rien n'est affiché aux parents tant que le DG n'a pas
-// composé ET publié les 5 jours (règle : un jour n'existe que s'il a des plats).
-const DEFAULT_WEEKLY_MENUS: WeeklyMenu[] = [
-  { day: 'Lundi', name: '', description: '', items: [] },
-  { day: 'Mardi', name: '', description: '', items: [] },
-  { day: 'Mercredi', name: '', description: '', items: [] },
-  { day: 'Jeudi', name: '', description: '', items: [] },
-  { day: 'Vendredi', name: '', description: '', items: [] },
-];
+// Menus de la semaine : pré-remplis avec la carte Miam's (Lun → Ven) pour que
+// l'espace parent affiche tous les menus dès l'installation. Le Gérant peut
+// les recomposer ensuite via Gestion Menu (MenuManagement).
+const DEFAULT_WEEKLY_MENUS: WeeklyMenu[] = WEEK_DAYS.map((day) => {
+  const composed = composedMenus.find((c) => c.day === day);
+  return {
+    day,
+    name: composed?.name ?? '',
+    description: composed?.description ?? '',
+    items: (composed?.items ?? []).map((it) => ({ name: it.name, price: it.price })),
+  };
+});
 
 const DEFAULT_FINANCE_SETTINGS: FinanceSettings = {
   ismSubscriptionPct: 10, schoolPerSubscription: 2000, otherSalesPct: 5,
@@ -210,6 +214,15 @@ interface RestoContextType {
     method: ORestoPaymentMethod,
     childId?: string,
   ) => { payment: ORestoPayment; addedMeals: number; wave?: WavePaymentRequest };
+  // Menu du jour payé par la carte prépayée : débit du total + 1 repas crédité
+  // (sur l'abonnement actif de l'enfant, sinon pass 1 jour). Lève une Error
+  // si solde insuffisant (message affichable tel quel).
+  buyDayMenu: (
+    clientUsername: string,
+    childId: string,
+    day: string,
+    total: number,
+  ) => { addedMeals: number };
   // Vente au comptoir (Gérant) : formules + tickets pour un client nommé.
   // - Espèces : activation / crédit immédiats + reçu imprimable.
   // - Wave : demande mobile en attente, le client confirme avec son code.
@@ -376,13 +389,16 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   const [financeExpenses, setFinanceExpenses] = useState<FinanceExpense[]>(() =>
     load<FinanceExpense[]>(LS_KEYS.financeExpenses, []),
   );
-  const [weeklyMenus, setWeeklyMenus] = useState<WeeklyMenu[]>(() =>
+  const [weeklyMenus, setWeeklyMenus] = useState<WeeklyMenu[]>(() => {
     // Migration douce : les menus enregistrés avant la composition (sans items) sont normalisés.
-    load<WeeklyMenu[]>(LS_KEYS.weeklyMenus, DEFAULT_WEEKLY_MENUS).map((m) => ({
+    // Si le stock local est vide (5 jours sans plats), on repart sur la semaine pré-remplie.
+    const stored = load<WeeklyMenu[]>(LS_KEYS.weeklyMenus, DEFAULT_WEEKLY_MENUS).map((m) => ({
       ...m,
       items: Array.isArray((m as Partial<WeeklyMenu>).items) ? (m as WeeklyMenu).items : [],
-    })),
-  );
+    }));
+    const hasAnyDish = stored.some((m) => (m.items ?? []).length > 0);
+    return hasAnyDish ? stored : DEFAULT_WEEKLY_MENUS;
+  });
 
   useEffect(() => save(LS_KEYS.establishments, establishments), [establishments]);
   useEffect(() => save(LS_KEYS.formulas, formulas), [formulas]);
@@ -544,12 +560,17 @@ export function RestoProvider({ children }: { children: ReactNode }) {
                 !!it && typeof (it as WeeklyMenuItem).name === 'string' && Number.isFinite(Number((it as WeeklyMenuItem).price)))
               .map((it) => ({ name: (it as WeeklyMenuItem).name.trim().slice(0, 60), price: Math.max(0, Math.floor(Number((it as WeeklyMenuItem).price))) }));
           };
-          setWeeklyMenus(WEEK_DAYS.map((d) => {
+          const remote = WEEK_DAYS.map((d) => {
             const r = byDay.get(d);
             return r
               ? { day: d, name: r.name ?? '', description: r.description ?? '', items: cleanItems((r as { items?: unknown }).items) }
               : { day: d, name: '', description: '', items: [] };
-          }));
+          });
+          // Semaine distante vide (table initialisée sans plats) : on garde
+          // les menus locaux au lieu d'afficher une cantine vide aux parents.
+          if (remote.some((m) => m.items.length > 0)) {
+            setWeeklyMenus(remote);
+          }
         }
         if (profRes.data && profRes.data.length > 0) {
           setParentProfiles(
@@ -1248,6 +1269,95 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     [formulas, creditTicketMeals, childrenList, wallets],
   );
 
+  // Menu du jour payé par la carte prépayée : débit du total + 1 repas crédité
+  // (ajouté à l'abonnement actif de l'enfant, sinon pass 1 jour créé).
+  // Lève une Error si solde insuffisant — message affichable tel quel.
+  const buyDayMenu = useCallback(
+    (clientUsername: string, childId: string, day: string, total: number) => {
+      const child = childrenList.find((c) => c.id === childId);
+      if (!child) throw new Error('Enfant introuvable');
+      if (!Number.isFinite(total) || total <= 0) throw new Error('Menu indisponible');
+      const balance = wallets.find((w) => w.childId === childId)?.balance ?? 0;
+      if (balance < total) {
+        throw new Error(`Solde insuffisant : ${balance} FCFA sur la carte de ${child.firstName}, menu ${total} FCFA. Rechargez la carte.`);
+      }
+      const now = new Date();
+      const rand = Math.floor(Math.random() * 36 * 36).toString(36).toUpperCase();
+      const tx: WalletTx = {
+        id: uid('W'), childId, kind: 'debit', amount: total,
+        method: 'card', status: 'paid',
+        reference: `MENU-${Date.now().toString(36).toUpperCase()}${rand}`,
+        label: `Menu ${day} — carte prépayée`,
+        createdAt: now.toISOString(),
+      };
+      const nowTs = now.getTime();
+      const active = subscriptions.find(
+        (s) => s.childId === childId && s.status === 'active' && new Date(s.endDate).getTime() >= nowTs,
+      );
+      let subscriptionId: string;
+      if (active) {
+        subscriptionId = active.id;
+        setSubscriptions((prev) =>
+          prev.map((s) => (s.id === active.id ? { ...s, mealsRemaining: s.mealsRemaining + 1 } : s)),
+        );
+        supabase.from('subscriptions').update({
+          meals_remaining: active.mealsRemaining + 1,
+        }).eq('id', active.id).then(() => undefined, () => undefined);
+      } else {
+        const pass: Subscription = {
+          id: uid('S'),
+          clientUsername,
+          formulaId: 'T1',
+          startDate: now.toISOString(),
+          endDate: new Date(nowTs + 86400000).toISOString(),
+          status: 'active',
+          mealsRemaining: 1,
+          qrToken: child.qrToken,
+          childId,
+        };
+        subscriptionId = pass.id;
+        setSubscriptions((prev) => [...prev, pass]);
+        supabase.from('subscriptions').insert({
+          id: pass.id,
+          client_username: pass.clientUsername,
+          formula_id: pass.formulaId,
+          start_date: pass.startDate,
+          end_date: pass.endDate,
+          status: pass.status,
+          meals_remaining: pass.mealsRemaining,
+          qr_token: pass.qrToken,
+          child_id: pass.childId ?? null,
+        }).then(() => undefined, () => undefined);
+      }
+      const payment: ORestoPayment = {
+        id: uid('P'), subscriptionId,
+        clientUsername, formulaId: 'T1',
+        amount: total, method: 'balance',
+        status: 'paid',
+        reference: `PAY-${Date.now().toString(36).toUpperCase()}${rand}`,
+        createdAt: now.toISOString(),
+      };
+      const nextBalance = balance - total;
+      setWalletTxs((prev) => [...prev, tx]);
+      setWallets((prev) => prev.map((w) => (w.childId === childId ? { ...w, balance: w.balance - total } : w)));
+      setPayments((prev) => [...prev, payment]);
+      supabase.from('wallet_transactions').insert({
+        id: tx.id, child_id: tx.childId, kind: tx.kind, amount: tx.amount,
+        method: 'card', status: 'paid', reference: tx.reference, label: tx.label,
+      }).then(() => undefined, () => undefined);
+      supabase.from('wallets').upsert({ child_id: childId, balance: nextBalance })
+        .then(() => undefined, () => undefined);
+      supabase.from('oresto_payments').insert({
+        id: payment.id, subscription_id: payment.subscriptionId,
+        client_username: clientUsername, formula_id: payment.formulaId,
+        amount: payment.amount, method: payment.method, status: payment.status,
+        reference: payment.reference,
+      }).then(() => undefined, () => undefined);
+      return { addedMeals: 1 };
+    },
+    [childrenList, wallets, subscriptions],
+  );
+
   // Vente au comptoir par le Gérant : ticket ou abonnement pour un client nommé.
   // Espèces : activation / crédit immédiats + reçu (sans passer par un pending stale).
   // Externe : demande pending à confirmer via coche manuelle.
@@ -1845,6 +1955,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         cancelSubscription,
         renewSubscription,
         buyTicket,
+        buyDayMenu,
         counterSale,
         validateMeal,
         stats,

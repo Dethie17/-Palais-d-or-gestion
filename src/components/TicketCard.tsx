@@ -16,6 +16,8 @@ interface TicketCardProps {
   total: number;
   highlight?: boolean;
   highlightLabel?: string;
+  /** Affiche le prix unitaire de chaque plat (vitrine parent). */
+  showPrices?: boolean;
   action?: ReactNode;
   className?: string;
 }
@@ -25,7 +27,7 @@ interface TicketCardProps {
  * (Menus = vitrine, Abonnement = achat). Photo du menu, souche jour,
  * pointillés de séparation, plats (sans prix unitaires) + total détachable.
  */
-const TicketCard = ({ day, name, description, image, items, total, highlight, highlightLabel, action, className }: TicketCardProps) => {
+const TicketCard = ({ day, name, description, image, items, total, highlight, highlightLabel, showPrices, action, className }: TicketCardProps) => {
   return (
     <div className={`bg-white rounded-2xl border-2 shadow-sm overflow-hidden flex flex-col ${highlight ? 'border-green-500 ring-2 ring-green-200' : 'border-slate-100'} ${className ?? ''}`}>
       {/* Photo du menu */}
@@ -63,7 +65,11 @@ const TicketCard = ({ day, name, description, image, items, total, highlight, hi
         <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
           {items.map((it) => (
             <li key={it.name} className="flex items-center gap-1.5">
-              <UtensilsCrossed className="w-3.5 h-3.5 text-slate-400" /> {it.name}
+              <UtensilsCrossed className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <span className="truncate">{it.name}</span>
+              {showPrices && (
+                <span className="ml-auto font-bold text-slate-800 whitespace-nowrap tabular-nums">{formatCurrency(it.price)}</span>
+              )}
             </li>
           ))}
         </ul>
