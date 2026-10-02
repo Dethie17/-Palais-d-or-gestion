@@ -12,7 +12,7 @@ import { UserRole } from '@/context/AuthContext';
 // reçu, commandes), menus récréation (lecture), historique.
 // Règle de caisse : SEUL le Gérant de cantine tient la Caisse (POS) au quotidien.
 const DG_PAGES: PageName[] = [
-  'home', 'dashboard', 'finance', 'subscriptions',
+  'dashboard', 'finance', 'subscriptions',
   'users', 'settings', 'history', 'profile',
 ];
 export const ROLE_PAGES: Record<UserRole, PageName[]> = {

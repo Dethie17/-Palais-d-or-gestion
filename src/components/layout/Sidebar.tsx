@@ -25,7 +25,7 @@ interface SidebarProps {
 }
 
 const allNavItems: { page: PageName; label: string; icon: React.ReactNode; roles: UserRole[] }[] = [
-  { page: 'home', label: 'Accueil', icon: <Home aria-hidden className="w-5 h-5" />, roles: ['personnel', 'admin', 'caissier', 'manager'] },
+  { page: 'home', label: 'Accueil', icon: <Home aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier'] },
   // Parent : UNE seule entrée — le parcours continu (anciens modules en redirect invisible).
   { page: 'home', label: 'Espace Parent', icon: <Home aria-hidden className="w-5 h-5" />, roles: ['client'] },
   { page: 'subscriptions', label: 'Abonnés & paiements', icon: <Users aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },
@@ -78,8 +78,6 @@ const Sidebar = ({ currentPage, onNavigate, open, onClose }: SidebarProps) => {
             <h1 className="text-2xl font-black tracking-tight leading-none">
               <span className="text-green-700">O</span> <span className="text-slate-900">RESTO</span>
             </h1>
-            <p className="text-xs text-slate-600 font-medium leading-tight mt-1">Repas • Abonnements • QR Code</p>
-            <p className="text-xs text-slate-500">Écoles & entreprises</p>
           </div>
           <button onClick={onClose} aria-label="Fermer le menu" className="lg:hidden text-slate-500 hover:text-slate-800 transition-colors p-2 rounded-lg">
             <X aria-hidden className="w-5 h-5" />

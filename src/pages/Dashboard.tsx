@@ -35,7 +35,7 @@ interface DashboardProps {
 
 type PeriodFilter = 'realtime' | 'day' | 'week' | 'month';
 
-const DARK_CARD = 'bg-white border border-slate-200 rounded-2xl shadow-sm';
+const DARK_CARD = 'bg-slate-900 border border-slate-800 rounded-2xl shadow-sm';
 
 const getStatCards = (orders: Order[], period: PeriodFilter, activeProductCount: number, previousProductCount: number) => {
   const stats = getOrderStats(orders, period === 'realtime' ? 'day' : period);
@@ -324,10 +324,10 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
             <div className="flex gap-2 flex-wrap">
               {isAdmin && (
                 <>
-                  <button onClick={handleDownloadReport} className="flex items-center gap-2 bg-white/10 border border-white/10 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-white/15">
+                  <button onClick={handleDownloadReport} className="flex items-center gap-2 bg-slate-900 border border-slate-800 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-slate-700">
                     <FileDown className="w-4 h-4" /><span className="hidden sm:inline">Rapport PDF</span>
                   </button>
-                  <button onClick={handleDownloadExcel} className="flex items-center gap-2 bg-white/10 border border-white/10 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-white/15">
+                  <button onClick={handleDownloadExcel} className="flex items-center gap-2 bg-slate-900 border border-slate-800 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-slate-700">
                     <FileSpreadsheet className="w-4 h-4" /><span className="hidden sm:inline">Export Excel</span>
                   </button>
                 </>
@@ -361,7 +361,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
           {statCards.map((stat) => {
             const Icon = stat.icon;
             return (
-              <div key={stat.label} className={`${DARK_CARD} p-4 sm:p-5 hover:border-orange-500/40 transition-colors`}>
+              <div key={stat.label} className={`${DARK_CARD} p-4 sm:p-5 hover:border-emerald-500/40 transition-colors`}>
                 <div className="flex items-start justify-between mb-3">
                   <span className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl ${stat.chip} flex items-center justify-center`}>
                     <Icon className="w-5 h-5" strokeWidth={2.5} />
@@ -488,8 +488,8 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                   />
                   <Legend wrapperStyle={{ paddingTop: '16px' }} iconType="circle" formatter={(value) => <span style={{ color: '#94a3b8', fontWeight: '600', fontSize: '13px' }}>{value}</span>} />
                   <Line type="monotone" dataKey="total" name="Total" stroke="#10b981" strokeWidth={3} dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }} activeDot={{ r: 6, fill: '#059669', stroke: '#fff', strokeWidth: 2 }} />
-                  <Line type="monotone" dataKey="caisse" name="Caisse" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 5, fill: '#2563eb', stroke: '#fff', strokeWidth: 2 }} />
-                  <Line type="monotone" dataKey="abonnements" name="Abonnements" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 5, fill: '#d97706', stroke: '#fff', strokeWidth: 2 }} />
+                  <Line type="monotone" dataKey="caisse" name="Caisse" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 5, fill: '#d97706', stroke: '#fff', strokeWidth: 2 }} />
+                  <Line type="monotone" dataKey="abonnements" name="Abonnements" stroke="#14b8a6" strokeWidth={2} dot={false} activeDot={{ r: 5, fill: '#0d9488', stroke: '#fff', strokeWidth: 2 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

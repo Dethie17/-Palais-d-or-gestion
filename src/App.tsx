@@ -56,9 +56,9 @@ function AppContent() {
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Gérant sans accueil : atterrissage direct sur le tableau de bord.
+  // Sans accueil : Gérant et DG atterrissent direct sur le tableau de bord.
   useEffect(() => {
-    if (user?.role === 'gestionnaire' && currentPage === 'home') {
+    if ((user?.role === 'gestionnaire' || user?.role === 'admin' || user?.role === 'manager') && currentPage === 'home') {
       setCurrentPage('dashboard');
     }
   }, [user?.role, currentPage]);

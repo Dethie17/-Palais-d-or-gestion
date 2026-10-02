@@ -6,9 +6,9 @@ import { formatCurrency } from '@/lib/utils';
 import { weeklyMenuTotal, publishedDays } from '@/lib/menus';
 import { isOfficialFormula } from '@/lib/formulas';
 import {
-  QrCode, UtensilsCrossed, Wallet, History, CalendarDays, ClipboardList,
-  ScanLine, LayoutDashboard, Users, Banknote, ArrowRight, Clock,
-  CheckCircle, XCircle, Ticket, Baby, Settings, AlertTriangle,
+  QrCode, UtensilsCrossed, Wallet, History, CalendarDays,
+  LayoutDashboard, Users, Banknote, ArrowRight, Clock,
+  CheckCircle, XCircle, Ticket, Baby,
 } from 'lucide-react';
 
 interface HomePageProps {
@@ -269,47 +269,6 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
               <p className="text-3xl md:text-4xl font-extrabold text-orange-600 mt-1">{published.length}<span className="text-lg text-slate-400">/5</span></p>
               <p className="text-[11px] text-slate-400 font-medium">jours publiés</p>
             </div>
-          </div>
-
-          {/* Alertes publication : rien n'est visible côté parents tant que ce n'est pas publié */}
-          {(published.length < 5 || formulas.filter((f) => f.kind === 'ticket' && !isOfficialFormula(f.id)).length === 0) && (
-            <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 flex gap-3 text-sm">
-              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div className="text-amber-900">
-                <p className="font-bold">À publier pour ouvrir la vente parents</p>
-                <ul className="mt-1 text-[13px] space-y-0.5 list-disc list-inside">
-                  {published.length < 5 && <li>Menus : {published.length}/5 jours publiés — <button onClick={() => onNavigate('menu')} className="font-bold underline underline-offset-2">composer la semaine</button>.</li>}
-                  {formulas.filter((f) => f.kind === 'ticket' && !isOfficialFormula(f.id)).length === 0 && <li>Aucun ticket publié — <button onClick={() => onNavigate('menu')} className="font-bold underline underline-offset-2">créer le premier ticket</button>.</li>}
-                </ul>
-              </div>
-            </div>
-          )}
-
-          {/* Actions service */}
-          <div className="grid sm:grid-cols-2 gap-3 md:gap-4">
-            {[
-              { label: 'Valider un repas', desc: 'Scanner ou saisir le QR → contrôle auto', icon: ScanLine, go: () => onNavigate('validation'), style: 'from-emerald-500 to-teal-600' },
-              { label: 'Composer les menus', desc: 'Plats + prix, publication de la semaine', icon: ClipboardList, go: () => onNavigate('menu'), style: 'from-orange-500 to-amber-500' },
-              { label: 'Abonnés & paiements', desc: 'Encaisser, confirmer, rembourser', icon: Users, go: () => onNavigate('subscriptions'), style: 'from-emerald-600 to-teal-600' },
-              { label: 'QR Élèves', desc: 'Badges et galerie des QR', icon: QrCode, go: () => onNavigate('qrgallery'), style: 'from-slate-700 to-slate-900' },
-              { label: 'Utilisateurs', desc: 'Parents, enfants et comptes du site', icon: Baby, go: () => onNavigate('users'), style: 'from-sky-500 to-blue-600' },
-              { label: 'Établissement', desc: 'Comptes et paramètres du site', icon: Settings, go: () => onNavigate('settings'), style: 'from-slate-500 to-slate-700' },
-            ].map((a) => (
-              <button
-                key={a.label}
-                onClick={a.go}
-                className="bg-white rounded-2xl p-4 md:p-5 shadow border flex items-center gap-4 text-left hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all"
-              >
-                <span className={`w-12 h-12 rounded-xl bg-gradient-to-br ${a.style} flex items-center justify-center flex-shrink-0`}>
-                  <a.icon className="w-6 h-6 text-white" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block font-bold text-slate-800">{a.label}</span>
-                  <span className="block text-xs text-slate-500 mt-0.5 truncate">{a.desc}</span>
-                </span>
-                <ArrowRight className="w-5 h-5 text-slate-300 ml-auto flex-shrink-0" />
-              </button>
-            ))}
           </div>
 
           {/* Semaine + activité */}

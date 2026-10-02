@@ -55,6 +55,21 @@ const scrollTo = (id: string) => {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
+/** Titre d'étape premium : pastille numérotée émeraude + titre + sous-titre. */
+function SectionTitle({ step, title, sub }: { step: string; title: string; sub: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="w-9 h-9 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-sm font-black flex-shrink-0 shadow">
+        {step}
+      </span>
+      <div className="min-w-0">
+        <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-900">{title}</h2>
+        <p className="text-sm text-slate-500 mt-0.5">{sub}</p>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Espace Parent — parcours fluide :
  * 1 inscription (carte crédit + QR créés seuls) → 2 abonnement
@@ -445,8 +460,7 @@ const EspaceParentPage = () => {
 
         {/* ===== 1. INSCRIPTION ===== */}
         <section id="inscription" className="scroll-mt-24">
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900">1 · J’inscris mes enfants</h2>
-          <p className="text-sm text-slate-500 mt-1">La carte crédit et le QR Code de chaque enfant sont créés automatiquement.</p>
+          <SectionTitle step="1" title="J’inscris mes enfants" sub="La carte et le QR Code de chaque enfant sont créés automatiquement." />
           <div className="grid md:grid-cols-2 gap-4 mt-4">
             {!profile && (
               <div className="md:col-span-2 rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
@@ -491,8 +505,7 @@ const EspaceParentPage = () => {
 
         {/* ===== 2. ABONNEMENT : les 3 formules ===== */}
         <section id="abonnement" className="scroll-mt-24">
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900">2 · Je choisis l’abonnement</h2>
-          <p className="text-sm text-slate-500 mt-1">1 repas par jour, le midi, du lundi au vendredi. Le paiement InTouch se fait dans le pavé.</p>
+          <SectionTitle step="2" title="Je choisis l’abonnement" sub="1 repas par jour, le midi, du lundi au vendredi. Paiement InTouch dans le pavé." />
           <div className="grid md:grid-cols-3 gap-4 mt-4 items-start">
             {aboFormulas.map((f) => (
               <FormulaCard
@@ -537,8 +550,7 @@ const EspaceParentPage = () => {
 
         {/* ===== 3. MENU : jour + semaine + tickets ===== */}
         <section id="menu" className="scroll-mt-24">
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900">3 · Menu du jour</h2>
-          <p className="text-sm text-slate-500 mt-1">Payé avec la carte de l’enfant : le total est débité, 1 repas est crédité. Menus publiés par le Personnel.</p>
+          <SectionTitle step="3" title="Menu du jour" sub="Payé avec la carte de l’enfant : total débité, 1 repas crédité. Menus publiés par le Personnel." />
 
           {menuDuJour && (menuDuJour.items ?? []).length > 0 ? (
             <div className="mt-4 max-w-md">
@@ -642,8 +654,7 @@ const EspaceParentPage = () => {
 
         {/* ===== 4. CARTES ===== */}
         <section id="cartes" className="scroll-mt-24">
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900">4 · Mes cartes</h2>
-          <p className="text-sm text-slate-500 mt-1">Rechargeables via InTouch, QR à présenter à la cantine.</p>
+          <SectionTitle step="4" title="Mes cartes" sub="Rechargeables via InTouch, QR à présenter à la cantine. La carte sert aux tickets repas." />
 
           {activeSubs.length > 0 && (
             <ul className="mt-4 space-y-4">
@@ -740,8 +751,7 @@ const EspaceParentPage = () => {
 
         {/* ===== 5. HISTORIQUE ===== */}
         <section id="historique" className="scroll-mt-24">
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900">5 · Historique des dépenses</h2>
-          <p className="text-sm text-slate-500 mt-1">Toutes les dépenses, par enfant.</p>
+          <SectionTitle step="5" title="Historique des dépenses" sub="Toutes les dépenses, par enfant." />
           <div className="flex flex-wrap items-center gap-2 mt-4 mb-3">
             {[{ id: 'all', label: 'Tous' }, ...kids.map((k) => ({ id: k.id, label: k.firstName }))].map((o) => (
               <button
@@ -836,20 +846,26 @@ const EspaceParentPage = () => {
   );
 };
 
-/** Carte formule avec panneau de paiement InTouch intégré (100 % dans le pavé). */
+/** Carte formule premium : badge cycle, prix fort, CTA émeraude, panneau InTouch intégré. */
 function FormulaCard({ formulaId, name, audience, description, price, meals, days, open, onOpen, onClose, panel }: {
   formulaId: string; name: string; audience: string; description: string; price: number;
   meals: number; days: number; open: boolean; onOpen: () => void; onClose: () => void; panel: React.ReactNode;
 }) {
+  const star = formulaId === 'F2';
   return (
-    <article className={`bg-white rounded-2xl border-2 p-5 md:p-6 flex flex-col h-full transition-shadow hover:shadow-lg ${open ? 'border-emerald-500 shadow-lg' : 'border-slate-200 shadow-sm'}`}>
-      <p className="self-start text-[11px] font-bold text-emerald-700 uppercase tracking-wider bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">{audience}</p>
-      <h3 className="font-bold text-slate-900 mt-2.5 leading-snug">{name}</h3>
+    <article className={`relative bg-white rounded-3xl border-2 p-5 md:p-6 flex flex-col h-full transition-all hover:shadow-xl hover:-translate-y-0.5 ${open ? 'border-emerald-500 shadow-lg' : star ? 'border-emerald-200 shadow-md' : 'border-slate-100 shadow-sm'}`}>
+      {star && !open && (
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[11px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-emerald-600 text-white shadow whitespace-nowrap">
+          Le plus choisi
+        </span>
+      )}
+      <p className="self-start text-[11px] font-black text-emerald-700 uppercase tracking-wider bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">{audience}</p>
+      <h3 className="font-black text-slate-900 mt-2.5 leading-snug">{name}</h3>
       <p className="text-sm text-slate-500 mt-1">{description}</p>
-      <p className="mt-4 text-3xl font-black tracking-tight text-slate-900">{formatCurrency(price)}</p>
-      <p className="text-sm text-slate-500 mt-0.5">{meals} repas · {days} jours</p>
+      <p className="mt-4 text-3xl font-black tracking-tight text-slate-900 tabular-nums">{formatCurrency(price)}</p>
+      <p className="text-[13px] text-slate-500 mt-0.5">{meals} repas · {days} jours</p>
       {!open ? (
-        <button onClick={onOpen} className="mt-4 w-full py-3 min-h-[48px] rounded-xl font-bold text-sm text-white bg-emerald-600 hover:bg-emerald-700">
+        <button onClick={onOpen} className="mt-4 w-full py-3 min-h-[48px] rounded-xl font-bold text-sm text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] transition-all shadow-sm">
           Choisir · {formatCurrency(price)}
         </button>
       ) : (
