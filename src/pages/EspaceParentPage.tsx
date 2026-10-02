@@ -14,7 +14,7 @@ import TicketCard from '@/components/TicketCard';
 import { dayPhoto } from '@/data/cantineWeek';
 import { weeklyMenuTotal } from '@/lib/menus';
 import {
-  CheckCircle, AlertCircle, Smartphone, Timer,
+  CheckCircle, AlertCircle, Smartphone, Timer, Ticket,
   Copy, Download, Printer,
   Pencil, Trash2, X, Check,
 } from 'lucide-react';
@@ -155,14 +155,7 @@ const EspaceParentPage = () => {
   const pendingByChild = (childId: string) =>
     allMine.some((s) => s.status === 'pending' && s.childId === childId);
 
-  const todayLabel = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   const todayName = DAY_INDEX[new Date().getDay()];
-  const subscribedCount = kids.filter((k) => activeByChild(k.id)).length;
-  const statusLine = kids.length === 0
-    ? 'Commencez par inscrire un enfant'
-    : subscribedCount === kids.length
-      ? 'Tous vos enfants sont abonnés'
-      : `${subscribedCount} / ${kids.length} enfant${kids.length > 1 ? 's' : ''} abonné${subscribedCount > 1 ? 's' : ''}`;
 
   // ---------- Paiement formule depuis le panneau intégré ----------
   const startFormulaPayment = (formulaId: string, childId: string) => {
@@ -420,33 +413,8 @@ const EspaceParentPage = () => {
     ?? publishedMenus[0];
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen bg-gradient-to-b from-emerald-50/60 via-slate-100 to-slate-100">
       <div className="max-w-6xl mx-auto px-4 py-6 md:py-8 space-y-10">
-
-        {/* Accueil chaleureux */}
-        <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-500 text-white p-6 md:p-8 shadow-lg">
-          <div aria-hidden className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-white/10 blur-2xl" />
-          <div aria-hidden className="absolute -bottom-24 -left-10 w-64 h-64 rounded-full bg-black/10 blur-2xl" />
-          <div className="relative">
-            <p className="inline-block text-[11px] font-bold uppercase tracking-[0.18em] bg-white/20 px-3 py-1 rounded-full">Espace parents</p>
-            <h1 className="text-2xl md:text-4xl font-bold mt-3">Bonjour, {username}</h1>
-            <p className="text-sm md:text-base text-emerald-50 mt-1">Cantine scolaire · 1 repas le midi, Lun → Ven · <span className="capitalize">{todayLabel}</span></p>
-            <p className="text-sm font-semibold text-white mt-2">{statusLine}</p>
-            <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {[
-                { v: String(kids.length), l: `Enfant${kids.length > 1 ? 's' : ''} · ${subscribedCount} abonné${subscribedCount > 1 ? 's' : ''}` },
-                { v: String(totals.mealsLeft), l: 'Repas restants' },
-                { v: formatCurrency(totals.balance), l: 'Solde cartes' },
-                { v: formatCurrency(totals.spent), l: 'Dépensé ce mois' },
-              ].map((s) => (
-                <div key={s.l} className="rounded-2xl bg-white/15 backdrop-blur px-4 py-3 border border-white/20">
-                  <p className="text-lg md:text-xl font-bold truncate">{s.v}</p>
-                  <p className="text-xs text-emerald-50">{s.l}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </header>
 
         {message && (
           <div role="status" className={`rounded-xl p-4 flex gap-3 text-sm font-medium border ${message.ok ? 'bg-emerald-50 text-emerald-900 border-emerald-200' : 'bg-red-50 text-red-800 border-red-200'}`}>
@@ -476,28 +444,11 @@ const EspaceParentPage = () => {
               />
             ))}
           </div>
-          <div className="mt-4">
-            {kids.length === 0 ? (
-              <p className="text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-4 text-center">
-                Aucun enfant pour l’instant — remplissez un formulaire ci-dessus.
-              </p>
-            ) : (
-              <button
-                onClick={() => scrollTo('cartes')}
-                className="w-full flex items-center gap-3 bg-emerald-50 border-2 border-emerald-200 rounded-2xl px-5 py-4 text-left hover:border-emerald-400 hover:shadow-md transition-all"
-              >
-                <span className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black flex-shrink-0">
-                  {kids.length}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-bold text-emerald-900">
-                    {kids.length} enfant{kids.length > 1 ? 's' : ''} inscrit{kids.length > 1 ? 's' : ''} — {kids.map((k) => k.firstName).join(', ')}
-                  </span>
-                  <span className="block text-xs text-emerald-700 mt-0.5">Cartes, QR, soldes et gestion (modifier / retirer) à l’étape 4 ↓</span>
-                </span>
-              </button>
-            )}
-          </div>
+          {kids.length === 0 && (
+            <p className="mt-4 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-4 text-center">
+              Aucun enfant pour l’instant — remplissez un formulaire ci-dessus.
+            </p>
+          )}
         </section>
 
         {/* ===== 2. ABONNEMENT : les 3 formules ===== */}
@@ -860,9 +811,9 @@ function FormulaCard({ formulaId, name, audience, description, price, meals, day
       <h3 className="font-black text-slate-900 mt-2.5 leading-snug">{name}</h3>
       <p className="text-sm text-slate-500 mt-1">{description}</p>
       <p className="mt-4 text-3xl font-black tracking-tight text-slate-900 tabular-nums">{formatCurrency(price)}</p>
-      <p className="text-[13px] text-slate-500 mt-0.5">{meals} repas · {days} jours</p>
+      <p className="text-[13px] text-slate-500 mt-0.5">{meals} repas · {days} jours · <span className="font-bold text-emerald-700">≈ {formatCurrency(pricePerMeal(price, meals))} / repas</span></p>
       {!open ? (
-        <button onClick={onOpen} className="mt-4 w-full py-3 min-h-[48px] rounded-xl font-bold text-sm text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] transition-all shadow-sm">
+        <button onClick={onOpen} className="mt-4 w-full py-3 min-h-[48px] rounded-xl font-bold text-sm text-white bg-gradient-to-r from-emerald-700 to-emerald-500 hover:from-emerald-800 hover:to-emerald-600 active:scale-[0.99] transition-all shadow-md shadow-emerald-600/20">
           Choisir · {formatCurrency(price)}
         </button>
       ) : (
@@ -1231,8 +1182,8 @@ function MenuTicketCard({ menu, highlight, kids, walletOf, buyer, onBuyer, onBuy
                 <option key={k.id} value={k.id}>{k.firstName} {k.lastName} · {formatCurrency(walletOf(k.id))}</option>
               ))}
             </select>
-            <button onClick={onBuy} className="mt-2 w-full py-3 min-h-[48px] rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700">
-              🎟 Ticket · {formatCurrency(total)}
+            <button onClick={onBuy} className="mt-2 w-full py-3 min-h-[48px] rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 active:scale-[0.99] transition-all inline-flex items-center justify-center gap-2">
+              <Ticket className="w-4 h-4" /> Ticket · {formatCurrency(total)}
             </button>
             {sel && walletOf(sel.id) < total && (
               <p className="mt-1.5 text-xs font-semibold text-red-600">Solde insuffisant — rechargez la carte à l’étape 4.</p>
