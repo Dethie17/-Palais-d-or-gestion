@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useResto } from '@/context/RestoContext';
 import { CheckCircle, XCircle, ScanLine, Camera, ImagePlus, Square, Search, UtensilsCrossed } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
@@ -43,43 +43,15 @@ const ValidationPage = () => {
   );
   const servedToday = today.filter((v) => v.status === 'accepted').length;
 
-  // Élèves avec abonnement actif (file du self), filtrables par nom
+  // Élèves avec abonnement actif (compteur d'en-tête)
   const activeSubs = useMemo(
     () => subscriptions.filter((s) => s.status === 'active' && new Date(s.endDate).getTime() >= Date.now()),
     [subscriptions],
   );
-  const servedClientsToday = useMemo(
-    () => {
-      const counts = new Map<string, number>();
-      for (const v of today) {
-        if (v.status !== 'accepted') continue;
-        // Clé par enfant si validation liée, sinon par compte (évite de fusionner frères/sœurs)
-        const key = v.childId ? `child:${v.childId}` : `user:${v.clientUsername}`;
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-      return counts;
-    },
-    [today],
-  );
-  const servedCountForSub = (s: { childId?: string; clientUsername: string }) =>
-    servedClientsToday.get(s.childId ? `child:${s.childId}` : `user:${s.clientUsername}`) ?? 0;
   const classes = useMemo(
     () => Array.from(new Set(kids.map((k) => k.className))).sort(),
     [kids],
   );
-  const filteredSubs = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const list = q
-      ? activeSubs.filter((s) => {
-          const k = s.childId ? kids.find((c) => c.id === s.childId) : undefined;
-          const hay = k
-            ? `${k.firstName} ${k.lastName} ${k.className} ${s.clientUsername} ${s.qrToken}`.toLowerCase()
-            : `${s.clientUsername} ${s.qrToken}`.toLowerCase();
-          return hay.includes(q);
-        })
-      : activeSubs;
-    return [...list].sort((a, b) => eleveKey(a).localeCompare(eleveKey(b)));
-  }, [activeSubs, search, kids, eleveKey]);
   const filteredKids = useMemo(() => {
     const q = search.trim().toLowerCase();
     return kids
@@ -88,7 +60,13 @@ const ValidationPage = () => {
       .sort((a, b) => a.firstName.localeCompare(b.firstName));
   }, [kids, search, classFilter]);
 
-  const formulaName = (formulaId: string) => formulas.find((f) => f.id === formulaId)?.name ?? '—';
+  // Enfant → abonnement actif (repas décomptés) ou solde carte (tickets).
+  const nowMs = Date.now();
+  const activeSubOf = (childId: string) =>
+    subscriptions.find((s) => s.childId === childId && s.status === 'active' && new Date(s.endDate).getTime() >= nowMs);
+  const servedTodayOf = (childId: string) =>
+    today.filter((v) => v.status === 'accepted' && v.childId === childId).length;
+  const hasSite = establishments.length > 0;
 
   // Plat du jour : publié par le Personnel (menus cantine). Sert de référence
   // affichée sur chaque ligne — sans menu publié, on sert par abonnement/solde.
@@ -102,22 +80,21 @@ const ValidationPage = () => {
   const todayDish = dishOfDate(new Date());
   const todayItems = menuOfDate(new Date())?.items ?? [];
 
-  // Nom d'élève : prénom + nom de l'enfant rattaché, sinon compte parent.
-  const eleveKey = useCallback((s: { childId?: string; clientUsername: string }) => {
-    const k = s.childId ? kids.find((c) => c.id === s.childId) : undefined;
-    return k ? `${k.firstName} ${k.lastName}` : s.clientUsername;
-  }, [kids]);
-  const eleveOfSub = (s: { childId?: string; clientUsername: string }) => {
-    const k = s.childId ? kids.find((c) => c.id === s.childId) : undefined;
-    return k ? { name: `${k.firstName} ${k.lastName}`, detail: k.className, initial: k.firstName.charAt(0).toUpperCase() } : { name: s.clientUsername, detail: 'compte parent', initial: s.clientUsername.charAt(0).toUpperCase() };
-  };
+  // Nom d'élève d'un passage : prénom + nom de l'enfant, sinon compte.
   const eleveOfValidation = (v: { childId?: string; clientUsername: string }) => {
     const k = v.childId ? kids.find((c) => c.id === v.childId) : undefined;
     return k ? `${k.firstName} ${k.lastName}` : v.clientUsername;
   };
 
   const runValidation = (code: string) => {
-    if (!code.trim() || !estabRef.current) return;
+    if (!code.trim()) {
+      setResult({ ok: false, message: 'Saisissez ou scannez un code élève.' });
+      return;
+    }
+    if (!estabRef.current) {
+      setResult({ ok: false, message: 'Aucune cantine : créez un établissement dans la section Établissement.' });
+      return;
+    }
     const r = validateMeal(code, estabRef.current);
     setResult({ ok: r.ok, message: r.message });
   };
@@ -292,14 +269,21 @@ const ValidationPage = () => {
         </div>
       )}
 
-      {/* 1. Liste des élèves — le plus rapide au self */}
+      {!hasSite && (
+        <div className="rounded-2xl p-4 flex gap-2 text-sm font-medium bg-red-50 text-red-800 border border-red-200">
+          <XCircle className="w-5 h-5 flex-shrink-0" />
+          <span>Aucune cantine enregistrée — créez votre établissement dans la section Établissement avant de servir.</span>
+        </div>
+      )}
+
+      {/* 1. Élèves — une seule liste : enfant + formule/solde + plat + servir */}
       <div className="bg-white rounded-2xl border shadow overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex flex-wrap items-center gap-3">
-          <p className="font-bold text-slate-800 flex items-center gap-2"><UtensilsCrossed className="w-5 h-5 text-green-700" /> Élèves abonnés ({filteredSubs.length})</p>
+          <p className="font-bold text-slate-800 flex items-center gap-2"><UtensilsCrossed className="w-5 h-5 text-green-700" /> Élèves ({filteredKids.length})</p>
           <div className="relative flex-1 min-w-[200px]">
             <Search aria-hidden className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
             <label htmlFor="search-eleve" className="sr-only">Rechercher un élève</label>
-            <input id="search-eleve" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un élève…" className="w-full pl-9 pr-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-green-700" />
+            <input id="search-eleve" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Nom, classe ou code QR…" className="w-full pl-9 pr-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-green-700" />
           </div>
           {classes.length > 0 && (
             <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className="px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-green-600">
@@ -308,28 +292,31 @@ const ValidationPage = () => {
             </select>
           )}
         </div>
-        {filteredSubs.length === 0 ? (
-          <p className="p-4 text-sm text-slate-500">Aucun élève abonné{search ? ' pour cette recherche' : ''}.</p>
+        {filteredKids.length === 0 ? (
+          <p className="p-4 text-sm text-slate-500">Aucun élève{search || classFilter ? ' pour cette recherche' : ' inscrit'}.</p>
         ) : (
           <ul className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
-            {filteredSubs.map((s) => {
-              const maxPerDay = 1;
-              const served = servedCountForSub(s);
-              const already = served >= maxPerDay;
-              const eleve = eleveOfSub(s);
+            {filteredKids.map((k) => {
+              const sub = activeSubOf(k.id);
+              const served = servedTodayOf(k.id);
+              const already = served >= 1;
+              const noMeals = !!sub && sub.mealsRemaining <= 0;
               return (
-                <li key={s.id} className="p-3 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-600 to-emerald-700 text-white font-black flex items-center justify-center flex-shrink-0">
-                    {eleve.initial}
+                <li key={k.id} className="p-3 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-700 to-emerald-600 text-white font-black flex items-center justify-center flex-shrink-0">
+                    {k.firstName.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-800 capitalize truncate">{eleve.name} <span className="font-normal text-slate-400">· {eleve.detail}</span></p>
-                    <p className="text-xs text-slate-500 truncate">{formulaName(s.formulaId)} • {s.mealsRemaining} repas restants{todayDish ? ` • plat : ${todayDish}` : ''}</p>
+                    <p className="font-bold text-slate-800 capitalize truncate">{k.firstName} {k.lastName} <span className="font-normal text-slate-400">• {k.className}</span></p>
+                    <p className="text-xs text-slate-500 truncate">
+                      {sub ? `${formulas.find((f) => f.id === sub.formulaId)?.name ?? 'Abonnement'} • ${sub.mealsRemaining} repas restants` : `Sans abonnement • solde ${walletOf(k.id)} FCFA`}
+                      {todayDish ? ` • plat : ${todayDish}` : ''}
+                    </p>
                   </div>
                   {already ? (
                     <span className="px-3 py-2 rounded-xl text-xs font-bold bg-green-100 text-green-800 flex items-center gap-1"><CheckCircle aria-hidden className="w-3.5 h-3.5" /> Servi</span>
                   ) : (
-                    <button onClick={() => runValidation(s.qrToken)} disabled={s.mealsRemaining <= 0} aria-label={`Servir ${eleve.name}`} className="px-4 py-2 rounded-xl text-sm font-bold bg-green-700 text-white hover:bg-green-800 disabled:opacity-40">
+                    <button onClick={() => runValidation(k.qrToken)} disabled={!hasSite || noMeals} aria-label={`Servir ${k.firstName} ${k.lastName}`} className="px-4 py-2 rounded-xl text-sm font-bold bg-green-700 text-white hover:bg-green-800 disabled:opacity-40">
                       Servir
                     </button>
                   )}
@@ -339,34 +326,6 @@ const ValidationPage = () => {
           </ul>
         )}
       </div>
-
-      {/* 1b. QR Cartes enfants (recharge prépayée), filtrables par classe */}
-      {filteredKids.length > 0 && (
-        <div className="bg-white rounded-2xl border shadow overflow-hidden">
-          <div className="p-4 border-b border-slate-100">
-            <p className="font-bold text-slate-800">QR Cartes enfants ({filteredKids.length}) — solde = carte bancaire</p>
-          </div>
-          <ul className="divide-y divide-slate-100 max-h-[320px] overflow-y-auto">
-            {filteredKids.map((k) => {
-              const served = servedClientsToday.get(`child:${k.id}`) ?? 0;
-              return (
-              <li key={k.id} className="p-3 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-700 to-emerald-600 text-white font-black flex items-center justify-center flex-shrink-0">
-                  {k.firstName.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-slate-800 capitalize truncate">{k.firstName} {k.lastName} <span className="font-normal text-slate-400">• {k.className}</span></p>
-                  <p className="text-xs text-slate-500">Solde : <strong>{walletOf(k.id)} FCFA</strong> • {k.qrToken} • servis : {served}</p>
-                </div>
-                <button onClick={() => runValidation(k.qrToken)} className="px-4 py-2 rounded-xl text-sm font-bold bg-green-700 text-white hover:bg-green-800">
-                  Servir
-                </button>
-              </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
 
       {/* 2, 3 & 4. Scan live + photo + saisie */}
       <div className="bg-white rounded-2xl border shadow p-5 space-y-4">

@@ -32,6 +32,7 @@ const QrGalleryPage = lazy(() => import('./pages/QrGalleryPage'));
 const ValidationPage = lazy(() => import('./pages/ValidationPage'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const EstablishmentsPage = lazy(() => import('./pages/EstablishmentsPage'));
 const ChildrenPage = lazy(() => import('./pages/ChildrenPage'));
 const FinancePage = lazy(() => import('./pages/FinancePage'));
 const EspaceParentPage = lazy(() => import('./pages/EspaceParentPage'));
@@ -178,6 +179,8 @@ function AppContent() {
 
       case 'users':
         return <UsersPage />;
+      case 'establishments':
+        return <EstablishmentsPage />;
       case 'settings':
         return <SettingsPage onNavigate={navigateTo} />;
       case 'history':

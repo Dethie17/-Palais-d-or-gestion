@@ -67,6 +67,7 @@ export type PageName =
   | 'orders'
   | 'users'
   | 'settings'
+  | 'establishments'
   | 'children'
   | 'finance'
   | 'qrgallery';

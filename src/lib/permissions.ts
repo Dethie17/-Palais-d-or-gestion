@@ -13,20 +13,20 @@ import { UserRole } from '@/context/AuthContext';
 // Règle de caisse : SEUL le Gérant de cantine tient la Caisse (POS) au quotidien.
 const DG_PAGES: PageName[] = [
   'dashboard', 'finance', 'subscriptions',
-  'users', 'settings', 'history', 'profile',
+  'users', 'settings', 'establishments', 'history', 'profile',
 ];
 export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // Parent : UN seul parcours continu (Espace Parent) + profil.
   // Anciennes pages conservées en redirect invisible vers 'home'.
   client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'history', 'profile'],
-  // Personnel : cantine terrain — menus, validation, abonnés, QR, utilisateurs, établissement, historique
-  personnel: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'settings', 'history', 'profile'],
+  // Personnel : cantine terrain — menus, validation, abonnés, QR, utilisateurs, établissements, paramètres, historique
+  personnel: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile'],
   // Gérant : SANS accueil — tableau de bord, caisse POS, menus récréation (lecture), historique
   gestionnaire: ['dashboard', 'pos', 'payment', 'receipt', 'orders', 'menus', 'history', 'profile'],
   // DG : pilotage + suivi uniquement
   admin: DG_PAGES,
   // Compatibilité anciens comptes : caissier → personnel, manager → DG
-  caissier: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'settings', 'history', 'profile'],
+  caissier: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile'],
   manager: DG_PAGES,
 };
 
@@ -55,6 +55,7 @@ export const PAGE_LABEL: Record<PageName, string> = {
   validation: 'Validation repas',
   users: 'Utilisateurs',
   settings: 'Paramètres',
+  establishments: 'Établissements',
   history: 'Historique',
   dashboard: 'Tableau de bord',
   menu: 'Gestion Menu',

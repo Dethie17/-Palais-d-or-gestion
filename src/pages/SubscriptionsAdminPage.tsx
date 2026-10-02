@@ -7,8 +7,8 @@ import { methodLabel } from '@/lib/wave';
 import { CYCLE_LABEL } from '@/lib/schoolCycles';
 import { isOfficialFormula, cycleOfFormula, validateFormulaPayload, pricePerMeal } from '@/lib/formulas';
 import {
-  Users, CreditCard, Banknote, CheckCircle, XCircle, Plus, Trash2, Pencil, Clock, Receipt,
-  GraduationCap, Baby, QrCode, ShieldCheck, CalendarDays,
+  Users, CreditCard, Banknote, CheckCircle, XCircle, Plus, Trash2, Pencil, Receipt,
+  GraduationCap, Baby, QrCode,
 } from 'lucide-react';
 import PaymentReceiptModal from '@/components/PaymentReceiptModal';
 import type { ORestoPayment } from '@/types/menu';
@@ -40,7 +40,7 @@ const SubscriptionsAdminPage = () => {
   // Catalogue formules : géré par la Direction uniquement.
   const isDG = user?.role === 'admin' || user?.role === 'manager';
   const {
-    subscriptions, formulas, payments, establishments, children: kids, parentProfiles,
+    subscriptions, formulas, payments, children: kids, parentProfiles,
     walletTxs, collectCashPayment, confirmManualPayment, confirmWalletTopUp, cancelSubscription,
     addFormula, updateFormula, deleteFormula,
   } = useResto();
@@ -149,7 +149,6 @@ const SubscriptionsAdminPage = () => {
           </span>
           <div className="min-w-0">
             <h1 className="text-2xl font-black tracking-tight">Abonnés & paiements</h1>
-            <p className="text-xs text-slate-300 mt-0.5">Cantine scolaire · cycles · abonnements InTouch / espèces (jamais la carte — carte = tickets){isDG ? ' · suivi lecture seule' : ''}</p>
           </div>
           {isDG && (
             <span className="ml-auto text-[11px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-slate-200">
@@ -277,9 +276,6 @@ const SubscriptionsAdminPage = () => {
           <div className="flex flex-wrap items-center gap-3">
             <div>
               <h2 className="text-lg font-black text-slate-900">Formules d’abonnement</h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {(isDG ? formulas : formulas.filter((f) => f.kind === 'subscription' && (f.id === 'F2' || f.id === 'F3' || !isOfficialFormula(f.id)))).length} formule(s) · Lycée + Préscolaire-Élémentaire + créations
-              </p>
             </div>
             <button
               onClick={() => document.getElementById('formule-name')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
@@ -288,17 +284,11 @@ const SubscriptionsAdminPage = () => {
               <Plus className="w-4 h-4" /> Ajouter un abonnement
             </button>
           </div>
-          {!isDG && (
-            <p className="text-xs text-slate-500 bg-white border border-slate-200 rounded-2xl px-4 py-3 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 flex-shrink-0 text-slate-400" /> Formules mensuelles : Lycée + Préscolaire-Élémentaire. Ajoutez-en d’autres ci-dessous si besoin (tickets : voir Gestion du menu).
-            </p>
-          )}
           <form onSubmit={handleSaveFormula} className="bg-white rounded-2xl border p-5 grid md:grid-cols-3 gap-3">
             <div className="md:col-span-3 flex flex-wrap items-center gap-2">
               <p className="font-bold text-slate-800 flex items-center gap-2">
                 {editing ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />} {editing ? 'Modifier la formule' : 'Nouvelle formule cantine'}
               </p>
-              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-500">1 repas / jour · service du midi · jours d’école</span>
             </div>
             <label className="block">
               <span className="block text-xs font-bold text-slate-600 mb-1">Nom de la formule *</span>
@@ -308,9 +298,6 @@ const SubscriptionsAdminPage = () => {
               <span className="block text-xs font-bold text-slate-600 mb-1">Description (vue parent)</span>
               <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="ex : 1 repas le midi, jours d’école, 30 jours" maxLength={140} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" />
             </label>
-            <div className="px-3 py-2.5 rounded-xl bg-emerald-50 border-2 border-emerald-200 text-sm font-bold text-emerald-800 flex items-center gap-1.5">
-              <CalendarDays className="w-4 h-4 flex-shrink-0" /> Abonnement cantine — tickets : créés par le Personnel (Gestion du menu)
-            </div>
             <label className="block">
               <span className="block text-xs font-bold text-slate-600 mb-1">Prix (FCFA) *</span>
               <input type="number" min={100} step={100} value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="ex : 27000" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" required />
@@ -333,19 +320,18 @@ const SubscriptionsAdminPage = () => {
               <span className="block text-xs font-bold text-slate-600 mb-1">Règles cantine</span>
               <input value={form.rules} onChange={(e) => setForm({ ...form, rules: e.target.value })} placeholder="ex : 1 repas/jour le midi, jours d’école" maxLength={140} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" />
             </label>
-            <div className="md:col-span-3 flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 border border-slate-200 px-4 py-2.5 text-xs text-slate-600">
-              <span className="flex items-center gap-1.5"><QrCode className="w-3.5 h-3.5" /> Cycle : F2 → Présco-Élém · F3 → Lycée · formules créées ici = tous cycles.</span>
-              {previewPrice > 0 && previewMeals > 0 && (
-                <span className="ml-auto font-extrabold text-slate-800">≈ {formatCurrency(pricePerMeal(previewPrice, previewMeals))} / repas · {previewMeals} repas · {Number(form.durationDays) || '?'} j</span>
-              )}
-            </div>
+            {previewPrice > 0 && previewMeals > 0 && (
+              <p className="md:col-span-3 rounded-xl bg-slate-50 border border-slate-200 px-4 py-2.5 text-xs font-extrabold text-slate-800">
+                ≈ {formatCurrency(pricePerMeal(previewPrice, previewMeals))} / repas · {previewMeals} repas · {Number(form.durationDays) || '?'} j
+              </p>
+            )}
             <div className="flex gap-2 md:col-span-3">
               <button type="submit" className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm">{editing ? 'Enregistrer' : 'Créer la formule'}</button>
               {editing && <button type="button" onClick={resetForm} className="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm">Annuler</button>}
             </div>
           </form>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {(isDG ? formulas : formulas.filter((f) => f.kind === 'subscription' && (f.id === 'F2' || f.id === 'F3' || !isOfficialFormula(f.id)))).map((f) => {
               const official = isOfficialFormula(f.id);
               const linked = subscriptions
@@ -353,21 +339,25 @@ const SubscriptionsAdminPage = () => {
                 .sort((a, b) => (a.status === b.status ? 0 : a.status === 'active' ? -1 : 1));
               const inUse = linked.length;
               return (
-              <div key={f.id} className="bg-white rounded-2xl border-2 border-slate-100 p-4 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex flex-wrap gap-1.5 mb-2">
+              <div key={f.id} className="bg-white rounded-3xl border-2 border-slate-100 p-5 shadow-sm hover:shadow-xl hover:-translate-y-0.5 hover:border-emerald-200 transition-all flex flex-col">
+                <div className="flex flex-wrap items-center gap-1.5">
                   {cycleBadge(f.id)}
+                  {inUse > 0 && (
+                    <span className="ml-auto text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">{inUse} en cours</span>
+                  )}
                 </div>
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-bold">{f.name}</p>
-                  <p className="font-extrabold text-right whitespace-nowrap">{formatCurrency(f.price)}
-                    {f.oldPrice && f.oldPrice > f.price && (
-                      <span className="ml-2 text-sm font-normal text-slate-400 line-through">{formatCurrency(f.oldPrice)}</span>
-                    )}
-                  </p>
+                <p className="mt-2.5 font-black text-slate-900 leading-snug">{f.name}</p>
+                {f.description && <p className="mt-1 text-[13px] text-slate-500">{f.description}</p>}
+                <div className="mt-3 flex items-baseline gap-2 flex-wrap">
+                  <p className="text-2xl font-black tracking-tight text-slate-900 tabular-nums">{formatCurrency(f.price)}</p>
+                  {f.oldPrice && f.oldPrice > f.price && (
+                    <span className="text-sm font-semibold text-slate-400 line-through tabular-nums">{formatCurrency(f.oldPrice)}</span>
+                  )}
                 </div>
+                <p className="mt-0.5 text-[13px] text-slate-500">{f.mealsIncluded} repas · {f.durationDays} jours · <span className="font-bold text-emerald-700">≈ {formatCurrency(pricePerMeal(f.price, f.mealsIncluded))} / repas</span></p>
                 {!official && f.kind === 'subscription' ? (
-                  <div className="mt-3 flex gap-2">
-                    <button onClick={() => { setConfirmDelete(null); startEdit(f); }} className="flex-1 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold">Modifier</button>
+                  <div className="mt-4 flex gap-2">
+                    <button onClick={() => { setConfirmDelete(null); startEdit(f); }} className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition-colors">Modifier</button>
                     <button
                       onClick={() => {
                         if (confirmDelete !== f.id) { setConfirmDelete(f.id); return; }
@@ -380,7 +370,7 @@ const SubscriptionsAdminPage = () => {
                         setMessage(`Formule « ${f.name} » supprimée.`);
                       }}
                       title={inUse > 0 ? 'Des abonnements utilisent cette formule' : 'Supprimer la formule'}
-                      className={`p-2 rounded-xl font-bold ${confirmDelete === f.id ? 'bg-red-600 text-white' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+                      className={`px-3.5 py-2.5 rounded-xl font-bold transition-colors ${confirmDelete === f.id ? 'bg-red-600 text-white' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -399,11 +389,6 @@ const SubscriptionsAdminPage = () => {
       {/* ---- PAIEMENTS ---- */}
       {tab === 'payments' && (
         <div className="bg-white rounded-2xl border overflow-hidden">
-          {pendingPayments.length > 0 && (
-            <p className="p-3 bg-amber-50 text-amber-800 text-sm font-semibold border-b flex items-center gap-1.5">
-              <Clock className="w-4 h-4" /> {pendingPayments.length} paiement(s) en attente d’encaissement au comptoir — {establishments.map((e) => e.name).join(', ')}
-            </p>
-          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">

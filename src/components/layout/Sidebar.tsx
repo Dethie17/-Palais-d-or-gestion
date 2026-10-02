@@ -15,6 +15,7 @@ import {
   ClipboardList,
   Settings,
   Banknote,
+  Building2,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -38,7 +39,8 @@ const allNavItems: { page: PageName; label: string; icon: React.ReactNode; roles
   { page: 'pos', label: 'Vente (POS)', icon: <ShoppingCart aria-hidden className="w-5 h-5" />, roles: ['gestionnaire'] },
   { page: 'menus', label: 'Menus récréation', icon: <UtensilsCrossed aria-hidden className="w-5 h-5" />, roles: ['gestionnaire'] },
   { page: 'users', label: 'Utilisateurs', icon: <Users aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },
-  { page: 'settings', label: 'Établissement', icon: <Settings aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },
+  { page: 'establishments', label: 'Établissements', icon: <Building2 aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },
+  { page: 'settings', label: 'Paramètres', icon: <Settings aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },
   { page: 'history', label: 'Historique', icon: <Receipt aria-hidden className="w-5 h-5" />, roles: ['personnel', 'gestionnaire', 'admin', 'caissier', 'manager'] },
 ];
 

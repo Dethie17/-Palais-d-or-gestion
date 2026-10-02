@@ -101,6 +101,11 @@ const MenuManagement = () => {
   const [confirmTicketDelete, setConfirmTicketDelete] = useState<string | null>(null);
   const [ticketMsg, setTicketMsg] = useState('');
   const ticketFormulas = formulas.filter((f) => f.kind === 'ticket');
+  // Billets de test (ex : « Ticket QA Parent ») : jamais affichés — la liste
+  // ne montre que les vrais tickets publiés, tant qu'aucun n'existe elle reste vide.
+  const publishedTickets = ticketFormulas
+    .filter((f) => !isOfficialFormula(f.id))
+    .filter((f) => !/qa|test/i.test(f.name));
   const ticketPreviewPrice = Number(ticketForm.price) || 0;
   const ticketPreviewMeals = Number(ticketForm.mealsIncluded) || 0;
 
@@ -400,10 +405,10 @@ const MenuManagement = () => {
         )}
 
         <div className="mt-4 grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {ticketFormulas.filter((f) => !isOfficialFormula(f.id)).length === 0 && (
+          {publishedTickets.length === 0 && (
             <p className="md:col-span-2 lg:col-span-3 text-sm text-slate-400 text-center py-4">Aucun ticket : créez le premier ci-dessus.</p>
           )}
-          {ticketFormulas.filter((f) => !isOfficialFormula(f.id)).map((f) => {
+          {publishedTickets.map((f) => {
             const inUse = subscriptions.filter((s) => s.formulaId === f.id && (s.status === 'active' || s.status === 'pending')).length;
             return (
               <div key={f.id} className="rounded-2xl border-2 border-slate-100 p-4">

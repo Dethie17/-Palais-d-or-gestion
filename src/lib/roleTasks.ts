@@ -41,7 +41,9 @@ const SERVICE_TASKS: RoleTask[] = [
   { label: 'Créer les tickets repas', page: 'menu', detail: 'Nom, prix, durée, repas — tous les champs' },
   { label: 'Encaisser abonnements & recharges', page: 'subscriptions', detail: 'Espèces au comptoir, confirmations' },
   { label: 'Voir passages du jour', page: 'validation', detail: 'Servis / refusés en temps réel' },
-  { label: 'Gérer utilisateurs & établissement', page: 'users', detail: 'Comptes du site, fiche établissement' },
+  { label: 'Gérer les utilisateurs', page: 'users', detail: 'Parents, enfants et comptes du site' },
+  { label: 'Gérer les établissements', page: 'establishments', detail: 'Ajouter ou supprimer un site de service' },
+  { label: 'Paramètres du site', page: 'settings', detail: 'Comptes, accès et mots de passe' },
   { label: 'Consulter historique service', page: 'history', detail: 'Tracer ce qui a été servi' },
 ];
 

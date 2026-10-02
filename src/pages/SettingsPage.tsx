@@ -27,11 +27,9 @@ interface DbUser {
 const CREATABLE_ROLES: UserRole[] = ['client', 'personnel', 'gestionnaire', 'admin'];
 
 /**
- * Établissement — Personnel de service (comptes du site + établissement)
- * + Directeur Général (toute la plateforme).
- * - Gérer les comptes : ajouter un client / personnel (/ gérant côté DG),
- *   supprimer, réinitialiser un mot de passe (table Supabase `users`).
- * - Vue d'ensemble : abonnements, utilisateurs, historiques + raccourcis.
+ * Paramètres — Personnel de service (comptes du site) + Directeur Général
+ * (toute la plateforme) : comptes, accès, mots de passe, vue d'ensemble.
+ * Les SITES (cantines) vivent dans la section Établissements.
  */
 const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
   const { user } = useAuth();
@@ -189,13 +187,16 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 flex items-center gap-2">
-          <SettingsIcon className="w-6 h-6 text-slate-700" /> Établissement
+        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">
+          Comptes & accès
+        </p>
+        <h1 className="mt-1 text-2xl font-extrabold text-slate-900 flex items-center gap-2">
+          <SettingsIcon className="w-6 h-6 text-slate-700" /> Paramètres
         </h1>
         <p className="text-slate-500 text-sm mt-1">
           {isStaff
-            ? <>Espace <strong>Personnel</strong> — comptes du site et établissement.</>
-            : <>Réservé à la <strong>Direction</strong> — gérez les accès et supervisez la plateforme.</>}
+            ? <>Espace <strong>Personnel</strong> — comptes du site et accès. Les sites sont dans <strong>Établissements</strong>.</>
+            : <>Réservé à la <strong>Direction</strong> — comptes, accès et supervision de la plateforme.</>}
         </p>
       </div>
 
