@@ -203,7 +203,8 @@ interface RestoContextType {
   ) => { payment: ORestoPayment; wave?: WavePaymentRequest } | null;
   // Achat d'un ticket repas : espèces = crédit immédiat après enregistrement ;
   // Wave/OM = demande mobile à confirmer (repas crédités à la confirmation) ;
-  // 'balance' = débit immédiat de la carte prépayée de l'enfant (childId requis).
+  // 'balance' = débit immédiat de la carte prépayée de l'enfant (childId requis,
+  // formules 'ticket' UNIQUEMENT — un abonnement ne se paie jamais avec la carte).
   buyTicket: (
     clientUsername: string,
     formulaId: string,
@@ -249,12 +250,8 @@ interface RestoContextType {
   confirmWalletTopUpMobile: (txId: string, code: string) => { ok: boolean; message: string };
   // Débit interne (validation repas sans abonnement) — retourne faux si solde insuffisant
   debitWallet: (childId: string, amount: number, label: string) => boolean;
-  // Paie un abonnement ENFANT avec le solde de sa carte prépayée (modèle carte unique) :
-  // débit immédiat (WalletTx kind 'subscription') + paiement tracé soldé (method 'balance')
-  // + activation immédiate. Refusé si solde insuffisant — la réservation reste en attente.
-  // Sûr à appeler juste après subscribe() dans le même handler (n'utilise que setState
-  // fonctionnels + l'objet réservation passé en retour de subscribe).
-  paySubscriptionWithBalance: (sub: Subscription) => { ok: boolean; message: string };
+  // Règle carte : la carte prépayée sert aux TICKETS repas (débit immédiat).
+  // Les ABONNEMENTS se paient InTouch / espèces / Wave — jamais avec le solde.
   setFinanceSettings: (s: Partial<FinanceSettings>) => void;
   // ---- Dépenses manuelles DG (loyer, salaires, fournisseurs...) ----
   financeExpenses: FinanceExpense[];
@@ -753,8 +750,13 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   // Paiement d'un abonnement en attente (avec déduplication).
   // Espèces → pending (encaissement au comptoir par le Gérant).
   // Wave/OM/carte → demande pending à confirmer (manuelle ou code Wave).
+  // 'balance' REFUSÉ : un abonnement ne se paie jamais avec la carte
+  // (la carte sert aux tickets repas). InTouch / espèces uniquement.
   const paySubscription = useCallback(
     (subscriptionId: string, method: ORestoPaymentMethod, subOverride?: Subscription) => {
+      if (method === 'balance') {
+        throw new Error('Abonnement : paiement par carte impossible — payez via InTouch ou en espèces. La carte sert aux tickets repas.');
+      }
       // subOverride : objet frais retourné par subscribe() — permet d'enchaîner
       // subscribe() + paySubscription() dans le même handler (state pas encore à jour).
       const sub = subscriptions.find((s) => s.id === subscriptionId) ?? subOverride;
@@ -805,84 +807,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     [formulas, subscriptions, payments],
   );
 
-  // Paiement d'un abonnement ENFANT avec le solde de sa carte prépayée.
-  // Prend l'objet réservation (retour de subscribe) : aucun lookup en state stale,
-  // toutes les écritures sont en setState fonctionnel → appelable dans le même
-  // handler que subscribe(). Réplique les règles d'activateSubscription.
-  const paySubscriptionWithBalance = useCallback(
-    (sub: Subscription) => {
-      if (sub.status === 'cancelled') return { ok: false, message: 'Abonnement annulé.' };
-      if (sub.status === 'active') return { ok: false, message: 'Abonnement déjà actif.' };
-      const formula = formulas.find((f) => f.id === sub.formulaId);
-      if (!formula) return { ok: false, message: 'Formule inconnue.' };
-      if (!sub.childId) return { ok: false, message: 'Paiement par carte réservé aux abonnements d’un enfant.' };
-      const childId = sub.childId;
-      const balance = wallets.find((w) => w.childId === childId)?.balance ?? 0;
-      if (balance < formula.price) {
-        return { ok: false, message: `Solde insuffisant : ${balance} FCFA sur la carte, abonnement ${formula.price} FCFA. Rechargez la carte.` };
-      }
-      const now = new Date();
-      const startDate = now.toISOString();
-      const endDate = new Date(now.getTime() + formula.durationDays * 86400000).toISOString();
-      const rand = Math.floor(Math.random() * 36 * 36).toString(36).toUpperCase();
-      const tx: WalletTx = {
-        id: uid('W'), childId, kind: 'subscription', amount: formula.price,
-        method: 'card', status: 'paid',
-        reference: `SUB-${Date.now().toString(36).toUpperCase()}${rand}`,
-        label: `Abonnement ${formula.name} — carte prépayée`,
-        createdAt: startDate,
-      };
-      const payment: ORestoPayment = {
-        id: uid('P'), subscriptionId: sub.id, clientUsername: sub.clientUsername,
-        formulaId: sub.formulaId, amount: formula.price, method: 'balance',
-        status: 'paid', reference: `PAY-${Date.now().toString(36).toUpperCase()}${rand}`,
-        createdAt: startDate,
-      };
-      const nextBalance = balance - formula.price;
-      setWalletTxs((prev) => [...prev, tx]);
-      setWallets((prev) => prev.map((w) => (w.childId === childId ? { ...w, balance: w.balance - formula.price } : w)));
-      setPayments((prev) => [...prev, payment]);
-      setSubscriptions((prev) =>
-        prev.map((s) => {
-          if (s.id === sub.id) {
-            return {
-              ...s,
-              status: 'active' as const,
-              mealsRemaining: Math.max(s.mealsRemaining, formula.mealsIncluded),
-              startDate,
-              endDate,
-            };
-          }
-          // Un seul actif par enfant : expire l'ancien éventuel (comme activateSubscription)
-          if (s.childId === childId && s.status === 'active') {
-            return { ...s, status: 'expired' as const };
-          }
-          return s;
-        }),
-      );
-      supabase.from('wallet_transactions').insert({
-        id: tx.id, child_id: tx.childId, kind: 'subscription', amount: tx.amount,
-        method: 'card', status: 'paid', reference: tx.reference,
-        payment_id: payment.id, label: tx.label,
-      }).then(() => undefined, () => undefined);
-      supabase.from('wallets').upsert({ child_id: childId, balance: nextBalance })
-        .then(() => undefined, () => undefined);
-      supabase.from('oresto_payments').insert({
-        id: payment.id, subscription_id: payment.subscriptionId,
-        client_username: payment.clientUsername, formula_id: payment.formulaId,
-        amount: payment.amount, method: payment.method, status: payment.status,
-        reference: payment.reference,
-      }).then(() => undefined, () => undefined);
-      supabase.from('subscriptions').update({
-        status: 'active',
-        meals_remaining: Math.max(sub.mealsRemaining, formula.mealsIncluded),
-        start_date: startDate,
-        end_date: endDate,
-      }).eq('id', sub.id).then(() => undefined, () => undefined);
-      return { ok: true, message: `Abonnement activé : ${formula.price} FCFA débités de la carte. Nouveau solde : ${nextBalance} FCFA.` };
-    },
-    [formulas, wallets],
-  );
+  // Règle carte : un abonnement ne se paie JAMAIS avec le solde prépayé
+  // (InTouch / espèces / Wave uniquement). La carte sert aux tickets repas.
 
   // Crédite les repas d'un ticket (abonnement actif existant ou mini-abonnement ticket)
   const creditTicketMeals = useCallback(
@@ -1102,6 +1028,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   );
 
   const renewSubscription = useCallback(    (subscriptionId: string, method: ORestoPaymentMethod) => {
+      // Renouvellement = nouvel abonnement : jamais payé avec la carte.
+      if (method === 'balance') return null;
       const sub = subscriptions.find((s) => s.id === subscriptionId);
       if (!sub) return null;
       // Garde : on ne renouvelle qu'un actif/expiré (pas pending/cancelled)
@@ -1156,11 +1084,15 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   // Achat d'un ticket repas (menu de la semaine) : crédite des repas SANS résilier
   // l'abonnement actif ; crée un mini-abonnement ticket s'il n'y en a aucun.
   // Espèces → crédit immédiat (vente comptoir). Wave/OM/carte → pending externe à confirmer.
-  // Solde ('balance' + childId) → débit immédiat de la carte prépayée de l'enfant.
+  // Solde ('balance' + childId) → débit immédiat de la carte prépayée de l'enfant,
+  // UNIQUEMENT pour les formules 'ticket' (un abonnement ne se paie jamais avec la carte).
   const buyTicket = useCallback(
     (clientUsername: string, formulaId: string, method: ORestoPaymentMethod, childId?: string) => {
       const formula = formulas.find((f) => f.id === formulaId);
       if (!formula) throw new Error('Formule inconnue');
+      if (method === 'balance' && formula.kind !== 'ticket') {
+        throw new Error('Abonnement : paiement par carte impossible — payez via InTouch ou en espèces. La carte sert aux tickets repas.');
+      }
       const now = new Date();
       const reference = `PAY-${Date.now().toString(36).toUpperCase()}`;
       if (method === 'balance') {
@@ -1938,7 +1870,6 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         myValidations,
         subscribe,
         paySubscription,
-        paySubscriptionWithBalance,
         confirmMobilePayment,
         resumeMobilePayment,
         confirmCashPayment,

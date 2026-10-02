@@ -55,16 +55,20 @@ describe('Menu du jour payé par la carte', () => {
     const { latest } = mountHarness();
     const childId = setupFamily(latest, 'parent-menu-actif', 30000);
 
+    // Abonnement payé en espèces au comptoir (jamais avec la carte).
+    let subId = '';
     act(() => {
       const sub = latest().subscribe('parent-menu-actif', 'F2', childId);
-      latest().paySubscriptionWithBalance(sub);
+      subId = sub.id;
     });
+    act(() => { latest().collectCashPayment(subId); });
+    expect(latest().subscriptions.find((s) => s.id === subId)?.status).toBe('active');
     const before = latest().subscriptions.find((s) => s.childId === childId && s.status === 'active')?.mealsRemaining;
 
     act(() => { latest().buyDayMenu('parent-menu-actif', childId, 'Mardi', 2500); });
     const after = latest().subscriptions.find((s) => s.childId === childId && s.status === 'active')?.mealsRemaining;
     expect(after).toBe((before ?? 0) + 1);
-    expect(latest().walletOf(childId)).toBe(30000 - 27000 - 2500);
+    expect(latest().walletOf(childId)).toBe(30000 - 2500);
   });
 
   it('refuse si solde insuffisant : rien débité, rien crédité', () => {

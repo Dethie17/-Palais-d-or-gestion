@@ -4,10 +4,11 @@ import { useResto } from '@/context/RestoContext';
 import { useProducts } from '@/context/ProductContext';
 import { formatCurrency } from '@/lib/utils';
 import { weeklyMenuTotal, publishedDays } from '@/lib/menus';
+import { isOfficialFormula } from '@/lib/formulas';
 import {
   QrCode, UtensilsCrossed, Wallet, History, CalendarDays, ClipboardList,
   ScanLine, LayoutDashboard, Users, Banknote, ArrowRight, Clock,
-  CheckCircle, XCircle, Ticket, Baby,
+  CheckCircle, XCircle, Ticket, Baby, Settings, AlertTriangle,
 } from 'lucide-react';
 
 interface HomePageProps {
@@ -56,7 +57,7 @@ function sameDay(a: Date, b: Date) {
 
 const HomePage = ({ onNavigate }: HomePageProps) => {
   const { user } = useAuth();
-  const { formulas, validations, subscriptions, stats, myChildren, weeklyMenus } = useResto();
+  const { formulas, validations, subscriptions, payments, parentProfiles, stats, myChildren, weeklyMenus } = useResto();
   const { products } = useProducts();
 
   const family = familyOf(user?.role);
@@ -246,35 +247,8 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
 
       {family === 'personnel' && (
         <>
-          <button
-            onClick={() => onNavigate('validation')}
-            className="w-full bg-white border-2 border-emerald-200 rounded-3xl p-6 shadow flex items-center gap-4 hover:border-emerald-400 hover:shadow-lg transition-all text-left"
-          >
-            <span className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
-              <ScanLine className="w-8 h-8 text-white" />
-            </span>
-            <span>
-              <span className="block text-xl font-bold text-slate-800">Valider un repas</span>
-              <span className="block text-sm text-slate-500">Scanner ou saisir le QR du client → contrôle automatique</span>
-            </span>
-            <ArrowRight className="w-6 h-6 text-emerald-600 ml-auto" />
-          </button>
-
-          <button
-            onClick={() => onNavigate('menu')}
-            className="w-full bg-white border-2 border-emerald-200 rounded-3xl p-6 shadow flex items-center gap-4 hover:border-emerald-400 hover:shadow-lg transition-all text-left"
-          >
-            <span className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
-              <ClipboardList className="w-8 h-8 text-white" />
-            </span>
-            <span>
-              <span className="block text-xl font-bold text-slate-800">Composer les menus du jour</span>
-              <span className="block text-sm text-slate-500">Plats + prix par jour, publication de la semaine</span>
-            </span>
-            <ArrowRight className="w-6 h-6 text-emerald-600 ml-auto" />
-          </button>
-
-          <div className="grid grid-cols-3 gap-3 md:gap-4">
+          {/* Tableau de bord service : état du jour en un coup d'œil */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             <div className="bg-white rounded-2xl p-4 md:p-5 shadow border">
               <div className="flex items-center gap-2 text-xs md:text-sm font-semibold text-slate-500"><CheckCircle className="w-4 h-4 text-green-600" /> Servis</div>
               <p className="text-3xl md:text-4xl font-extrabold text-green-600 mt-1">{acceptedToday.length}</p>
@@ -287,28 +261,99 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
             </div>
             <div className="bg-white rounded-2xl p-4 md:p-5 shadow border">
               <div className="flex items-center gap-2 text-xs md:text-sm font-semibold text-slate-500"><Clock className="w-4 h-4 text-amber-500" /> En attente</div>
-              <p className="text-3xl md:text-4xl font-extrabold text-amber-600 mt-1">{subscriptions.filter((s) => s.status === 'pending').length}</p>
+              <p className="text-3xl md:text-4xl font-extrabold text-amber-600 mt-1">{subscriptions.filter((s) => s.status === 'pending').length + payments.filter((p) => p.status === 'pending').length}</p>
               <p className="text-[11px] text-slate-400 font-medium">à encaisser</p>
+            </div>
+            <div className="bg-white rounded-2xl p-4 md:p-5 shadow border">
+              <div className="flex items-center gap-2 text-xs md:text-sm font-semibold text-slate-500"><CalendarDays className="w-4 h-4 text-orange-500" /> Menus</div>
+              <p className="text-3xl md:text-4xl font-extrabold text-orange-600 mt-1">{published.length}<span className="text-lg text-slate-400">/5</span></p>
+              <p className="text-[11px] text-slate-400 font-medium">jours publiés</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 md:gap-4">
+          {/* Alertes publication : rien n'est visible côté parents tant que ce n'est pas publié */}
+          {(published.length < 5 || formulas.filter((f) => f.kind === 'ticket' && !isOfficialFormula(f.id)).length === 0) && (
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 flex gap-3 text-sm">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-amber-900">
+                <p className="font-bold">À publier pour ouvrir la vente parents</p>
+                <ul className="mt-1 text-[13px] space-y-0.5 list-disc list-inside">
+                  {published.length < 5 && <li>Menus : {published.length}/5 jours publiés — <button onClick={() => onNavigate('menu')} className="font-bold underline underline-offset-2">composer la semaine</button>.</li>}
+                  {formulas.filter((f) => f.kind === 'ticket' && !isOfficialFormula(f.id)).length === 0 && <li>Aucun ticket publié — <button onClick={() => onNavigate('menu')} className="font-bold underline underline-offset-2">créer le premier ticket</button>.</li>}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* Actions service */}
+          <div className="grid sm:grid-cols-2 gap-3 md:gap-4">
             {[
-              { label: 'Abonnés', icon: Users, go: () => onNavigate('subscriptions'), style: 'bg-emerald-600' },
-              { label: 'QR Élèves', icon: QrCode, go: () => onNavigate('qrgallery'), style: 'bg-slate-900' },
-              { label: 'Historique', icon: History, go: () => onNavigate('history'), style: 'bg-orange-500' },
+              { label: 'Valider un repas', desc: 'Scanner ou saisir le QR → contrôle auto', icon: ScanLine, go: () => onNavigate('validation'), style: 'from-emerald-500 to-teal-600' },
+              { label: 'Composer les menus', desc: 'Plats + prix, publication de la semaine', icon: ClipboardList, go: () => onNavigate('menu'), style: 'from-orange-500 to-amber-500' },
+              { label: 'Abonnés & paiements', desc: 'Encaisser, confirmer, rembourser', icon: Users, go: () => onNavigate('subscriptions'), style: 'from-emerald-600 to-teal-600' },
+              { label: 'QR Élèves', desc: 'Badges et galerie des QR', icon: QrCode, go: () => onNavigate('qrgallery'), style: 'from-slate-700 to-slate-900' },
+              { label: 'Utilisateurs', desc: 'Parents, enfants et comptes du site', icon: Baby, go: () => onNavigate('users'), style: 'from-sky-500 to-blue-600' },
+              { label: 'Établissement', desc: 'Comptes et paramètres du site', icon: Settings, go: () => onNavigate('settings'), style: 'from-slate-500 to-slate-700' },
             ].map((a) => (
               <button
                 key={a.label}
                 onClick={a.go}
-                className="flex flex-col items-center gap-2 p-4 md:p-5 rounded-2xl bg-white shadow border hover:shadow-md active:scale-[0.98] transition-all"
+                className="bg-white rounded-2xl p-4 md:p-5 shadow border flex items-center gap-4 text-left hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all"
               >
-                <span className={`w-11 h-11 rounded-xl ${a.style} flex items-center justify-center`}>
-                  <a.icon className="w-5 h-5 text-white" />
+                <span className={`w-12 h-12 rounded-xl bg-gradient-to-br ${a.style} flex items-center justify-center flex-shrink-0`}>
+                  <a.icon className="w-6 h-6 text-white" />
                 </span>
-                <span className="text-xs md:text-sm font-bold text-slate-800">{a.label}</span>
+                <span className="min-w-0">
+                  <span className="block font-bold text-slate-800">{a.label}</span>
+                  <span className="block text-xs text-slate-500 mt-0.5 truncate">{a.desc}</span>
+                </span>
+                <ArrowRight className="w-5 h-5 text-slate-300 ml-auto flex-shrink-0" />
               </button>
             ))}
+          </div>
+
+          {/* Semaine + activité */}
+          <div className="grid md:grid-cols-2 gap-3 md:gap-4">
+            <div className="bg-white rounded-2xl p-5 shadow-sm border">
+              <div className="flex items-center gap-2 text-sm font-black text-slate-800">
+                <span className="w-8 h-8 rounded-xl bg-orange-100 flex items-center justify-center"><CalendarDays className="w-4 h-4 text-orange-600" /></span>
+                Semaine · {published.length}/5 publiée
+              </div>
+              <ul className="mt-3 space-y-2">
+                {weeklyMenus.map((m) => {
+                  const ok = (m.items ?? []).length > 0;
+                  return (
+                    <li key={m.day} className="flex items-center gap-2.5 text-sm">
+                      <span className={`text-[11px] font-black px-2 py-1 rounded-lg whitespace-nowrap ${ok ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                        {m.day.slice(0, 3).toUpperCase()}
+                      </span>
+                      <span className={`min-w-0 flex-1 truncate ${ok ? 'font-semibold text-slate-700' : 'text-slate-400'}`}>
+                        {ok ? (m.name || `Menu du ${m.day}`) : 'Non composé'}
+                      </span>
+                      <span className={`text-[11px] font-bold ${ok ? 'text-emerald-600' : 'text-slate-400'}`}>{ok ? 'Publié' : 'Brouillon'}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <button onClick={() => onNavigate('menu')} className="mt-4 w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-700">
+                Gérer les menus
+              </button>
+            </div>
+            <div className="bg-white rounded-2xl p-5 shadow-sm border">
+              <div className="flex items-center gap-2 text-sm font-black text-slate-800">
+                <span className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center"><Ticket className="w-4 h-4 text-emerald-700" /></span>
+                Activité du site
+              </div>
+              <ul className="mt-3 space-y-2 text-sm">
+                <li className="flex justify-between items-center rounded-xl bg-slate-50 border px-3 py-2.5"><span className="text-slate-600">Tickets publiés</span><span className="font-black">{formulas.filter((f) => f.kind === 'ticket' && !isOfficialFormula(f.id)).length}</span></li>
+                <li className="flex justify-between items-center rounded-xl bg-slate-50 border px-3 py-2.5"><span className="text-slate-600">Abonnements actifs</span><span className="font-black">{subscriptions.filter((s) => s.status === 'active').length}</span></li>
+                <li className="flex justify-between items-center rounded-xl bg-slate-50 border px-3 py-2.5"><span className="text-slate-600">Parents inscrits</span><span className="font-black">{parentProfiles.length}</span></li>
+                <li className="flex justify-between items-center rounded-xl bg-slate-50 border px-3 py-2.5"><span className="text-slate-600">Plats récréation</span><span className="font-black">{products.filter((p) => p.available).length}</span></li>
+              </ul>
+              <button onClick={() => onNavigate('history')} className="mt-4 w-full py-2.5 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 inline-flex items-center justify-center gap-2">
+                <History className="w-4 h-4" /> Voir l’historique
+              </button>
+            </div>
           </div>
         </>
       )}

@@ -25,7 +25,7 @@ const ChildrenPage = () => {
   const {
     myChildren, walletOf, childTxs, updateChild,
     topUpChild, confirmWalletTopUpMobile, formulas, subscriptions,
-    subscribe, paySubscription, paySubscriptionWithBalance, confirmMobilePayment,
+    subscribe, paySubscription, confirmMobilePayment,
     parentProfileOf, myValidations,
   } = useResto();
   const username = user?.username ?? '';
@@ -149,29 +149,6 @@ const ChildrenPage = () => {
       flash(true, method === 'cash'
         ? `Abonnement réservé (${payment.reference}) : payez au comptoir, le gérant activera la carte.`
         : `Abonnement réservé (${payment.reference}) : en attente de confirmation du gérant.`);
-    } catch (err) {
-      flash(false, err instanceof Error ? err.message : 'Souscription impossible.');
-    }
-  };
-
-  /** Abonnement payé avec le solde de la carte prépayée : débit + activation immédiats. */
-  const handleSubscribeWithBalance = (childId: string) => {
-    const formulaId = subFormula[childId];
-    if (!formulaId) {
-      flash(false, 'Choisissez une formule pour cet enfant.');
-      return;
-    }
-    const child = kids.find((k) => k.id === childId);
-    const childCycle = child?.cycle ?? 'primaire';
-    const required = FORMULA_CYCLE[formulaId];
-    if (required && required !== childCycle) {
-      flash(false, `Cette formule est réservée au cycle ${CYCLE_LABEL[required]}.`);
-      return;
-    }
-    try {
-      const sub = subscribe(username, formulaId, childId);
-      const res = paySubscriptionWithBalance(sub);
-      flash(res.ok, res.message);
     } catch (err) {
       flash(false, err instanceof Error ? err.message : 'Souscription impossible.');
     }
@@ -420,17 +397,9 @@ const ChildrenPage = () => {
                       <button onClick={() => handleSubscribeChild(k.id)} className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold">Payer</button>
                     </div>
                     <div className="mt-2">
-                      <button
-                        onClick={() => handleSubscribeWithBalance(k.id)}
-                        disabled={!subFormula[k.id] || balance < (aboFormulas.find((f) => f.id === subFormula[k.id])?.price ?? Number.POSITIVE_INFINITY)}
-                        title="Payer l’abonnement avec le solde de la carte prépayée (activation immédiate)"
-                        className="w-full px-3 py-2 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 transition flex items-center justify-center gap-1.5"
-                      >
-                        <Wallet className="w-4 h-4" /> Payer avec le solde carte · {formatCurrency(balance)}
-                      </button>
-                      {subFormula[k.id] && balance < (aboFormulas.find((f) => f.id === subFormula[k.id])?.price ?? 0) && (
-                        <p className="text-[11px] text-amber-600 font-semibold mt-1">Solde insuffisant — rechargez la carte ci-dessus, ou payez Wave / Espèces.</p>
-                      )}
+                      <p className="text-[11px] text-slate-500 bg-white border border-slate-200 rounded-xl px-3 py-2">
+                        Abonnement : InTouch ou espèces — la carte prépayée sert aux tickets repas.
+                      </p>
                     </div>
                   </div>
 

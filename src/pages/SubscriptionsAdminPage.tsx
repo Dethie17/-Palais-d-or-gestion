@@ -149,7 +149,7 @@ const SubscriptionsAdminPage = () => {
           </span>
           <div className="min-w-0">
             <h1 className="text-2xl font-black tracking-tight">Abonnés & paiements</h1>
-            <p className="text-xs text-slate-300 mt-0.5">Cantine scolaire · cycles · Wave / Espèces / Solde carte{isDG ? ' · suivi lecture seule' : ''}</p>
+            <p className="text-xs text-slate-300 mt-0.5">Cantine scolaire · cycles · abonnements InTouch / espèces (jamais la carte — carte = tickets){isDG ? ' · suivi lecture seule' : ''}</p>
           </div>
           {isDG && (
             <span className="ml-auto text-[11px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-slate-200">

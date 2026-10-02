@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, act } from '@testing-library/react';
 import { RestoProvider, useResto } from '@/context/RestoContext';
-import type { Subscription } from '@/types/menu';
 
 type Api = ReturnType<typeof useResto>;
 
@@ -23,7 +22,7 @@ function mountHarness() {
 }
 
 const F2_PRICE = 27000;
-const F2_MEALS = 20;
+const T1_PRICE = 1900;
 
 function setupFamily(api: () => Api, username: string, balance: number) {
   act(() => { api().saveParentProfile(username, 'Awa', 'Diallo', '771234567'); });
@@ -38,53 +37,54 @@ function setupFamily(api: () => Api, username: string, balance: number) {
   return childId;
 }
 
-function subscribeAndPayWithBalance(api: () => Api, username: string, childId: string) {
-  let sub: Subscription | null = null;
-  let res = { ok: false, message: '' };
-  // Même handler : subscribe() puis paiement — reproduit le flux réel de l'app.
-  act(() => {
-    sub = api().subscribe(username, 'F2', childId);
-    res = api().paySubscriptionWithBalance(sub);
-  });
-  return { sub: sub as unknown as Subscription, res };
-}
-
-describe('Carte prépayée : abonnement payé avec le solde', () => {
-  it('réserve + paie dans le même handler : débit, paiement tracé, activation', () => {
+describe('Règle carte : tickets uniquement, jamais les abonnements', () => {
+  it('ticket payé avec la carte : débit immédiat + repas crédités', () => {
     const { latest } = mountHarness();
-    const childId = setupFamily(latest, 'parent-solde-ok', 30000);
-    expect(latest().walletOf(childId)).toBe(30000);
-
-    const { sub, res } = subscribeAndPayWithBalance(latest, 'parent-solde-ok', childId);
-    expect(res.ok).toBe(true);
-
-    const stored = latest().subscriptions.find((s) => s.id === sub.id);
-    expect(stored?.status).toBe('active');
-    expect(stored?.mealsRemaining).toBe(F2_MEALS);
-    expect(latest().walletOf(childId)).toBe(3000);
-
-    const payment = latest().payments.find((p) => p.subscriptionId === sub.id);
-    expect(payment?.status).toBe('paid');
-    expect(payment?.method).toBe('balance');
-    expect(payment?.amount).toBe(F2_PRICE);
-
-    const tx = latest().childTxs(childId).find((t) => t.kind === 'subscription');
-    expect(tx?.status).toBe('paid');
-    expect(tx?.amount).toBe(F2_PRICE);
-  });
-
-  it('refuse si solde insuffisant : réservation conservée, rien débité', () => {
-    const { latest } = mountHarness();
-    const childId = setupFamily(latest, 'parent-solde-ko', 5000);
-
-    const { sub, res } = subscribeAndPayWithBalance(latest, 'parent-solde-ko', childId);
-    expect(res.ok).toBe(false);
-    expect(res.message).toMatch(/insuffisant/i);
-
-    expect(latest().subscriptions.find((s) => s.id === sub.id)?.status).toBe('pending');
+    const childId = setupFamily(latest, 'parent-ticket-ok', 5000);
     expect(latest().walletOf(childId)).toBe(5000);
-    expect(latest().payments.some((p) => p.subscriptionId === sub.id)).toBe(false);
-    expect(latest().childTxs(childId).some((t) => t.kind === 'subscription')).toBe(false);
+
+    let addedMeals = 0;
+    act(() => {
+      ({ addedMeals } = latest().buyTicket('parent-ticket-ok', 'T1', 'balance', childId));
+    });
+    expect(addedMeals).toBeGreaterThan(0);
+    expect(latest().walletOf(childId)).toBe(5000 - T1_PRICE);
+
+    const payment = latest().payments.find((p) => p.formulaId === 'T1' && p.method === 'balance');
+    expect(payment?.status).toBe('paid');
+    expect(payment?.amount).toBe(T1_PRICE);
+  });
+
+  it('abonnement payé avec la carte : refusé (InTouch / espèces uniquement)', () => {
+    const { latest } = mountHarness();
+    const childId = setupFamily(latest, 'parent-abo-ko', 30000);
+
+    let subId = '';
+    act(() => {
+      const sub = latest().subscribe('parent-abo-ko', 'F2', childId);
+      subId = sub.id;
+    });
+    expect(() => {
+      act(() => { latest().buyTicket('parent-abo-ko', 'F2', 'balance', childId); });
+    }).toThrow(/carte impossible/i);
+
+    expect(() => {
+      act(() => { latest().paySubscription(subId, 'balance'); });
+    }).toThrow(/carte impossible/i);
+
+    // Rien débité : le solde reste intact, la réservation reste en attente.
+    expect(latest().walletOf(childId)).toBe(30000);
+    expect(latest().subscriptions.find((s) => s.id === subId)?.status).toBe('pending');
+  });
+
+  it('refuse le ticket si solde insuffisant : rien débité, rien crédité', () => {
+    const { latest } = mountHarness();
+    const childId = setupFamily(latest, 'parent-ticket-ko', 500);
+
+    expect(() => {
+      act(() => { latest().buyTicket('parent-ticket-ko', 'T1', 'balance', childId); });
+    }).toThrow(/insuffisant/i);
+    expect(latest().walletOf(childId)).toBe(500);
   });
 
   it('flux externe inchangé : subscribe + paySubscription même handler (cash → pending)', () => {
@@ -101,5 +101,6 @@ describe('Carte prépayée : abonnement payé avec le solde', () => {
     const payment = latest().payments.find((p) => p.id === paymentId);
     expect(payment?.status).toBe('pending');
     expect(payment?.method).toBe('cash');
+    expect(F2_PRICE).toBe(27000);
   });
 });

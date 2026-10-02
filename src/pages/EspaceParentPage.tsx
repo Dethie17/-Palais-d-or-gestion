@@ -5,6 +5,7 @@ import { formatCurrency } from '@/lib/utils';
 import { getChildQrToken } from '@/lib/clientQr';
 import { initiateWavePayment, isMobileMethod, isValidSnPhone, isValidWaveCode, type WavePaymentRequest } from '@/lib/wave';
 import { CYCLES, CYCLE_LABEL, cycleOfClass, pricePerMeal } from '@/lib/schoolCycles';
+import { isOfficialFormula } from '@/lib/formulas';
 import type { Child, ORestoPayment, ORestoPaymentMethod, ORestoPaymentStatus, SchoolCycle, Subscription, WalletTx, WeeklyMenu } from '@/types/menu';
 import { QRCodeSVG } from 'qrcode.react';
 import WavePaymentModal from '@/components/WavePaymentModal';
@@ -99,6 +100,9 @@ const EspaceParentPage = () => {
     .filter((f): f is NonNullable<typeof f> => !!f && f.kind === 'subscription');
   const customTickets = formulas
     .filter((f) => f.kind === 'ticket')
+    // Seuls les tickets PUBLIÉS par le Personnel (Gestion Menu) sont vendus ici :
+    // les formules officielles internes (T1/C10) ne sont jamais proposées.
+    .filter((f) => !isOfficialFormula(f.id))
     // Billets de test du personnel (ex : « Ticket QA Parent ») : masqués aux parents.
     .filter((f) => !/qa|test/i.test(f.name))
     .sort((a, b) => a.price - b.price);
@@ -467,15 +471,20 @@ const EspaceParentPage = () => {
                 Aucun enfant pour l’instant — remplissez un formulaire ci-dessus.
               </p>
             ) : (
-              <ChildManager
-                kids={kids}
-                activeByChild={activeByChild}
-                pendingByChild={pendingByChild}
-                walletOf={walletOf}
-                updateChild={updateChild}
-                deleteChild={deleteChild}
-                flash={flash}
-              />
+              <button
+                onClick={() => scrollTo('cartes')}
+                className="w-full flex items-center gap-3 bg-emerald-50 border-2 border-emerald-200 rounded-2xl px-5 py-4 text-left hover:border-emerald-400 hover:shadow-md transition-all"
+              >
+                <span className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black flex-shrink-0">
+                  {kids.length}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-emerald-900">
+                    {kids.length} enfant{kids.length > 1 ? 's' : ''} inscrit{kids.length > 1 ? 's' : ''} — {kids.map((k) => k.firstName).join(', ')}
+                  </span>
+                  <span className="block text-xs text-emerald-700 mt-0.5">Cartes, QR, soldes et gestion (modifier / retirer) à l’étape 4 ↓</span>
+                </span>
+              </button>
             )}
           </div>
         </section>
@@ -588,7 +597,7 @@ const EspaceParentPage = () => {
           <h3 className="mt-8 font-bold text-slate-800">Tickets repas <span className="font-normal text-sm text-slate-400">· prix fixe, payés par la carte</span></h3>
           {customTickets.length === 0 ? (
             <p className="mt-3 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-6 text-center">
-              Aucun ticket en vente pour le moment.
+              Aucun ticket publié pour le moment — le Personnel les crée dans Gestion Menu.
             </p>
           ) : (
             <>
@@ -681,47 +690,24 @@ const EspaceParentPage = () => {
 
           {kids.length > 0 ? (
             <ul className="mt-4 grid sm:grid-cols-2 gap-3">
-              {kids.map((k) => {
-                const token = k.qrToken || getChildQrToken(k.id);
-                const sub = activeByChild(k.id);
-                return (
-                  <li key={k.id} id={`carte-${k.id}`} className="scroll-mt-24 bg-white rounded-2xl border-2 border-slate-200 p-4">
-                    <div className="flex items-center gap-3">
-                      <span className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center text-lg font-black flex-shrink-0">
-                        {k.firstName.charAt(0).toUpperCase()}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-slate-900 truncate">{k.firstName} {k.lastName}</p>
-                        <p className="text-xs text-slate-500 truncate">{k.className} · {CYCLE_LABEL[k.cycle ?? 'primaire']}</p>
-                      </div>
-                      <span className={`flex-shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-full ${sub ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {sub ? `${sub.mealsRemaining} repas` : 'Sans abo'}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-2xl font-black text-slate-900">{formatCurrency(walletOf(k.id))}</p>
-                    <p className="text-xs text-slate-400">Solde carte</p>
-                    <div className="mt-3 flex items-center gap-3 rounded-xl bg-slate-50 border p-3">
-                      <div ref={(el) => { qrRefs.current[k.id] = el; }} className="p-1.5 border border-slate-200 bg-white flex-shrink-0">
-                        <QRCodeSVG value={token} size={84} level="M" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-mono text-xs font-semibold text-slate-600 tracking-wider">{token}</p>
-                        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-                          <button onClick={() => copyToken(token)} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
-                            <Copy className="w-3 h-3" /> {copied === token ? 'Copié' : 'Copier'}
-                          </button>
-                          <button onClick={() => downloadPNG(k.id, token, `${k.firstName} ${k.lastName}`)} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
-                            <Download className="w-3 h-3" /> PNG
-                          </button>
-                          <button onClick={() => window.print()} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
-                            <Printer className="w-3 h-3" /> Imprimer
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
+              {kids.map((k) => (
+                <KidCard
+                  key={k.id}
+                  k={k}
+                  sub={activeByChild(k.id)}
+                  pending={pendingByChild(k.id)}
+                  token={k.qrToken || getChildQrToken(k.id)}
+                  balance={walletOf(k.id)}
+                  copiedToken={copied}
+                  onCopy={copyToken}
+                  onPNG={downloadPNG}
+                  onPrint={() => window.print()}
+                  qrRefCb={(el) => { qrRefs.current[k.id] = el; }}
+                  updateChild={updateChild}
+                  deleteChild={deleteChild}
+                  flash={flash}
+                />
+              ))}
             </ul>
           ) : (
             <p className="mt-4 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-6 text-center">
@@ -1319,132 +1305,149 @@ function QuickEnrollCycle({ cycleId, username, hasProfile, addChild, kidsCount, 
   );
 }
 
-function ChildManager({ kids, activeByChild, pendingByChild, walletOf, updateChild, deleteChild, flash }: {
-  kids: Child[];
-  activeByChild: (id: string) => Subscription | undefined;
-  pendingByChild: (id: string) => boolean;
-  walletOf: (id: string) => number;
+/** Carte enfant premium : identité, solde tickets, QR + gestion (modifier / retirer).
+ * La gestion vit ici (étape 4) — l'inscription (étape 1) ne fait qu'inscrire.
+ * Règle carte : le solde sert aux tickets repas, jamais aux abonnements.
+ */
+function KidCard({ k, sub, pending, token, balance, copiedToken, onCopy, onPNG, onPrint, qrRefCb, updateChild, deleteChild, flash }: {
+  k: Child;
+  sub: Subscription | undefined;
+  pending: boolean;
+  token: string;
+  balance: number;
+  copiedToken: string | null;
+  onCopy: (token: string) => void;
+  onPNG: (childId: string, token: string, label: string) => void;
+  onPrint: () => void;
+  qrRefCb: (el: HTMLDivElement | null) => void;
   updateChild: (id: string, updates: Partial<Pick<Child, 'firstName' | 'lastName' | 'className' | 'cycle'>>) => void;
   deleteChild: (id: string) => void;
   flash: (ok: boolean, text: string) => void;
 }) {
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [fFirst, setFFirst] = useState('');
   const [fLast, setFLast] = useState('');
   const [fClass, setFClass] = useState('');
-  const [confirmId, setConfirmId] = useState<string | null>(null);
 
-  const startEdit = (k: Child) => {
-    setEditingId(k.id);
-    setConfirmId(null);
+  const startEdit = () => {
+    setEditing(true);
+    setConfirming(false);
     setFFirst(k.firstName);
     setFLast(k.lastName);
     setFClass(k.className);
   };
 
-  const saveEdit = (id: string) => {
+  const saveEdit = () => {
     if (!fFirst.trim() || !fLast.trim() || !fClass) {
       flash(false, 'Nom, prénom et classe sont requis.');
       return;
     }
-    updateChild(id, { firstName: fFirst.trim(), lastName: fLast.trim(), className: fClass, cycle: cycleOfClass(fClass) });
-    setEditingId(null);
+    updateChild(k.id, { firstName: fFirst.trim(), lastName: fLast.trim(), className: fClass, cycle: cycleOfClass(fClass) });
+    setEditing(false);
     flash(true, 'Enfant mis à jour.');
   };
 
-  const askDelete = (k: Child) => {
-    if (activeByChild(k.id)) {
+  const askDelete = () => {
+    if (sub) {
       flash(false, `${k.firstName} a une carte active.`);
       return;
     }
-    if (pendingByChild(k.id)) {
+    if (pending) {
       flash(false, `${k.firstName} a un paiement en attente.`);
       return;
     }
-    setConfirmId(k.id);
-    setEditingId(null);
-  };
-
-  const confirmDelete = (k: Child) => {
-    deleteChild(k.id);
-    setConfirmId(null);
-    flash(true, `${k.firstName} ${k.lastName} retiré.`);
+    setConfirming(true);
+    setEditing(false);
   };
 
   return (
-    <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      {kids.map((k) => {
-        const sub = activeByChild(k.id);
-        const pending = pendingByChild(k.id);
-        const isEditing = editingId === k.id;
-        const isConfirming = confirmId === k.id;
-        return (
-          <li key={k.id} className="bg-white rounded-2xl border p-4">
-            {isEditing ? (
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <input value={fLast} onChange={(e) => setFLast(e.target.value)} aria-label="Nom" placeholder="Nom" className="px-3 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-emerald-600" />
-                  <input value={fFirst} onChange={(e) => setFFirst(e.target.value)} aria-label="Prénom" placeholder="Prénom" className="px-3 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-emerald-600" />
-                </div>
-                <select value={fClass} onChange={(e) => setFClass(e.target.value)} aria-label="Classe" className="px-3 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm bg-white w-full">
-                  <option value="">Choisir…</option>
-                  {CYCLES.map((c) => (
-                    <optgroup key={c.id} label={c.label}>
-                      {c.classes.map((cls) => <option key={cls} value={cls}>{cls}</option>)}
-                    </optgroup>
-                  ))}
-                </select>
-                <div className="flex gap-2 pt-1">
-                  <button onClick={() => saveEdit(k.id)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-bold">
-                    <Check className="w-4 h-4" /> Enregistrer
-                  </button>
-                  <button onClick={() => setEditingId(null)} className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-white border text-sm">
-                    <X className="w-4 h-4" /> Annuler
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3">
-                <span className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold flex-shrink-0">
-                  {k.firstName.charAt(0).toUpperCase()}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold truncate">{k.firstName} {k.lastName}</p>
-                  <p className="text-xs text-slate-500 truncate">{k.className} · {CYCLE_LABEL[k.cycle ?? 'primaire']}</p>
-                  <p className="text-xs text-slate-400">Solde : {formatCurrency(walletOf(k.id))}</p>
-                </div>
-                <span className={`flex-shrink-0 text-xs font-bold px-2 py-1 rounded-full ${sub ? 'bg-emerald-100 text-emerald-700' : pending ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
-                  {sub ? `${sub.mealsRemaining} repas` : pending ? 'En attente' : 'Sans abo'}
-                </span>
-              </div>
-            )}
-            {!isEditing && !isConfirming && (
-              <div className="mt-3 flex gap-2">
-                <button onClick={() => startEdit(k)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl border text-xs font-bold hover:bg-slate-50">
-                  <Pencil className="w-3.5 h-3.5" /> Modifier
-                </button>
-                <button onClick={() => askDelete(k)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50">
-                  <Trash2 className="w-3.5 h-3.5" /> Retirer
-                </button>
-              </div>
-            )}
-            {isConfirming && (
-              <div className="mt-3 rounded-xl bg-red-50 border border-red-200 p-3">
-                <p className="text-sm font-semibold text-red-800">Retirer {k.firstName} {k.lastName} ?</p>
-                <div className="mt-2 flex gap-2">
-                  <button onClick={() => confirmDelete(k)} className="flex-1 px-3 py-2 min-h-[44px] rounded-xl bg-red-600 text-white text-xs font-bold">
-                    Oui, retirer
-                  </button>
-                  <button onClick={() => setConfirmId(null)} className="flex-1 px-3 py-2 min-h-[44px] rounded-xl bg-white border text-xs">
-                    Annuler
-                  </button>
-                </div>
-              </div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+    <li id={`carte-${k.id}`} className="scroll-mt-24 bg-white rounded-3xl border-2 border-slate-100 shadow-sm hover:shadow-lg transition-shadow overflow-hidden">
+      <div className="bg-gradient-to-r from-slate-900 to-slate-700 px-5 pt-4 pb-4 text-white">
+        <div className="flex items-center gap-3">
+          <span className="w-11 h-11 rounded-2xl bg-white/15 border border-white/20 text-white flex items-center justify-center text-lg font-black flex-shrink-0">
+            {k.firstName.charAt(0).toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold truncate">{k.firstName} {k.lastName}</p>
+            <p className="text-xs text-slate-300 truncate">{k.className} · {CYCLE_LABEL[k.cycle ?? 'primaire']}</p>
+          </div>
+          <span className={`flex-shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-full ${sub ? 'bg-emerald-400 text-emerald-950' : pending ? 'bg-amber-300 text-amber-950' : 'bg-white/15 text-slate-200'}`}>
+            {sub ? `${sub.mealsRemaining} repas` : pending ? 'En attente' : 'Sans abo'}
+          </span>
+        </div>
+        <div className="mt-3">
+          <p className="text-2xl font-black tracking-tight tabular-nums">{formatCurrency(balance)}</p>
+          <p className="text-[11px] text-slate-300">Solde carte · tickets repas</p>
+        </div>
+      </div>
+      <div className="p-4">
+        <div className="flex items-center gap-3 rounded-2xl bg-slate-50 border p-3">
+          <div ref={qrRefCb} className="p-1.5 border border-slate-200 bg-white flex-shrink-0 rounded-lg">
+            <QRCodeSVG value={token} size={84} level="M" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-xs font-semibold text-slate-600 tracking-wider truncate">{token}</p>
+            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+              <button onClick={() => onCopy(token)} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
+                <Copy className="w-3 h-3" /> {copiedToken === token ? 'Copié' : 'Copier'}
+              </button>
+              <button onClick={() => onPNG(k.id, token, `${k.firstName} ${k.lastName}`)} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
+                <Download className="w-3 h-3" /> PNG
+              </button>
+              <button onClick={onPrint} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
+                <Printer className="w-3 h-3" /> Imprimer
+              </button>
+            </div>
+          </div>
+        </div>
+        {editing ? (
+          <div className="mt-3 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <input value={fLast} onChange={(e) => setFLast(e.target.value)} aria-label="Nom" placeholder="Nom" className="px-3 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-emerald-600" />
+              <input value={fFirst} onChange={(e) => setFFirst(e.target.value)} aria-label="Prénom" placeholder="Prénom" className="px-3 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-emerald-600" />
+            </div>
+            <select value={fClass} onChange={(e) => setFClass(e.target.value)} aria-label="Classe" className="px-3 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm bg-white w-full">
+              <option value="">Choisir…</option>
+              {CYCLES.map((c) => (
+                <optgroup key={c.id} label={c.label}>
+                  {c.classes.map((cls) => <option key={cls} value={cls}>{cls}</option>)}
+                </optgroup>
+              ))}
+            </select>
+            <div className="flex gap-2 pt-1">
+              <button onClick={saveEdit} className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-bold">
+                <Check className="w-4 h-4" /> Enregistrer
+              </button>
+              <button onClick={() => setEditing(false)} className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-white border text-sm">
+                <X className="w-4 h-4" /> Annuler
+              </button>
+            </div>
+          </div>
+        ) : confirming ? (
+          <div className="mt-3 rounded-xl bg-red-50 border border-red-200 p-3">
+            <p className="text-sm font-semibold text-red-800">Retirer {k.firstName} {k.lastName} ?</p>
+            <div className="mt-2 flex gap-2">
+              <button onClick={() => { deleteChild(k.id); setConfirming(false); flash(true, `${k.firstName} ${k.lastName} retiré.`); }} className="flex-1 px-3 py-2 min-h-[44px] rounded-xl bg-red-600 text-white text-xs font-bold">
+                Oui, retirer
+              </button>
+              <button onClick={() => setConfirming(false)} className="flex-1 px-3 py-2 min-h-[44px] rounded-xl bg-white border text-xs">
+                Annuler
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 flex gap-2">
+            <button onClick={startEdit} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl border text-xs font-bold hover:bg-slate-50">
+              <Pencil className="w-3.5 h-3.5" /> Modifier
+            </button>
+            <button onClick={askDelete} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50">
+              <Trash2 className="w-3.5 h-3.5" /> Retirer
+            </button>
+          </div>
+        )}
+      </div>
+    </li>
   );
 }
 

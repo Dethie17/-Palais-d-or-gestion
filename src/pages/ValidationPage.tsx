@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useResto } from '@/context/RestoContext';
 import { CheckCircle, XCircle, ScanLine, Camera, ImagePlus, Square, Search, UtensilsCrossed } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
@@ -10,17 +10,21 @@ function sameDay(a: Date, b: Date) {
 
 /**
  * Validation des repas — pensée pour le service d'une cantine scolaire.
- * 4 façons de servir, du plus rapide au plus sûr (scan OK tous navigateurs) :
+ * Contexte cantine : chaque ligne affiche l'ENFANT (prénom + nom + classe),
+ * le PLAT DU JOUR servi (publié par le Personnel) et le moyen de contrôle :
  * 1. Liste des élèves abonnés : 1 clic = 1 repas servi (file du self).
  * 2. Scan caméra live du badge QR (moteur ZXing intégré : Chrome, Edge, Firefox, Safari…).
  * 3. Photo du badge décodée en local (marche PARTOUT, même en HTTP non sécurisé).
  * 4. Saisie manuelle du code.
  * Contrôles auto : abonnement actif, date valide, repas restants, anti-double (1/jour/QR).
+ * Règle carte : la carte prépayée sert aux TICKETS repas ; les abonnements
+ * se paient InTouch / espèces — jamais avec le solde.
  */
 const READER_ID = 'o-resto-qr-reader';
 const PHOTO_READER_ID = 'o-resto-qr-photo';
+const DAY_NAMES = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 const ValidationPage = () => {
-  const { establishments, subscriptions, formulas, validateMeal, validations, children: kids, walletOf } = useResto();
+  const { establishments, subscriptions, formulas, validateMeal, validations, children: kids, walletOf, weeklyMenus } = useResto();
   const [token, setToken] = useState('');
   const [establishmentId, setEstablishmentId] = useState(establishments[0]?.id ?? '');
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -66,10 +70,16 @@ const ValidationPage = () => {
   const filteredSubs = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = q
-      ? activeSubs.filter((s) => s.clientUsername.toLowerCase().includes(q) || s.qrToken.toLowerCase().includes(q))
+      ? activeSubs.filter((s) => {
+          const k = s.childId ? kids.find((c) => c.id === s.childId) : undefined;
+          const hay = k
+            ? `${k.firstName} ${k.lastName} ${k.className} ${s.clientUsername} ${s.qrToken}`.toLowerCase()
+            : `${s.clientUsername} ${s.qrToken}`.toLowerCase();
+          return hay.includes(q);
+        })
       : activeSubs;
-    return [...list].sort((a, b) => a.clientUsername.localeCompare(b.clientUsername));
-  }, [activeSubs, search]);
+    return [...list].sort((a, b) => eleveKey(a).localeCompare(eleveKey(b)));
+  }, [activeSubs, search, kids, eleveKey]);
   const filteredKids = useMemo(() => {
     const q = search.trim().toLowerCase();
     return kids
@@ -79,6 +89,32 @@ const ValidationPage = () => {
   }, [kids, search, classFilter]);
 
   const formulaName = (formulaId: string) => formulas.find((f) => f.id === formulaId)?.name ?? '—';
+
+  // Plat du jour : publié par le Personnel (menus cantine). Sert de référence
+  // affichée sur chaque ligne — sans menu publié, on sert par abonnement/solde.
+  const publishedMenus = weeklyMenus.filter((m) => (m.items ?? []).length > 0);
+  const menuOfDate = (d: Date) => publishedMenus.find((m) => m.day === DAY_NAMES[d.getDay()]);
+  const dishOfDate = (d: Date) => {
+    const m = menuOfDate(d);
+    if (!m) return null;
+    return m.name || `Menu du ${m.day}`;
+  };
+  const todayDish = dishOfDate(new Date());
+  const todayItems = menuOfDate(new Date())?.items ?? [];
+
+  // Nom d'élève : prénom + nom de l'enfant rattaché, sinon compte parent.
+  const eleveKey = useCallback((s: { childId?: string; clientUsername: string }) => {
+    const k = s.childId ? kids.find((c) => c.id === s.childId) : undefined;
+    return k ? `${k.firstName} ${k.lastName}` : s.clientUsername;
+  }, [kids]);
+  const eleveOfSub = (s: { childId?: string; clientUsername: string }) => {
+    const k = s.childId ? kids.find((c) => c.id === s.childId) : undefined;
+    return k ? { name: `${k.firstName} ${k.lastName}`, detail: k.className, initial: k.firstName.charAt(0).toUpperCase() } : { name: s.clientUsername, detail: 'compte parent', initial: s.clientUsername.charAt(0).toUpperCase() };
+  };
+  const eleveOfValidation = (v: { childId?: string; clientUsername: string }) => {
+    const k = v.childId ? kids.find((c) => c.id === v.childId) : undefined;
+    return k ? `${k.firstName} ${k.lastName}` : v.clientUsername;
+  };
 
   const runValidation = (code: string) => {
     if (!code.trim() || !estabRef.current) return;
@@ -223,6 +259,23 @@ const ValidationPage = () => {
         </div>
       </div>
 
+      {/* Plat du jour servi : publié par le Personnel */}
+      {todayDish ? (
+        <div className="rounded-2xl border-2 border-orange-200 bg-orange-50 p-4">
+          <p className="text-[11px] font-black uppercase tracking-widest text-orange-600 flex items-center gap-1.5">
+            <UtensilsCrossed className="w-4 h-4" /> Plat du jour servi
+          </p>
+          <p className="mt-1 font-black text-slate-900">{todayDish}</p>
+          {todayItems.length > 0 && (
+            <p className="mt-0.5 text-sm text-slate-600">{todayItems.map((it) => it.name).join(' • ')}</p>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
+          <span className="font-bold text-slate-700">Aucun menu publié aujourd’hui</span> — service par abonnement / solde carte. Le Personnel compose la semaine dans Gestion Menu.
+        </div>
+      )}
+
       <div>
         <label className="text-sm font-semibold text-slate-700">Cantine (lieu du service)</label>
         <select value={establishmentId} onChange={(e) => setEstablishmentId(e.target.value)} className="mt-1 w-full md:max-w-md px-4 py-3 rounded-xl border-2 border-slate-200 bg-white outline-none focus:border-orange-500">
@@ -263,19 +316,20 @@ const ValidationPage = () => {
               const maxPerDay = 1;
               const served = servedCountForSub(s);
               const already = served >= maxPerDay;
+              const eleve = eleveOfSub(s);
               return (
                 <li key={s.id} className="p-3 flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-600 to-emerald-700 text-white font-black flex items-center justify-center flex-shrink-0">
-                    {s.clientUsername.charAt(0).toUpperCase()}
+                    {eleve.initial}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-800 capitalize truncate">{s.clientUsername}</p>
-                    <p className="text-xs text-slate-500">{formulaName(s.formulaId)} • {s.mealsRemaining} repas restants</p>
+                    <p className="font-bold text-slate-800 capitalize truncate">{eleve.name} <span className="font-normal text-slate-400">· {eleve.detail}</span></p>
+                    <p className="text-xs text-slate-500 truncate">{formulaName(s.formulaId)} • {s.mealsRemaining} repas restants{todayDish ? ` • plat : ${todayDish}` : ''}</p>
                   </div>
                   {already ? (
                     <span className="px-3 py-2 rounded-xl text-xs font-bold bg-green-100 text-green-800 flex items-center gap-1"><CheckCircle aria-hidden className="w-3.5 h-3.5" /> Servi</span>
                   ) : (
-                    <button onClick={() => runValidation(s.qrToken)} disabled={s.mealsRemaining <= 0} aria-label={`Servir ${s.clientUsername}`} className="px-4 py-2 rounded-xl text-sm font-bold bg-green-700 text-white hover:bg-green-800 disabled:opacity-40">
+                    <button onClick={() => runValidation(s.qrToken)} disabled={s.mealsRemaining <= 0} aria-label={`Servir ${eleve.name}`} className="px-4 py-2 rounded-xl text-sm font-bold bg-green-700 text-white hover:bg-green-800 disabled:opacity-40">
                       Servir
                     </button>
                   )}
@@ -386,13 +440,14 @@ const ValidationPage = () => {
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-500">
-              <tr><th className="text-left p-3">Heure</th><th className="text-left p-3">Élève</th><th className="text-left p-3">Statut</th><th className="text-left p-3">Motif</th></tr>
+              <tr><th className="text-left p-3">Heure</th><th className="text-left p-3">Élève</th><th className="text-left p-3">Plat servi</th><th className="text-left p-3">Statut</th><th className="text-left p-3">Motif</th></tr>
             </thead>
             <tbody>
               {today.map((v) => (
                 <tr key={v.id} className="border-t">
                   <td className="p-3">{new Date(v.validatedAt).toLocaleTimeString('fr-FR')}</td>
-                  <td className="p-3 font-semibold capitalize">{v.clientUsername}</td>
+                  <td className="p-3 font-semibold capitalize">{eleveOfValidation(v)}</td>
+                  <td className="p-3 text-slate-600">{dishOfDate(new Date(v.validatedAt)) ?? '—'}</td>
                   <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${v.status === 'accepted' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{v.status === 'accepted' ? 'Servi' : 'Refusé'}</span></td>
                   <td className="p-3 text-slate-500">{v.reason ?? '—'}</td>
                 </tr>
