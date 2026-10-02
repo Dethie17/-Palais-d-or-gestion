@@ -678,19 +678,21 @@ const EspaceParentPage = () => {
           )}
 
           {kids.length > 0 && (
-            <div className="mt-4 rounded-3xl bg-slate-900 text-white p-5 md:p-6 shadow-xl">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs font-bold uppercase tracking-widest text-emerald-300">
-                  • Recharger une carte
+            <div className="mt-4 rounded-3xl bg-slate-900 text-white p-5 md:p-6 shadow-xl border border-slate-800 overflow-hidden relative">
+              <div aria-hidden className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-emerald-500/15 blur-3xl" />
+              <div className="relative flex flex-wrap items-center gap-2">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300 flex items-center gap-2">
+                  <span aria-hidden className="w-1.5 h-8 rounded-full bg-gradient-to-b from-emerald-400 to-emerald-600" />
+                  Recharger une carte
                 </p>
-                <span className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full bg-white/15 text-emerald-200">
+                <span className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full bg-white/15 text-emerald-200 tabular-nums">
                   Solde total · {formatCurrency(totals.balance)}
                 </span>
               </div>
-              <p className="mt-2 text-sm text-slate-300">
-                Choisissez la carte, le montant, puis validez avec votre code InTouch — comme pour les abonnements.
+              <p className="relative mt-2 text-sm text-slate-300">
+                Carte, montant, numéro InTouch → code à 6 chiffres. Crédit immédiat, suivi dans l’historique.
               </p>
-              <div className="mt-4 rounded-2xl bg-white text-slate-900 p-4 md:p-5">
+              <div className="relative mt-4 rounded-2xl bg-white text-slate-900 p-4 md:p-5 shadow-inner">
                 <RechargePanel kids={kids} walletOf={walletOf} onDone={handleRecharged} onError={(t) => flash(false, t)} />
               </div>
             </div>
@@ -997,6 +999,8 @@ function RechargePanel({ kids, walletOf, onDone, onError }: {
 
   const parsedCustom = parseInt(custom.replace(/\D/g, ''), 10);
   const amount = Number.isFinite(parsedCustom) && parsedCustom > 0 ? parsedCustom : (preset ?? 0);
+  const selKid = kids.find((k) => k.id === childId);
+  const ready = !!childId && amount > 0 && isValidSnPhone(phone);
   const left = wave ? Math.max(0, new Date(wave.expiresAt).getTime() - now) : 0;
   const countdown = `${String(Math.floor(left / 60000)).padStart(2, '0')}:${String(Math.floor((left % 60000) / 1000)).padStart(2, '0')}`;
 
@@ -1055,9 +1059,9 @@ function RechargePanel({ kids, walletOf, onDone, onError }: {
 
   if (!wave || !txId) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div>
-          <span className="text-xs font-bold text-slate-600">Carte à recharger</span>
+          <p className="text-xs font-black uppercase tracking-widest text-slate-400">1 · Carte à recharger</p>
           <div className="mt-1.5 flex flex-wrap gap-2">
             {kids.map((k) => {
               const sel = childId === k.id;
@@ -1066,23 +1070,23 @@ function RechargePanel({ kids, walletOf, onDone, onError }: {
                   key={k.id}
                   onClick={() => setChildId(k.id)}
                   aria-pressed={sel}
-                  className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all ${sel ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+                  className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all ${sel ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:shadow-sm'}`}
                 >
-                  {k.firstName} {k.lastName} · {formatCurrency(walletOf(k.id))}
+                  {k.firstName} {k.lastName} · <span className="tabular-nums">{formatCurrency(walletOf(k.id))}</span>
                 </button>
               );
             })}
           </div>
         </div>
         <div>
-          <span className="text-xs font-bold text-slate-600">Montant</span>
+          <p className="text-xs font-black uppercase tracking-widest text-slate-400">2 · Montant</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             {[1000, 2000, 5000, 10000].map((a) => (
               <button
                 key={a}
                 onClick={() => { setPreset(a); setCustom(''); }}
                 aria-pressed={preset === a && !custom}
-                className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all ${preset === a && !custom ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400'}`}
+                className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all tabular-nums ${preset === a && !custom ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/25' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400 hover:shadow-sm'}`}
               >
                 {formatCurrency(a)}
               </button>
@@ -1093,35 +1097,49 @@ function RechargePanel({ kids, walletOf, onDone, onError }: {
               onChange={(e) => setCustom(e.target.value.replace(/\D/g, '').slice(0, 6))}
               placeholder="Autre montant"
               aria-label="Montant libre en FCFA"
-              className="px-3.5 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-xs font-bold w-36 outline-none focus:border-emerald-600"
+              className={`px-3.5 py-2 min-h-[44px] rounded-xl border-2 text-xs font-bold w-36 outline-none transition-all tabular-nums ${custom ? 'border-emerald-600 bg-emerald-50/50' : 'border-slate-200 focus:border-emerald-600'}`}
             />
           </div>
         </div>
         <div>
-          <label htmlFor="recharge-tel" className="text-xs font-bold text-slate-600">Numéro InTouch</label>
+          <label htmlFor="recharge-tel" className="text-xs font-black uppercase tracking-widest text-slate-400">3 · Numéro InTouch</label>
           <input
             id="recharge-tel"
             inputMode="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
             placeholder="77 123 45 67"
-            className="mt-1 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-emerald-600"
+            className="mt-1.5 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm tabular-nums outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10 transition-all"
           />
         </div>
-        {error && <p className="text-xs font-semibold text-red-600">{error}</p>}
-        <button onClick={handleValidate} className="w-full py-3 min-h-[48px] rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 inline-flex items-center justify-center gap-2">
-          <Smartphone className="w-4 h-4" /> Recharger{amount > 0 ? ` · ${formatCurrency(amount)}` : ''}
-        </button>
+        {error && <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</p>}
+        <div>
+          <button
+            onClick={handleValidate}
+            disabled={!ready}
+            className="w-full py-3 min-h-[48px] rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-500 text-white text-sm font-bold hover:from-emerald-800 hover:to-emerald-600 active:scale-[0.99] transition-all inline-flex items-center justify-center gap-2 shadow-md shadow-emerald-600/25 disabled:opacity-40 disabled:shadow-none disabled:active:scale-100"
+          >
+            <Smartphone className="w-4 h-4" /> Recharger{amount > 0 ? ` · ${formatCurrency(amount)}` : ''}
+          </button>
+          {!ready && (
+            <p className="mt-1.5 text-center text-[11px] text-slate-400">Choisissez la carte, le montant et un numéro InTouch valide pour continuer.</p>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
+      <p className="text-sm text-slate-600">
+        Recharge <strong className="text-slate-900 tabular-nums">{formatCurrency(amount)}</strong>
+        {selKid ? <> → carte de <strong className="text-slate-900">{selKid.firstName} {selKid.lastName}</strong></> : null} ·
+        validez avec le code reçu par InTouch.
+      </p>
       <div className="rounded-xl bg-slate-900 text-white p-4 flex items-center justify-between gap-2">
         <div>
           <p className="text-xs text-slate-400">Montant envoyé · {wave.merchantName}</p>
-          <p className="text-xl font-bold">{wave.amountLabel}</p>
+          <p className="text-xl font-bold tabular-nums">{wave.amountLabel}</p>
         </div>
         <div className="text-right">
           <p className="text-xs text-slate-400 flex items-center gap-1 justify-end"><Timer className="w-3.5 h-3.5" /> Expire</p>
@@ -1136,16 +1154,22 @@ function RechargePanel({ kids, walletOf, onDone, onError }: {
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
           placeholder="••••••"
-          className="mt-1 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm text-center font-mono tracking-[0.3em] outline-none focus:border-emerald-600"
+          className="mt-1 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm text-center font-mono tracking-[0.3em] outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10 transition-all"
         />
       </div>
-      {error && <p className="text-xs font-semibold text-red-600">{error}</p>}
+      {error && <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</p>}
       <button
         onClick={handleConfirm}
-        disabled={confirming || left === 0}
-        className="w-full py-3 min-h-[48px] rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-40"
+        disabled={confirming || left === 0 || code.length !== 6}
+        className="w-full py-3 min-h-[48px] rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-500 text-white text-sm font-bold hover:from-emerald-800 hover:to-emerald-600 active:scale-[0.99] transition-all disabled:opacity-40 shadow-md shadow-emerald-600/25 disabled:shadow-none"
       >
         {confirming ? 'Confirmation…' : 'Confirmer la recharge'}
+      </button>
+      <button
+        onClick={() => { setWave(null); setTxId(null); setCode(''); setError(null); }}
+        className="w-full text-sm font-semibold text-slate-500 hover:text-slate-700"
+      >
+        ← Modifier la carte ou le montant
       </button>
     </div>
   );
