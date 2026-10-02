@@ -13,17 +13,17 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 15% 15%;
 
-    --primary: 15 85% 50%;
+    --primary: 142 71% 29%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 10% 94%;
-    --secondary-foreground: 220 15% 25%;
+    --secondary: 20 90% 92%;
+    --secondary-foreground: 20 90% 32%;
 
     --muted: 220 10% 94%;
-    --muted-foreground: 220 10% 50%;
+    --muted-foreground: 220 10% 38%;
 
-    --accent: 15 85% 95%;
-    --accent-foreground: 15 85% 40%;
+    --accent: 20 90% 48%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
@@ -37,16 +37,21 @@
     --info: 210 85% 55%;
     --info-foreground: 0 0% 100%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 15 85% 50%;
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+    --ring: 142 71% 29%;
 
     --radius: 0.75rem;
 
-    --sidebar-bg: 220 20% 14%;
-    --sidebar-foreground: 220 10% 85%;
-    --sidebar-active: 15 85% 50%;
+    --sidebar-bg: 220 20% 12%;
+    --sidebar-foreground: 220 10% 88%;
+    --sidebar-active: 142 71% 29%;
     --sidebar-hover: 220 15% 20%;
+
+    --brand: 142 71% 29%;
+    --brand-dark: 142 71% 22%;
+    --brand-light: 142 60% 94%;
+    --accent-brand: 20 90% 48%;
   }
 }
 
@@ -54,8 +59,78 @@
   * {
     @apply border-border;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: hsl(var(--brand) / 0.22);
+  }
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 1px;
+    border-color: hsl(var(--ring));
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-green-700 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-green-700/25 transition-all hover:bg-green-800 hover:shadow-xl hover:shadow-green-700/30 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none;
+  }
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-orange-600/25 transition-all hover:bg-orange-700 active:scale-[0.98] disabled:opacity-50;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border-2 border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition-all hover:border-green-700/40 hover:bg-green-50/50 active:scale-[0.98];
+  }
+  .card-pro {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
+  }
+  .input-pro {
+    @apply w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-green-700;
+  }
+  .label-pro {
+    @apply mb-1.5 block text-sm font-semibold text-slate-700;
+  }
+}
+
+/* Impression (planche QR, reçus) : que le contenu, sans navigation */
+@media print {
+  aside, header, .no-print {
+    display: none !important;
+  }
+  main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* Accessibilité : aucun scroll/défilement brutal si l'utilisateur préfère réduire les animations */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
@@ -125,6 +200,15 @@
 
 .animate-scale-in {
   animation: scale-in 0.3s ease-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+.animate-shake {
+  animation: shake 0.4s ease-out;
 }
 
 /* Carrousel horizontal des tickets (swipe tactile + flèches desktop) */

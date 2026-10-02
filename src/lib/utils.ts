@@ -11,9 +11,11 @@ export function cn(...inputs: ClassValue[]) {
  * @returns Le montant formaté en FCFA
  */
 export function formatCurrency(amount: number, showDecimals: boolean = true): string {
-  const formatted = showDecimals 
-    ? amount.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-    : Math.round(amount).toLocaleString('fr-FR');
+  const safe = Number(amount);
+  const value = Number.isFinite(safe) ? safe : 0;
+  const formatted = showDecimals
+    ? value.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+    : Math.round(value).toLocaleString('fr-FR');
   return `${formatted} FCFA`;
 }
 

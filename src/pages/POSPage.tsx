@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CartItem, Product } from '@/types/menu';
-import { categories, categoryIcons } from '@/data/mockData';
+import { categories } from '@/data/mockData';
 import { formatCurrency } from '@/lib/utils';
 import { useProducts } from '@/context/ProductContext';
 import { 
@@ -90,21 +90,22 @@ const POSPage = ({ onProceedToPayment }: POSPageProps) => {
               <p className="text-sm text-slate-600 mt-0.5">{availableProducts.length} produits disponibles</p>
             </div>
             {/* Mobile cart toggle */}
-            <button onClick={() => setShowCart(true)} className="lg:hidden relative p-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-lg shadow-orange-500/30">
-              <ShoppingCart className="w-5 h-5" />
+            <button onClick={() => setShowCart(true)} aria-label={cartCount > 0 ? `Ouvrir le panier, ${cartCount} articles` : 'Ouvrir le panier'} className="lg:hidden relative p-3 rounded-xl bg-green-700 text-white shadow-lg shadow-green-700/30 hover:bg-green-800">
+              <ShoppingCart aria-hidden className="w-5 h-5" />
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center">{cartCount}</span>
               )}
             </button>
           </div>
-          <div className="flex gap-2 overflow-x-auto tiny-scrollbar pb-1">
+          <div className="flex gap-2 overflow-x-auto tiny-scrollbar pb-1" role="tablist" aria-label="Catégories de produits">
             {categories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
+                aria-pressed={activeCategory === cat}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
                   activeCategory === cat
-                    ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-lg shadow-orange-500/30'
+                    ? 'bg-green-700 text-white shadow-lg shadow-green-700/30'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
@@ -115,28 +116,37 @@ const POSPage = ({ onProceedToPayment }: POSPageProps) => {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar bg-gradient-to-br from-slate-50 to-orange-50/20">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <p className="text-lg font-bold text-slate-800">Aucun produit dans cette catégorie</p>
+              <p className="mt-1 text-sm text-slate-600">Essayez une autre catégorie ou vérifiez le catalogue.</p>
+              <button onClick={() => setActiveCategory('Tous')} className="btn-secondary mt-4">Voir tous les produits</button>
+            </div>
+          ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4">
             {filtered.map((product) => (
               <button
                 key={product.id}
                 onClick={() => addToCart(product)}
-                className={`bg-white rounded-2xl border-2 border-slate-200 overflow-hidden text-left hover:shadow-xl hover:border-orange-400 transition-all group ${
+                aria-label={`Ajouter ${product.name} au panier, ${formatCurrency(product.price)}`}
+                className={`bg-white rounded-2xl border-2 border-slate-200 overflow-hidden text-left hover:shadow-xl hover:border-green-600 transition-all group ${
                   animatingId === product.id ? 'animate-cart-pop' : ''
                 }`}
               >
                 <div className="h-28 lg:h-32 overflow-hidden relative">
-                  <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                  <img src={product.image} alt={product.name} loading="lazy" width={300} height={200} onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 </div>
                 <div className="p-3 lg:p-4">
                   <h3 className="text-sm lg:text-base font-bold text-slate-800 truncate mb-1">{product.name}</h3>
-                  <p className="text-base lg:text-lg font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
+                  <p className="text-base lg:text-lg font-bold text-green-700">
                     {formatCurrency(product.price)}
                   </p>
                 </div>
               </button>
             ))}
           </div>
+          )}
         </div>
       </div>
 

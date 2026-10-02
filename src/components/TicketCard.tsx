@@ -23,7 +23,7 @@ interface TicketCardProps {
 /**
  * Ticket repas de cantine — présentation soignée et identique partout
  * (Menus = vitrine, Abonnement = achat). Photo du menu, souche jour,
- * pointillés de séparation, plats + prix, total détachable.
+ * pointillés de séparation, plats (sans prix unitaires) + total détachable.
  */
 const TicketCard = ({ day, name, description, image, items, total, highlight, highlightLabel, action, className }: TicketCardProps) => {
   return (
@@ -62,9 +62,8 @@ const TicketCard = ({ day, name, description, image, items, total, highlight, hi
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
         <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
           {items.map((it) => (
-            <li key={it.name} className="flex justify-between gap-2">
-              <span className="flex items-center gap-1.5"><UtensilsCrossed className="w-3.5 h-3.5 text-slate-400" /> {it.name}</span>
-              <span className="font-semibold whitespace-nowrap">{formatCurrency(it.price)}</span>
+            <li key={it.name} className="flex items-center gap-1.5">
+              <UtensilsCrossed className="w-3.5 h-3.5 text-slate-400" /> {it.name}
             </li>
           ))}
         </ul>

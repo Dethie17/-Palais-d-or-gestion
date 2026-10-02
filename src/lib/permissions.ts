@@ -5,27 +5,28 @@ import { UserRole } from '@/context/AuthContext';
 // Chaque profil a un périmètre différent : le garde dans App.tsx s'en sert,
 // la Sidebar n'affiche que les pages autorisées.
 // Référentiel des profils : src/lib/roleTasks.ts
-// Règle de caisse : SEUL le Gérant de cantine tient la Caisse (POS).
-// Le Directeur Général supervise (lecture des encaissements, rapports)
-// mais ne voit pas les pages pos / payment / receipt / orders.
+// Directeur Général : pilotage + suivi (tableau de bord, finance,
+// abonnés & paiements en lecture seule, utilisateurs, paramètres).
+// Hors périmètre DG : caisse POS, validation, QR, abonnement parent,
+// mes enfants, tickets & formules, gestion menu (terrain : gérant/personnel).
+// Règle de caisse : SEUL le Gérant de cantine tient la Caisse (POS) au quotidien.
+const DG_PAGES: PageName[] = [
+  'home', 'dashboard', 'finance', 'subscriptions',
+  'users', 'settings', 'history', 'profile',
+];
 export const ROLE_PAGES: Record<UserRole, PageName[]> = {
-  // Catalogue, tickets, QR, suivi conso
-  client: ['home', 'menus', 'subscription', 'qrcode', 'history', 'profile'],
-  // Contrôle QR + validation, catalogue + tickets en lecture, historique
-  personnel: ['home', 'menus', 'tickets', 'validation', 'history', 'profile'],
-  // Pilote sa cantine : stats, menus, cantines, validations, abonnés + tickets/formules + CAISSE POS (seul habilité)
-  gestionnaire: ['home', 'dashboard', 'menu', 'menus', 'tickets', 'subscriptions', 'establishments', 'validation', 'users', 'history', 'pos', 'payment', 'receipt', 'orders', 'profile'],
-  // DG : supervision globale SANS caisse (tickets/formules en lecture)
-  admin: [
-    'home', 'dashboard', 'menu', 'menus', 'tickets', 'subscriptions', 'establishments', 'validation',
-    'users', 'settings', 'history', 'profile',
-  ],
-  // Compatibilité anciens comptes : caissier → personnel, manager → DG (sans caisse)
-  caissier: ['home', 'menus', 'tickets', 'validation', 'history', 'profile'],
-  manager: [
-    'home', 'dashboard', 'menu', 'menus', 'tickets', 'subscriptions', 'establishments', 'validation',
-    'users', 'settings', 'history', 'profile',
-  ],
+  // Parent : UN seul parcours continu (Espace Parent) + profil.
+  // Anciennes pages conservées en redirect invisible vers 'home'.
+  client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'history', 'profile'],
+  // Personnel : contrôle QR + validation, composition des menus, tickets (création + vente), encaissements, galerie QR, historique
+  personnel: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'history', 'profile'],
+  // Gérant : caisse POS + tableau de bord + historique (menus, abonnés, validation : DG/personnel)
+  gestionnaire: ['home', 'dashboard', 'history', 'pos', 'payment', 'receipt', 'orders', 'profile'],
+  // DG : pilotage + suivi uniquement
+  admin: DG_PAGES,
+  // Compatibilité anciens comptes : caissier → personnel, manager → DG
+  caissier: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'history', 'profile'],
+  manager: DG_PAGES,
 };
 
 export function canAccess(role: UserRole | undefined, page: PageName): boolean {
@@ -34,7 +35,7 @@ export function canAccess(role: UserRole | undefined, page: PageName): boolean {
 }
 
 export const ROLE_LABEL: Record<UserRole, string> = {
-  client: 'Client',
+  client: 'Parent',
   personnel: 'Personnel de service',
   gestionnaire: 'Gérant de cantine',
   admin: 'Directeur Général',
@@ -46,12 +47,11 @@ export const ROLE_LABEL: Record<UserRole, string> = {
 export const PAGE_LABEL: Record<PageName, string> = {
   home: 'Accueil',
   menus: 'Menus',
-  tickets: 'Tickets & formules',
   subscription: 'Abonnement',
   subscriptions: 'Abonnés & paiements',
   qrcode: 'Mon QR Code',
+  qrgallery: 'QR Élèves',
   validation: 'Validation repas',
-  establishments: 'Établissements',
   users: 'Utilisateurs',
   settings: 'Paramètres',
   history: 'Historique',
@@ -62,4 +62,6 @@ export const PAGE_LABEL: Record<PageName, string> = {
   receipt: 'Reçu',
   orders: 'Commandes',
   profile: 'Profil',
+  children: 'Mes enfants',
+  finance: 'Finance',
 };

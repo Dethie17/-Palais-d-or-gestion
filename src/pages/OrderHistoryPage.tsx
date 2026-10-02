@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatCurrency } from '@/lib/utils';
-import { Clock, ShoppingBag, Search, Trash2, XCircle, CheckCircle, Receipt } from 'lucide-react';
+import { Clock, ShoppingBag, Search, XCircle, CheckCircle, Receipt } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Order } from '@/types/menu';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -111,7 +111,7 @@ const ReceiptModal = ({ order, onClose }: ReceiptModalProps) => {
 };
 
 const OrderHistoryPage = () => {
-  const { orders, updateOrder, deleteOrder } = useApp();
+  const { orders, updateOrder } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -133,16 +133,6 @@ const OrderHistoryPage = () => {
       message: 'Voulez-vous vraiment annuler cette commande ?',
       type: 'warning',
       onConfirm: () => updateOrder(orderId, { status: 'cancelled' }),
-    });
-  };
-
-  const handleDeleteOrder = (orderId: string) => {
-    setConfirmDialog({
-      isOpen: true,
-      title: 'Supprimer la commande',
-      message: 'Voulez-vous vraiment supprimer cette commande ? Cette action est irréversible.',
-      type: 'danger',
-      onConfirm: () => deleteOrder(orderId),
     });
   };
 
@@ -168,7 +158,7 @@ const OrderHistoryPage = () => {
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      preparing: 'bg-blue-100 text-blue-800 border-blue-200',
+      preparing: 'bg-amber-100 text-amber-800 border-amber-200',
       ready: 'bg-green-100 text-green-800 border-green-200',
       completed: 'bg-emerald-100 text-emerald-800 border-emerald-200',
       cancelled: 'bg-red-100 text-red-800 border-red-200',
@@ -282,15 +272,15 @@ const OrderHistoryPage = () => {
                 {/* Voir Ticket Button - Always visible */}
                 <button
                   onClick={() => handleViewReceipt(order)}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold text-xs sm:text-sm hover:shadow-lg hover:shadow-blue-500/50 transition-all active:scale-95"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 text-white font-semibold text-xs sm:text-sm hover:shadow-lg hover:shadow-orange-500/50 transition-all active:scale-95"
                   title="Voir le ticket"
                 >
                   <Receipt className="w-4 h-4" />
                   Voir ticket
                 </button>
 
-                {/* Action Buttons Row */}
-                <div className="grid grid-cols-3 gap-2">
+                {/* Action Buttons Row (statuts uniquement — l'historique ne se supprime pas) */}
+                <div className="grid grid-cols-2 gap-2">
                   {/* Vendu Button - Only if not completed or cancelled */}
                   {order.status !== 'completed' && order.status !== 'cancelled' && (
                     <button
@@ -314,18 +304,6 @@ const OrderHistoryPage = () => {
                       <span className="hidden sm:inline">Annuler</span>
                     </button>
                   )}
-                  
-                  {/* Supprimer Button - Always visible */}
-                  <button
-                    onClick={() => handleDeleteOrder(order.id)}
-                    className={`flex items-center justify-center gap-1 px-2 py-2 rounded-lg bg-red-100 border-2 border-red-300 text-red-800 font-semibold text-xs hover:bg-red-200 transition-all active:scale-95 ${
-                      order.status === 'completed' || order.status === 'cancelled' ? 'col-span-3' : ''
-                    }`}
-                    title="Supprimer la commande"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Supprimer</span>
-                  </button>
                 </div>
               </div>
             </div>

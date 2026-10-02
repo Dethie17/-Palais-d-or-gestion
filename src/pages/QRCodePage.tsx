@@ -8,7 +8,7 @@ import { useRef, useState } from 'react';
 
 const QRCodePage = () => {
   const { user } = useAuth();
-  const { mySubscription, mySubscriptions, myValidations, formulas } = useResto();
+  const { mySubscription, mySubscriptions, myValidations, formulas, myChildren, walletOf } = useResto();
   const [copied, setCopied] = useState(false);
   const qrRef = useRef<HTMLDivElement>(null);
 
@@ -64,7 +64,7 @@ const QRCodePage = () => {
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
       <div className="text-center">
-        <p className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-100 px-3 py-1 rounded-full">
+        <p className="inline-flex items-center gap-1 text-xs font-bold text-green-700 bg-green-100 px-3 py-1 rounded-full">
           <QrCode className="w-3 h-3" /> Badge repas personnel
         </p>
         <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 mt-2">Mon QR Code O RESTO</h1>
@@ -118,16 +118,16 @@ const QRCodePage = () => {
       </div>
 
       {/* Actions */}
-      <div className="grid grid-cols-3 gap-2">
-        <button onClick={copy} className="flex items-center justify-center gap-1 px-3 py-3 rounded-xl bg-white border font-semibold text-sm text-slate-700 hover:bg-slate-50">
-          {copied ? <CheckCircle className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 no-print">
+        <button onClick={copy} className="btn-secondary">
+          {copied ? <CheckCircle aria-hidden className="w-4 h-4 text-green-600" /> : <Copy aria-hidden className="w-4 h-4" />}
           {copied ? 'Copié !' : 'Copier'}
         </button>
-        <button onClick={downloadPNG} className="flex items-center justify-center gap-1 px-3 py-3 rounded-xl bg-slate-900 text-white font-semibold text-sm hover:bg-slate-800">
-          <Download className="w-4 h-4" /> Image PNG
+        <button onClick={downloadPNG} className="flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl bg-slate-900 text-white font-semibold text-sm hover:bg-slate-800">
+          <Download aria-hidden className="w-4 h-4" /> Image PNG
         </button>
-        <button onClick={() => window.print()} className="flex items-center justify-center gap-1 px-3 py-3 rounded-xl bg-orange-500 text-white font-semibold text-sm hover:bg-orange-600">
-          <Printer className="w-4 h-4" /> Imprimer
+        <button onClick={() => window.print()} className="btn-primary">
+          <Printer aria-hidden className="w-4 h-4" /> Imprimer
         </button>
       </div>
 
@@ -139,10 +139,28 @@ const QRCodePage = () => {
         </p>
       )}
 
-      <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 text-sm text-indigo-800 flex gap-2">
+      <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-sm text-green-800 flex gap-2">
         <ShieldCheck className="w-5 h-5 flex-shrink-0" />
         <span>Contrôle automatique à chaque scan : abonnement actif, date de validité, repas restants et anti-double (1 repas / jour / QR Code).</span>
       </div>
+
+      {user && myChildren(user.username).length > 0 && (
+        <div className="space-y-3">
+          <h2 className="font-extrabold text-slate-900">QR Cartes des enfants</h2>
+          {myChildren(user.username).map((k) => (
+            <div key={k.id} className="bg-white border rounded-2xl p-4 flex items-center gap-4">
+              <div className="p-2 border rounded-xl bg-white">
+                <QRCodeSVG value={k.qrToken} size={90} />
+              </div>
+              <div className="text-sm">
+                <p className="font-extrabold capitalize">{k.firstName} {k.lastName} <span className="font-normal text-slate-500">• {k.className}</span></p>
+                <p className="font-mono font-bold text-slate-700">{k.qrToken}</p>
+                <p className="text-slate-500">Solde carte : <strong>{walletOf(k.id)} FCFA</strong></p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

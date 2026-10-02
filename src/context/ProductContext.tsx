@@ -9,7 +9,11 @@ interface ProductContextType {
   updateProduct: (id: string, updates: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
   loading: boolean;
+  offline: boolean;
+  reload: () => void;
 }
+
+const LS_PRODUCTS_KEY = 'o-resto-products-v1';
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
 
@@ -26,7 +30,6 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
   const loadProducts = async () => {
     try {
-      console.log('🔄 Chargement des produits depuis Supabase...');
       setLoading(true);
       const { data, error } = await supabase
         .from('products')
@@ -34,13 +37,10 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         .order('name', { ascending: true });
 
       if (error) {
-        console.error('❌ Erreur lors du chargement des produits:', error);
-        // Repli hors-ligne : catalogue local Miam's pour que POS et Gestion Menu marchent toujours
-        console.log('📦 Repli sur le catalogue local Miam\'s');
+        // Repli hors-ligne : catalogue local persisté puis mock
         setOffline(true);
-        setProducts(mockProducts);
+        setProducts(readLocalProducts() ?? mockProducts);
       } else if (data && data.length > 0) {
-        console.log(`✅ ${data.length} produit(s) chargé(s) depuis Supabase`);
         setOffline(false);
         // Convertir les données Supabase en Products
         const productsFromDB = data.map((row) => ({
@@ -55,9 +55,9 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           extras: row.extras || undefined,
         }));
         setProducts(productsFromDB);
+        writeLocalProducts(productsFromDB);
       } else {
-        // Table vide : initialiser Supabase avec le catalogue Miam's (best-effort)
-        console.log('ℹ️  Table vide : initialisation avec le catalogue Miam\'s...');
+        // Table vide : initialiser Supabase avec le catalogue local (best-effort)
         try {
           await supabase.from('products').insert(
             mockProducts.map((p) => ({
@@ -75,22 +75,43 @@ export function ProductProvider({ children }: { children: ReactNode }) {
           /* pas bloquant : on affiche quand même le catalogue local */
         }
         setProducts(mockProducts);
+        writeLocalProducts(mockProducts);
       }
-    } catch (error) {
-      console.error('❌ Erreur fatale lors du chargement des produits:', error);
-      console.log('📦 Repli sur le catalogue local Miam\'s');
+    } catch {
       setOffline(true);
-      setProducts(mockProducts);
+      setProducts(readLocalProducts() ?? mockProducts);
     } finally {
       setLoading(false);
     }
   };
 
+  function readLocalProducts(): Product[] | null {
+    try {
+      const raw = localStorage.getItem(LS_PRODUCTS_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Product[];
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeLocalProducts(list: Product[]) {
+    try {
+      localStorage.setItem(LS_PRODUCTS_KEY, JSON.stringify(list));
+    } catch {
+      /* stockage indisponible */
+    }
+  }
+
   const addProduct = async (product: Product) => {
     try {
-      console.log('🔵 Ajout produit - Début:', product.id);
-      // Mise à jour optimiste
-      setProducts((prev) => [...prev, product]);
+      // Mise à jour optimiste + persistance locale
+      setProducts((prev) => {
+        const next = [...prev, product];
+        writeLocalProducts(next);
+        return next;
+      });
 
       // Insertion dans Supabase
       const { error } = await supabase.from('products').insert({
@@ -104,20 +125,15 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         extras: product.extras || [],
       });
 
-      if (error) {
-        console.error('❌ ERREUR Supabase lors de l\'ajout du produit:', error);
-        console.error('❌ Message:', error.message);
-        if (offline) {
-          console.log('📦 Mode hors-ligne : ajout conservé localement');
-        } else {
-          // Rollback en cas d'erreur
-          setProducts((prev) => prev.filter((p) => p.id !== product.id));
-        }
-      } else {
-        console.log('✅ Produit ajouté avec succès dans Supabase');
+      if (error && !offline) {
+        // Rollback en cas d'erreur en ligne
+        setProducts((prev) => {
+          const next = prev.filter((p) => p.id !== product.id);
+          writeLocalProducts(next);
+          return next;
+        });
       }
-    } catch (error) {
-      console.error('❌ Erreur fatale lors de l\'ajout du produit:', error);
+    } catch {
       if (!offline) {
         setProducts((prev) => prev.filter((p) => p.id !== product.id));
       }
@@ -126,9 +142,12 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
   const updateProduct = async (id: string, updates: Partial<Product>) => {
     try {
-      console.log('🔵 Mise à jour produit - Début:', id, updates);
-      // Mise à jour optimiste
-      setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+      // Mise à jour optimiste + persistance locale
+      setProducts((prev) => {
+        const next = prev.map((p) => (p.id === id ? { ...p, ...updates } : p));
+        writeLocalProducts(next);
+        return next;
+      });
 
       // Préparer les données pour Supabase
       const supabaseUpdates: Record<string, unknown> = {};
@@ -146,20 +165,11 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         .update(supabaseUpdates)
         .eq('id', id);
 
-      if (error) {
-        console.error('❌ ERREUR Supabase lors de la mise à jour du produit:', error);
-        console.error('❌ Message:', error.message);
-        if (offline) {
-          console.log('📦 Mode hors-ligne : modification conservée localement');
-        } else {
-          // Rollback: recharger les produits
-          await loadProducts();
-        }
-      } else {
-        console.log('✅ Produit mis à jour avec succès dans Supabase');
+      if (error && !offline) {
+        // Rollback: recharger les produits
+        await loadProducts();
       }
-    } catch (error) {
-      console.error('❌ Erreur fatale lors de la mise à jour du produit:', error);
+    } catch {
       if (!offline) {
         await loadProducts();
       }
@@ -168,29 +178,23 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
   const deleteProduct = async (id: string) => {
     try {
-      console.log('🔵 Suppression produit - Début:', id);
       // Sauvegarde pour rollback
       const productToDelete = products.find((p) => p.id === id);
-      // Suppression optimiste
-      setProducts((prev) => prev.filter((p) => p.id !== id));
+      // Suppression optimiste + persistance locale
+      setProducts((prev) => {
+        const next = prev.filter((p) => p.id !== id);
+        writeLocalProducts(next);
+        return next;
+      });
 
       // Suppression dans Supabase
       const { error } = await supabase.from('products').delete().eq('id', id);
 
-      if (error) {
-        console.error('❌ ERREUR Supabase lors de la suppression du produit:', error);
-        console.error('❌ Message:', error.message);
-        if (offline) {
-          console.log('📦 Mode hors-ligne : suppression conservée localement');
-        } else if (productToDelete) {
-          // Rollback en cas d'erreur
-          setProducts((prev) => [...prev, productToDelete]);
-        }
-      } else {
-        console.log('✅ Produit supprimé avec succès de Supabase');
+      if (error && !offline && productToDelete) {
+        // Rollback en cas d'erreur en ligne
+        setProducts((prev) => [...prev, productToDelete]);
       }
-    } catch (error) {
-      console.error('❌ Erreur fatale lors de la suppression du produit:', error);
+    } catch {
       if (!offline) {
         await loadProducts();
       }
@@ -205,6 +209,8 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         updateProduct,
         deleteProduct,
         loading,
+        offline,
+        reload: loadProducts,
       }}
     >
       {children}

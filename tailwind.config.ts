@@ -74,6 +74,14 @@ export default {
           active: "hsl(var(--sidebar-active))",
           hover: "hsl(var(--sidebar-hover))",
         },
+        brand: {
+          DEFAULT: "hsl(var(--brand))",
+          dark: "hsl(var(--brand-dark))",
+          light: "hsl(var(--brand-light))",
+        },
+        brandaccent: {
+          DEFAULT: "hsl(var(--accent-brand))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -98,12 +106,18 @@ export default {
           "50%": { transform: "scale(1.15)" },
           "100%": { transform: "scale(1)" },
         },
+        shake: {
+          "0%, 100%": { transform: "translateX(0)" },
+          "20%, 60%": { transform: "translateX(-6px)" },
+          "40%, 80%": { transform: "translateX(6px)" },
+        },
       },
       animation: {
         "fade-in": "fade-in 0.3s ease-out",
         "scale-in": "scale-in 0.2s ease-out",
         "slide-up": "slide-up 0.4s ease-out",
         "cart-pop": "cart-pop 0.3s ease-out",
+        shake: "shake 0.4s ease-out",
       },
     },
   },

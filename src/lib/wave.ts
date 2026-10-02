@@ -1,7 +1,7 @@
 import type { ORestoPaymentMethod } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
 
-export type MobileMethod = 'wave';
+export type MobileMethod = 'wave' | 'intouch';
 
 export interface WavePaymentRequest {
   reference: string;
@@ -40,23 +40,45 @@ export const WAVE_MERCHANT_NUMBER =
 export const WAVE_MERCHANT_NAME =
   (import.meta.env.VITE_WAVE_MERCHANT_NAME as string | undefined) ?? 'O RESTO';
 
+export const INTOUCH_MERCHANT_NUMBER =
+  (import.meta.env.VITE_INTOUCH_MERCHANT_NUMBER as string | undefined) ?? '+221 77 000 00 00';
+export const INTOUCH_MERCHANT_NAME =
+  (import.meta.env.VITE_INTOUCH_MERCHANT_NAME as string | undefined) ?? 'O RESTO';
+
+/**
+ * Lien de paiement Wave Business (encaissement comptoir / POS).
+ * Configurable via VITE_WAVE_BUSINESS_URL / VITE_WAVE_BUSINESS_NAME.
+ * Le client paie le montant exact via le lien (ou son QR), le caissier
+ * vérifie la notification Wave Business puis confirme l'encaissement.
+ */
+export const WAVE_BUSINESS_URL =
+  (import.meta.env.VITE_WAVE_BUSINESS_URL as string | undefined) ??
+  'https://pay.wave.com/m/M_sn_1ZFaHP4di8qG/c/sn/';
+export const WAVE_BUSINESS_NAME =
+  (import.meta.env.VITE_WAVE_BUSINESS_NAME as string | undefined) ??
+  'O RESTO';
+
 /** Expiration d'une demande de paiement mobile : 15 minutes. */
 export const WAVE_TTL_MS = 15 * 60 * 1000;
 
 export function isMobileMethod(method: ORestoPaymentMethod): method is MobileMethod {
-  return method === 'wave';
+  return method === 'wave' || method === 'intouch';
 }
 
 export function methodLabel(method: ORestoPaymentMethod): string {
   switch (method) {
     case 'wave':
       return 'Wave';
+    case 'intouch':
+      return 'InTouch';
     case 'cash':
       return 'Espèces';
     case 'mobile_money':
       return 'Mobile Money';
     case 'card':
       return 'Carte bancaire';
+    case 'balance':
+      return 'Solde carte';
     default:
       return method;
   }
@@ -82,6 +104,27 @@ export function initiateWavePayment(
   const codes = readCodes();
   codes[reference] = demoCode;
   writeCodes(codes);
+
+  if (method === 'intouch') {
+    return {
+      reference,
+      amount,
+      amountLabel: formatCurrency(amount),
+      method,
+      methodLabel: methodLabel(method),
+      merchantNumber: INTOUCH_MERCHANT_NUMBER,
+      merchantName: INTOUCH_MERCHANT_NAME,
+      ussdCode: '#144#',
+      expiresAt: new Date(Date.now() + WAVE_TTL_MS).toISOString(),
+      demoCode,
+      steps: [
+        `Ouvrez InTouch et envoyez ${formatCurrency(amount)} au marchand ${INTOUCH_MERCHANT_NAME} (${INTOUCH_MERCHANT_NUMBER}).`,
+        `Motif / référence : ${reference}.`,
+        'Validez avec votre code secret InTouch.',
+        'Saisissez ci-dessous le code de confirmation à 6 chiffres pour activer votre carte.',
+      ],
+    };
+  }
 
   return {
     reference,
@@ -109,15 +152,15 @@ export function isValidWaveCode(code: string): boolean {
 }
 
 /**
- * Vérifie le code saisi. En mode démo : compare au code généré à
- * l'initiation. Repli : tout code à 6 chiffres est accepté (données
- * anciennes ou restauration après vidage du stockage).
+ * Vérifie le code saisi. Exige le code généré à l'initiation sur cet appareil.
+ * Sans code attendu (stockage vidé / autre appareil) : refusé — passez par
+ * la coche manuelle du gérant (confirmation externe vérifiée).
  */
 export function checkWaveCode(reference: string, code: string): boolean {
   const clean = code.trim();
   if (!isValidWaveCode(clean)) return false;
   const expected = readCodes()[reference];
-  if (!expected) return true;
+  if (!expected) return false;
   return clean === expected;
 }
 

@@ -47,3 +47,24 @@ export function getClientQrToken(username: string): string {
 export function isPersonalQrToken(username: string, token: string): boolean {
   return getClientQrToken(username) === token.trim().toUpperCase();
 }
+
+/** Token QR stable et unique pour un enfant (jamais régénéré). */
+export function getChildQrToken(childId: string): string {
+  const id = childId.trim();
+  if (!id) return 'ORESTO-VISITEUR';
+  const map = readMap();
+  const key = `child:${id.toLowerCase()}`;
+  if (map[key]) return map[key];
+  const token = `ORESTO-${hashUsername(`enfant-${id}`)}`;
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ ...map, [key]: token }));
+  } catch {
+    /* stockage indisponible : token déterministe quand même */
+  }
+  return token;
+}
+
+/** Vrai si ce token est le QR de cet enfant. */
+export function isChildQrToken(childId: string, token: string): boolean {
+  return getChildQrToken(childId) === token.trim().toUpperCase();
+}

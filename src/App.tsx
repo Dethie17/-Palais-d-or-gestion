@@ -2,13 +2,14 @@ import { Suspense, lazy, useState } from 'react';
 import { Menu, ShieldAlert } from 'lucide-react';
 import Sidebar from './components/layout/Sidebar';
 import SplashScreen from './components/SplashScreen';
+import ParentGate from './components/ParentGate';
 import OrestoLogo from './components/brand/OrestoLogo';
 import { getRoleDef } from './lib/roleTasks';
 import { PageName, CartItem, Order } from './types/menu';
 import { canAccess, ROLE_PAGES, PAGE_LABEL } from './lib/permissions';
 import { AppProvider, useApp } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { RestoProvider } from './context/RestoContext';
+import { RestoProvider, useResto } from './context/RestoContext';
 import { ProductProvider } from './context/ProductContext';
 
 // Chargement différé : chaque page = un chunk séparé → premier affichage rapide,
@@ -23,14 +24,17 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const MenusPage = lazy(() => import('./pages/MenusPage'));
-const TicketsPage = lazy(() => import('./pages/TicketsPage'));
+
 const SubscriptionPage = lazy(() => import('./pages/SubscriptionPage'));
 const SubscriptionsAdminPage = lazy(() => import('./pages/SubscriptionsAdminPage'));
 const QRCodePage = lazy(() => import('./pages/QRCodePage'));
+const QrGalleryPage = lazy(() => import('./pages/QrGalleryPage'));
 const ValidationPage = lazy(() => import('./pages/ValidationPage'));
-const EstablishmentsPage = lazy(() => import('./pages/EstablishmentsPage'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const ChildrenPage = lazy(() => import('./pages/ChildrenPage'));
+const FinancePage = lazy(() => import('./pages/FinancePage'));
+const EspaceParentPage = lazy(() => import('./pages/EspaceParentPage'));
 
 function PageLoader() {
   return (
@@ -46,6 +50,7 @@ function PageLoader() {
 function AppContent() {
   const { addOrder } = useApp();
   const { isAuthenticated, loading, user } = useAuth();
+  const { parentProfileOf } = useResto();
   const [currentPage, setCurrentPage] = useState<PageName>('home');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
@@ -68,6 +73,15 @@ function AppContent() {
     return (
       <Suspense fallback={<PageLoader />}>
         <LoginPage />
+      </Suspense>
+    );
+  }
+
+  // Portail parent : en guise de login, fiche nom/prénom/téléphone obligatoire
+  if (user?.role === 'client' && user?.username && !parentProfileOf(user.username)) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ParentGate username={user.username} />
       </Suspense>
     );
   }
@@ -100,31 +114,35 @@ function AppContent() {
       const RoleIcon = roleDef.icon;
       const allowedPages = ROLE_PAGES[user?.role ?? 'client'] ?? [];
       return (
-        <div className="p-8 max-w-lg mx-auto">
-          <div className="bg-white rounded-3xl border shadow p-8 text-center">
-            <ShieldAlert className="w-12 h-12 text-red-500 mx-auto mb-3" />
+        <div className="p-4 sm:p-8 max-w-lg mx-auto">
+          <div className="bg-white rounded-2xl border shadow p-6 sm:p-8 text-center">
+            <ShieldAlert aria-hidden className="w-12 h-12 text-red-600 mx-auto mb-3" />
             <h2 className="text-xl font-bold text-slate-800">Accès réservé</h2>
-            <p className="text-sm text-slate-500 mt-2">
+            <p className="text-sm text-slate-600 mt-2">
               Votre profil <strong>{roleDef.title}</strong> ne donne pas accès à cette page.
             </p>
             <div className="mt-4 text-left bg-slate-50 rounded-2xl p-4">
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
-                <RoleIcon className="w-4 h-4" /> Votre périmètre — {roleDef.title}
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-600 flex items-center gap-1.5">
+                <RoleIcon aria-hidden className="w-4 h-4" /> Votre périmètre — {roleDef.title}
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {allowedPages.map((p) => (
-                  <span key={p} className="text-xs font-semibold px-2.5 py-1 rounded-full bg-white border text-slate-600">
+                  <button
+                    key={p}
+                    onClick={() => setCurrentPage(p)}
+                    className="text-xs font-semibold px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-700 hover:border-green-700 hover:text-green-800"
+                  >
                     {PAGE_LABEL[p] ?? p}
-                  </span>
+                  </button>
                 ))}
               </div>
-              <p className="mt-3 text-xs text-slate-400">{roleDef.mission}</p>
+              <p className="mt-3 text-xs text-slate-500">{roleDef.mission}</p>
             </div>
             <button
-              onClick={() => setCurrentPage('home')}
-              className="mt-5 px-6 py-3 rounded-xl bg-green-700 text-white font-bold text-sm hover:bg-green-800"
+              onClick={() => setCurrentPage(allowedPages[0] ?? 'home')}
+              className="btn-primary mt-5"
             >
-              Retour à l’accueil
+              Aller à {PAGE_LABEL[allowedPages[0]] ?? 'l’accueil'}
             </button>
           </div>
         </div>
@@ -132,26 +150,31 @@ function AppContent() {
     }
     switch (currentPage) {
       case 'home':
+        // Espace Parent unifié : un seul parcours continu pour le rôle client.
+        if (user?.role === 'client') return <EspaceParentPage />;
         return <HomePage onNavigate={navigateTo} />;
       case 'menus':
+        if (user?.role === 'client') return <EspaceParentPage />;
         return <MenusPage onNavigate={navigateTo} />;
-      case 'tickets':
-        return <TicketsPage />;
       case 'subscription':
+        if (user?.role === 'client') return <EspaceParentPage />;
         return <SubscriptionPage onNavigate={navigateTo} />;
       case 'subscriptions':
         return <SubscriptionsAdminPage />;
       case 'qrcode':
+        if (user?.role === 'client') return <EspaceParentPage />;
         return <QRCodePage />;
+      case 'qrgallery':
+        return <QrGalleryPage />;
       case 'validation':
         return <ValidationPage />;
-      case 'establishments':
-        return <EstablishmentsPage />;
+
       case 'users':
         return <UsersPage />;
       case 'settings':
         return <SettingsPage onNavigate={navigateTo} />;
       case 'history':
+        if (user?.role === 'client') return <EspaceParentPage />;
         return <OrderHistoryPage />;
       case 'dashboard':
         return <Dashboard onNavigate={navigateTo} />;
@@ -167,6 +190,11 @@ function AppContent() {
         return <OrderHistoryPage />;
       case 'profile':
         return <ProfilePage />;
+      case 'children':
+        if (user?.role === 'client') return <EspaceParentPage />;
+        return <ChildrenPage />;
+      case 'finance':
+        return <FinancePage />;
       default:
         return <HomePage onNavigate={navigateTo} />;
     }
@@ -178,8 +206,14 @@ function AppContent() {
 
       {/* Mobile header */}
       <header className="lg:hidden fixed top-0 left-0 right-0 z-30 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200 flex items-center px-4 gap-3 shadow-sm">
-        <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-xl hover:bg-slate-100 transition-colors">
-          <Menu className="w-6 h-6 text-slate-700" />
+        <button
+          onClick={() => setSidebarOpen(true)}
+          aria-label="Ouvrir le menu"
+          aria-expanded={sidebarOpen}
+          aria-controls="sidebar-principale"
+          className="p-2 rounded-xl hover:bg-slate-100 transition-colors"
+        >
+          <Menu aria-hidden className="w-6 h-6 text-slate-700" />
         </button>
         <div className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-xl bg-white border flex items-center justify-center overflow-hidden">

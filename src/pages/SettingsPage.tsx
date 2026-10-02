@@ -4,8 +4,9 @@ import { useAuth, UserRole } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { getRoleDef } from '@/lib/roleTasks';
 import { getClientQrToken } from '@/lib/clientQr';
-import { addLocalUser, getLocalUsers, isDemoAccount, removeLocalUser, setLocalPassword } from '@/context/AuthContext';
+import { addLocalUserHashed, getLocalUsers, isDemoAccount, removeLocalUser, setLocalPasswordHashed } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { hashPassword } from '@/lib/password';
 import { formatCurrency } from '@/lib/utils';
 import {
   Settings as SettingsIcon, Users, Plus, Trash2, KeyRound, Wallet,
@@ -93,22 +94,27 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
       flash('err', `« ${username} » est un compte de démonstration réservé.`);
       return;
     }
-    // 1) Registre local : le compte pourra se connecter même sans Supabase
-    const local = addLocalUser({ username, role: newRole, password: newPassword });
+    // 1) Registre local haché : le compte pourra se connecter même sans Supabase
+    const local = await addLocalUserHashed({ username, role: newRole, password: newPassword });
     if (!local.ok) {
       flash('err', local.message);
       return;
     }
-    // 2) Supabase si joignable (synchronisation distante)
+    // 2) Supabase si joignable (mot de passe haché, jamais en clair)
     let remote = false;
     try {
+      const hashed = await hashPassword(newPassword);
       const { error } = await supabase.from('users').insert({
         username,
-        password: newPassword,
+        password: hashed,
         role: newRole,
         qr_token: newRole === 'client' ? getClientQrToken(username) : null,
       });
       if (!error) remote = true;
+      else {
+        // Compte déjà en base distante mais pas en local : on garde le local haché
+        remote = false;
+      }
     } catch {
       /* hors-ligne : le compte local suffit */
     }
@@ -119,7 +125,8 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
   };
 
   const handleDelete = async (username: string) => {
-    if (username === user?.username) {
+    const key = username.trim().toLowerCase();
+    if (key === (user?.username ?? '').trim().toLowerCase()) {
       flash('err', 'Vous ne pouvez pas supprimer votre propre compte.');
       return;
     }
@@ -129,33 +136,38 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
     }
     setConfirmDelete(null);
     let remote = true;
+    let remoteError = '';
     try {
-      const { error } = await supabase.from('users').delete().eq('username', username);
+      const { error } = await supabase.from('users').delete().eq('username', key);
       if (error) throw error;
-    } catch {
+    } catch (err: unknown) {
       remote = false; // hors-ligne : suppression locale uniquement
+      remoteError = err instanceof Error ? err.message : '';
     }
-    removeLocalUser(username);
-    flash('ok', remote ? `Compte « ${username} » supprimé.` : `Compte « ${username} » supprimé (mode local).`);
+    removeLocalUser(key);
+    if (remote) flash('ok', `Compte « ${key} » supprimé (local + distant).`);
+    else flash('ok', `Compte « ${key} » supprimé en local uniquement — distant inchangé${remoteError ? ` (${remoteError})` : ''}. Resynchronisez quand la base répond.`);
     loadUsers();
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resetUser || resetPassword.length < 6) {
+    const key = resetUser.trim().toLowerCase();
+    if (!key || resetPassword.length < 6) {
       flash('err', 'Choisissez un compte et un mot de passe de 6 caractères minimum.');
       return;
     }
-    const localUpdated = setLocalPassword(resetUser, resetPassword);
+    const hashed = await hashPassword(resetPassword);
+    const localUpdated = await setLocalPasswordHashed(key, resetPassword);
     try {
-      const { error } = await supabase.from('users').update({ password: resetPassword }).eq('username', resetUser);
+      const { error } = await supabase.from('users').update({ password: hashed }).eq('username', key);
       if (error) throw error;
       setResetPassword('');
-      flash('ok', `Mot de passe de « ${resetUser} » mis à jour.`);
+      flash('ok', `Mot de passe de « ${key} » mis à jour (local + distant).`);
     } catch (err: unknown) {
       if (localUpdated) {
         setResetPassword('');
-        flash('ok', `Mot de passe de « ${resetUser} » mis à jour (mode local).`);
+        flash('ok', `Mot de passe de « ${key} » mis à jour (mode local).`);
         return;
       }
       const message = err instanceof Error ? err.message : 'Mise à jour impossible.';
@@ -193,7 +205,7 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
         </button>
         <button onClick={() => onNavigate('users')} className="bg-white rounded-2xl border p-4 text-left hover:shadow-md transition-shadow">
           <p className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1"><Users className="w-4 h-4" /> Comptes</p>
-          <p className="text-3xl font-black text-slate-900 mt-1">{offline ? '—' : dbUsers.length}</p>
+          <p className="text-3xl font-black text-slate-900 mt-1">{dbUsers.length}</p>
           <p className="text-xs text-green-700 font-semibold mt-1">Voir utilisateurs & accès →</p>
         </button>
         <button onClick={() => onNavigate('dashboard')} className="bg-white rounded-2xl border p-4 text-left hover:shadow-md transition-shadow">
@@ -249,13 +261,14 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
                     <tr><td colSpan={4} className="p-4 text-center text-slate-400">Chargement…</td></tr>
                   ) : dbUsers.map((u) => {
                     const def = getRoleDef(u.role as UserRole);
+                    const isSelf = u.username.trim().toLowerCase() === (user?.username ?? '').trim().toLowerCase();
                     return (
                       <tr key={u.username} className="border-t">
-                        <td className="p-3 font-bold capitalize">{u.username}{u.username === user?.username && <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">vous</span>}</td>
+                        <td className="p-3 font-bold capitalize">{u.username}{isSelf && <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-bold">vous</span>}</td>
                         <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-bold bg-gradient-to-r ${def.color} text-white`}>{def.title}</span></td>
                         <td className="p-3 text-xs text-slate-500">{u.created_at ? new Date(u.created_at).toLocaleDateString('fr-FR') : '—'}</td>
                         <td className="p-3 text-right">
-                          <button onClick={() => handleDelete(u.username)} disabled={u.username === user?.username} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${confirmDelete === u.username ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700 hover:bg-red-100'} disabled:opacity-40`}>
+                          <button onClick={() => handleDelete(u.username)} disabled={isSelf} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${confirmDelete === u.username ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700 hover:bg-red-100'} disabled:opacity-40`}>
                             <Trash2 className="w-3 h-3 inline mr-1" />{confirmDelete === u.username ? 'Confirmer ?' : 'Supprimer'}
                           </button>
                         </td>
@@ -272,7 +285,7 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
 
           {/* Changer un mot de passe */}
           <form onSubmit={handleResetPassword} className="bg-white rounded-2xl border p-5">
-            <p className="font-bold text-slate-800 flex items-center gap-2"><KeyRound className="w-5 h-5 text-blue-600" /> Changer le mot de passe d’un compte</p>
+            <p className="font-bold text-slate-800 flex items-center gap-2"><KeyRound className="w-5 h-5 text-green-600" /> Changer le mot de passe d’un compte</p>
             <div className="mt-3 grid sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">Compte</label>

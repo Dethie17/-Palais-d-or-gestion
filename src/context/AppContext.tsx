@@ -24,7 +24,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadOrders = async () => {
     try {
-      console.log('🔄 Chargement des commandes depuis Supabase...');
       setLoading(true);
       const { data, error } = await supabase
         .from('orders')
@@ -32,31 +31,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('❌ Erreur lors du chargement des commandes:', error);
-        console.error('❌ Message:', error.message);
         // Si erreur de connexion, commencer avec une liste vide
         setOrders([]);
       } else if (data && data.length > 0) {
-        console.log(`✅ ${data.length} commande(s) chargée(s) depuis Supabase`);
-        console.log('📦 Données:', data);
-        // Convertir les données Supabase en Orders
+        // Convertir les données Supabase en Orders (ISO pur, pas de bricolage jour UTC)
         const ordersFromDB = data.map((row) => {
-          // 🔧 FIX TIMEZONE: Parser la date UTC et garder le VRAI jour
-          // Au lieu de convertir en heure locale, on garde la date UTC telle quelle
-          const utcDateString = row.created_at;
-          const utcDate = new Date(utcDateString);
-          
-          // Extraire le VRAI jour depuis la chaîne UTC (avant conversion)
-          // Format: "2026-02-11T23:12:37.598+00:00" → on veut le 11, pas le 12
-          const utcDateOnly = utcDateString.split('T')[0]; // "2026-02-11"
-          const [year, month, day] = utcDateOnly.split('-').map(Number);
-          
-          // Créer une date en heure locale MAIS avec le jour UTC correct
-          const correctedDate = new Date(year, month - 1, day, 
-            utcDate.getHours(), utcDate.getMinutes(), utcDate.getSeconds(), utcDate.getMilliseconds());
-          
-          console.log(`🔧 ${row.number}: UTC "${utcDateString}" → Jour UTC=${utcDateOnly} → Date corrigée="${correctedDate.toLocaleString('fr-FR')}"`);
-          
           return {
             id: row.id,
             number: row.number,
@@ -67,7 +46,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             total: row.total,
             status: row.status as Order['status'],
             type: row.type as Order['type'],
-            createdAt: correctedDate,
+            createdAt: new Date(row.created_at),
             customerName: row.customer_name || undefined,
             paymentMethod: row.payment_method || undefined,
             amountReceived: row.amount_received || undefined,
@@ -76,12 +55,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
         setOrders(ordersFromDB);
       } else {
-        console.log('ℹ️ Aucune commande dans Supabase - Liste vide');
         // Base vide, commencer sans commandes
         setOrders([]);
       }
     } catch (error) {
-      console.error('❌ ERREUR critique chargement:', error);
+      if (import.meta.env.DEV) console.error('[O RESTO] chargement commandes:', error);
       setOrders([]);
     } finally {
       setLoading(false);
@@ -90,15 +68,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addOrder = async (order: Order) => {
     try {
-      console.log('🔵 Ajout commande - Début:', order.number);
-      console.log('🔵 Date locale:', order.createdAt.toLocaleString('fr-FR'));
-      
       // Mettre à jour l'état local immédiatement pour une meilleure réactivité
       setOrders((prev) => [order, ...prev]);
-
-      // 🔧 FIX: Forcer la date en UTC pour éviter les décalages timezone
-      const utcDate = order.createdAt.toISOString();
-      console.log('🔧 Date UTC pour Supabase:', utcDate);
 
       const orderToInsert = {
         id: order.id,
@@ -110,27 +81,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         total: order.total,
         status: order.status,
         type: order.type,
-        created_at: utcDate,
+        created_at: order.createdAt.toISOString(),
         customer_name: order.customerName,
         payment_method: order.paymentMethod,
         amount_received: order.amountReceived,
         change: order.change,
       };
 
-      console.log('🔵 Données à insérer:', orderToInsert);
-
-      const { data, error } = await supabase.from('orders').insert([orderToInsert]).select();
-      
-      if (error) {
-        console.error('❌ ERREUR Supabase lors de l\'ajout:', error);
-        console.error('❌ Message:', error.message);
-        console.error('❌ Détails:', error.details);
-        // En cas d'erreur, on garde quand même l'ajout local
-      } else {
-        console.log('✅ Commande sauvegardée dans Supabase:', data);
-      }
-    } catch (error) {
-      console.error('❌ ERREUR critique ajout commande:', error);
+      const { error } = await supabase.from('orders').insert([orderToInsert]).select();
+      // En cas d'erreur, on garde quand même l'ajout local
+    } catch {
       // En cas d'erreur, on garde quand même l'ajout local
     }
   };
@@ -160,12 +120,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .update(updateData)
         .eq('id', id);
 
-      if (error) {
-        console.error('Erreur mise à jour Supabase:', error);
-        // En cas d'erreur, on garde quand même la mise à jour locale
-      }
-    } catch (error) {
-      console.error('Erreur mise à jour:', error);
+      // En cas d'erreur, on garde quand même la mise à jour locale
+    } catch {
       // En cas d'erreur, on garde quand même la mise à jour locale
     }
   };
@@ -175,14 +131,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Mettre à jour l'état local immédiatement pour une meilleure réactivité
       setOrders((prev) => prev.filter((order) => order.id !== id));
 
-      const { error } = await supabase.from('orders').delete().eq('id', id);
-
-      if (error) {
-        console.error('Erreur suppression Supabase:', error);
-        // En cas d'erreur, on garde quand même la suppression locale
-      }
-    } catch (error) {
-      console.error('Erreur suppression:', error);
+      await supabase.from('orders').delete().eq('id', id);
+      // En cas d'erreur, on garde quand même la suppression locale
+    } catch {
       // En cas d'erreur, on garde quand même la suppression locale
     }
   };
@@ -191,13 +142,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const { error } = await supabase.from('orders').delete().neq('id', '');
 
-      if (error) {
-        console.error('Erreur suppression totale:', error);
-      } else {
+      if (!error) {
         setOrders([]);
       }
-    } catch (error) {
-      console.error('Erreur:', error);
+    } catch {
+      /* ignore */
     }
   };
 
@@ -226,12 +175,17 @@ export function useApp() {
 }
 
 // Helper functions for statistics
+function startOfDayAt(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+}
+
 export function getOrderStats(orders: Order[], period: 'day' | 'week' | 'month') {
   const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  startOfDay.setHours(0, 0, 0, 0);
+  const startOfDay = startOfDayAt(now);
+  // Semaine cantine : lundi → dimanche
+  const mondayOffset = (startOfDay.getDay() + 6) % 7;
   const startOfWeek = new Date(startOfDay);
-  startOfWeek.setDate(startOfDay.getDate() - startOfDay.getDay());
+  startOfWeek.setDate(startOfDay.getDate() - mondayOffset);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   startOfMonth.setHours(0, 0, 0, 0);
 
@@ -240,53 +194,25 @@ export function getOrderStats(orders: Order[], period: 'day' | 'week' | 'month')
   else if (period === 'week') startDate = startOfWeek;
   else startDate = startOfMonth;
 
-  // 🔧 DEBUG
-  console.log('📅 DEBUG Filtre:', {
-    maintenant: now.toLocaleString('fr-FR'),
-    debutPeriode: startDate.toLocaleString('fr-FR'),
-    periode: period,
-    totalCommandes: orders.length
-  });
-
-  // 🔧 FIX COMPLET: Comparer uniquement les JOURS, pas les heures
+  const startDayTs = startDate.getTime();
   const filteredOrders = orders.filter((order) => {
-    const orderYear = order.createdAt.getFullYear();
-    const orderMonth = order.createdAt.getMonth();
-    const orderDate = order.createdAt.getDate();
-    
-    const startYear = startDate.getFullYear();
-    const startMonth = startDate.getMonth();
-    const startDateNum = startDate.getDate();
-    
-    // Créer des timestamps à minuit pile pour comparaison exacte
-    const orderDayTimestamp = new Date(orderYear, orderMonth, orderDate, 0, 0, 0, 0).getTime();
-    const startDayTimestamp = new Date(startYear, startMonth, startDateNum, 0, 0, 0, 0).getTime();
-    
-    const isInPeriod = orderDayTimestamp >= startDayTimestamp && order.status === 'completed';
-    
-    // 🔧 DEBUG: Afficher chaque commande avec jour exact
-    if (order.status === 'completed') {
-      const orderDayStr = `${orderDate}/${orderMonth + 1}/${orderYear}`;
-      const startDayStr = `${startDateNum}/${startMonth + 1}/${startYear}`;
-      console.log(`  📦 ${order.number}: Jour=${orderDayStr} (${order.createdAt.toLocaleString('fr-FR')}) | Filtre≥${startDayStr} → ${isInPeriod ? '✅ Incluse' : '❌ Exclue'}`);
-    }
-    
-    return isInPeriod;
+    if (order.status !== 'completed') return false;
+    return startOfDayAt(order.createdAt).getTime() >= startDayTs;
   });
 
   const revenue = filteredOrders.reduce((sum, order) => sum + order.total, 0);
   const orderCount = filteredOrders.length;
   const customerCount = new Set(filteredOrders.map((o) => o.customerName || o.id)).size;
 
-  // Calculate previous period for change percentage
+  // Période précédente comparée aussi à minuit (même base que la courante)
   const periodLength = now.getTime() - startDate.getTime();
   const previousStartDate = new Date(startDate.getTime() - periodLength);
-  const previousOrders = orders.filter(
-    (order) =>
-      order.createdAt >= previousStartDate &&
-      order.createdAt < startDate &&
-      order.status === 'completed'
-  );
+  const previousStartDayTs = startOfDayAt(previousStartDate).getTime();
+  const previousOrders = orders.filter((order) => {
+    if (order.status !== 'completed') return false;
+    const dayTs = startOfDayAt(order.createdAt).getTime();
+    return dayTs >= previousStartDayTs && dayTs < startDayTs;
+  });
 
   const previousRevenue = previousOrders.reduce((sum, order) => sum + order.total, 0);
   const previousOrderCount = previousOrders.length;
@@ -351,6 +277,22 @@ export function getTopProducts(orders: Order[]) {
           });
         }
       });
+      // Suppléments inclus dans le CA top produits (sinon CA < réalité)
+      (order.extras ?? []).forEach(({ extra, quantity }) => {
+        const existing = productStats.get(`extra-${extra.id}`);
+        if (existing) {
+          existing.sold += quantity;
+          existing.revenue += extra.price * quantity;
+        } else {
+          productStats.set(`extra-${extra.id}`, {
+            id: `extra-${extra.id}`,
+            name: `+ ${extra.name}`,
+            image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c',
+            sold: quantity,
+            revenue: extra.price * quantity,
+          });
+        }
+      });
     });
 
   return Array.from(productStats.values())
@@ -359,29 +301,20 @@ export function getTopProducts(orders: Order[]) {
 }
 
 export function getWeeklySales(orders: Order[]) {
-  const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+  const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
   const now = new Date();
+  const mondayOffset = (now.getDay() + 6) % 7;
   const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setDate(now.getDate() - mondayOffset);
   startOfWeek.setHours(0, 0, 0, 0);
 
   const salesByDay = days.map((day, index) => {
     const targetDate = new Date(startOfWeek);
     targetDate.setDate(startOfWeek.getDate() + index);
-    
-    // 🔧 FIX: Comparer par jour uniquement
-    const targetYear = targetDate.getFullYear();
-    const targetMonth = targetDate.getMonth();
-    const targetDay = targetDate.getDate();
 
     const dayOrders = orders.filter((order) => {
       if (order.status !== 'completed') return false;
-      
-      const orderYear = order.createdAt.getFullYear();
-      const orderMonth = order.createdAt.getMonth();
-      const orderDay = order.createdAt.getDate();
-      
-      return orderYear === targetYear && orderMonth === targetMonth && orderDay === targetDay;
+      return startOfDayAt(order.createdAt).getTime() === startOfDayAt(targetDate).getTime();
     });
 
     const amount = dayOrders.reduce((sum, order) => sum + order.total, 0);
@@ -394,6 +327,7 @@ export function getWeeklySales(orders: Order[]) {
 
 export function getChartData(orders: Order[], period: 'realtime' | 'day' | 'week' | 'month') {
   const completedOrders = orders.filter((order) => order.status === 'completed');
+  const countCustomers = (list: Order[]) => new Set(list.map((o) => (o.customerName?.trim().toLowerCase() || o.id))).size;
   
   if (period === 'realtime') {
     // Afficher les 12 dernières heures en temps réel
@@ -414,7 +348,7 @@ export function getChartData(orders: Order[], period: 'realtime' | 'day' | 'week
       
       const revenue = hourOrders.reduce((sum, order) => sum + order.total, 0);
       const orderCount = hourOrders.length;
-      const customers = hourOrders.length;
+      const customers = countCustomers(hourOrders);
       
       const hour = startDate.getHours();
       data.push({
@@ -451,7 +385,7 @@ export function getChartData(orders: Order[], period: 'realtime' | 'day' | 'week
       
       const revenue = dayOrders.reduce((sum, order) => sum + order.total, 0);
       const orderCount = dayOrders.length;
-      const customers = dayOrders.length; // Chaque commande = 1 client
+      const customers = countCustomers(dayOrders);
       
       data.push({
         label: days[targetDate.getDay()],
@@ -482,7 +416,7 @@ export function getChartData(orders: Order[], period: 'realtime' | 'day' | 'week
       
       const revenue = weekOrders.reduce((sum, order) => sum + order.total, 0);
       const orderCount = weekOrders.length;
-      const customers = weekOrders.length;
+      const customers = countCustomers(weekOrders);
       
       const weekNumber = 4 - i;
       data.push({
@@ -514,7 +448,7 @@ export function getChartData(orders: Order[], period: 'realtime' | 'day' | 'week
       
       const revenue = weekOrders.reduce((sum, order) => sum + order.total, 0);
       const orderCount = weekOrders.length;
-      const customers = weekOrders.length;
+      const customers = countCustomers(weekOrders);
       
       const weekNumber = 5 - i;
       data.push({

@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS oresto_payments (
   id TEXT PRIMARY KEY,
   subscription_id TEXT REFERENCES subscriptions(id),
   amount NUMERIC NOT NULL,
-  method TEXT NOT NULL CHECK (method IN ('cash', 'wave', 'mobile_money', 'card')),
+  method TEXT NOT NULL CHECK (method IN ('cash', 'wave', 'mobile_money', 'card', 'balance')),
   status TEXT NOT NULL CHECK (status IN ('pending', 'paid', 'failed', 'cancelled', 'refunded')),
   reference TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ DEFAULT NOW()

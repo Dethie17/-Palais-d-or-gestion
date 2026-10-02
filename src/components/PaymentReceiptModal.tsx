@@ -6,6 +6,7 @@ import OrestoLogo from './brand/OrestoLogo';
 const METHOD_LABEL: Record<string, string> = {
   wave: 'Wave', cash: 'Espèces',
   mobile_money: 'Mobile Money', card: 'Carte bancaire',
+  balance: 'Solde carte',
 };
 
 const STATUS_LABEL: Record<string, string> = {

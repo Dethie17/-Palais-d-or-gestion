@@ -26,7 +26,6 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   private handleReload = () => {
-    sessionStorage.clear();
     window.location.href = '/';
   };
 

@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import { CartItem, Order, ProductExtra } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
-import { 
-  ArrowLeft, 
-  Banknote, 
-  CreditCard, 
-  Smartphone, 
-  Receipt, 
+import { WAVE_BUSINESS_URL, WAVE_BUSINESS_NAME } from '@/lib/wave';
+import { QRCodeSVG } from 'qrcode.react';
+import {
+  ArrowLeft,
+  Banknote,
+  CreditCard,
+  Smartphone,
   CheckCircle,
   Delete,
   Plus,
-  Minus
+  Minus,
+  ExternalLink,
+  Copy
 } from 'lucide-react';
 
 interface PaymentPageProps {
@@ -22,7 +25,7 @@ interface PaymentPageProps {
 const paymentMethods = [
   { id: 'wave', label: 'Wave', icon: Smartphone, gradient: 'from-blue-500 to-cyan-600', available: true },
   { id: 'cash', label: 'Espèces (comptant)', icon: Banknote, gradient: 'from-green-500 to-emerald-600', available: true },
-  { id: 'mobile_money', label: 'Mobile Money', icon: CreditCard, gradient: 'from-purple-500 to-pink-600', available: true },
+  { id: 'mobile_money', label: 'Mobile Money', icon: CreditCard, gradient: 'from-amber-500 to-orange-600', available: true },
 ];
 
 const availableExtras: ProductExtra[] = [
@@ -42,7 +45,9 @@ const extraImages: Record<string, string> = {
 const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
   const [selectedMethod, setSelectedMethod] = useState('wave');
   const [amountReceived, setAmountReceived] = useState('');
+  const [customerName, setCustomerName] = useState('');
   const [selectedExtras, setSelectedExtras] = useState<{ [key: string]: number }>({});
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const extrasTotal = Object.entries(selectedExtras).reduce((sum, [extraId, quantity]) => {
@@ -87,17 +92,22 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
         quantity
       }));
 
+    const name = customerName.trim();
+    const uid = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const order: Order = {
-      id: Date.now().toString(),
-      number: `CMD-${String(Math.floor(Math.random() * 900) + 100)}`,
+      id: uid,
+      number: `CMD-${new Date().getFullYear().toString().slice(2)}${String(Date.now()).slice(-6)}`,
       items: cart,
       extras: orderExtras.length > 0 ? orderExtras : undefined,
       subtotal,
       tax: 0,
       total,
       status: 'pending',
-      type: 'dine-in',
+      type: 'takeaway',
       createdAt: new Date(),
+      customerName: name || undefined,
       paymentMethod: paymentMethods.find((m) => m.id === selectedMethod)?.label,
       amountReceived: selectedMethod === 'cash' ? received : undefined,
       change: selectedMethod === 'cash' && received >= total ? change : undefined,
@@ -105,7 +115,29 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
     onPaymentComplete(order);
   };
 
-  const canPay = selectedMethod === 'cash' ? received >= total : true;
+  const canPay = cart.length > 0 && (selectedMethod === 'cash' ? received >= total && total > 0 : total > 0);
+
+  const copyWaveLink = async () => {
+    try {
+      await navigator.clipboard.writeText(WAVE_BUSINESS_URL);
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      /* presse-papiers indisponible */
+    }
+  };
+
+  if (cart.length === 0) {
+    return (
+      <div className="p-6 lg:p-8 min-h-[60vh] flex items-center justify-center">
+        <div className="text-center max-w-sm">
+          <p className="text-lg font-bold text-slate-800">Panier vide</p>
+          <p className="mt-2 text-sm text-slate-600">Ajoutez des articles depuis la caisse avant de passer au paiement.</p>
+          <button onClick={onBack} className="btn-primary mt-6">Retour à la caisse</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 lg:p-8 animate-fade-in min-h-screen bg-gradient-to-br from-slate-50 to-orange-50/20">
@@ -187,7 +219,7 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
             )}
             <div className="flex justify-between text-2xl lg:text-3xl font-bold text-slate-800 pt-4 border-t-2 border-slate-200">
               <span>Total</span>
-              <span className="bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
+              <span className="text-green-700">
                 {formatCurrency(total)}
               </span>
             </div>
@@ -196,6 +228,17 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
 
         {/* Payment Methods + Numpad */}
         <div className="space-y-6">
+          <div>
+            <label htmlFor="customer-name" className="label-pro">Client (reçu + stats)</label>
+            <input
+              id="customer-name"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="Nom du client (ex : Awa Diallo)"
+              autoComplete="name"
+              className="input-pro"
+            />
+          </div>
           <div>
             <h2 className="text-xl font-bold text-slate-800 mb-4">Méthode de paiement</h2>
             <div className="grid grid-cols-2 gap-3">
@@ -249,6 +292,39 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
             </div>
           </div>
 
+          {selectedMethod === 'wave' && (
+            <div className="rounded-2xl border-2 border-blue-200 bg-gradient-to-b from-blue-50 to-white p-5 text-center">
+              <p className="text-xs font-black uppercase tracking-widest text-blue-600 flex items-center justify-center gap-1.5">
+                <Smartphone className="w-4 h-4" /> Paiement Wave Business
+              </p>
+              <p className="mt-1 text-sm font-bold text-slate-800">{WAVE_BUSINESS_NAME}</p>
+              <p className="text-3xl lg:text-4xl font-black text-slate-900 mt-2">{formatCurrency(total)}</p>
+              <p className="text-xs text-slate-500 mt-1">Le client paie exactement ce montant via le lien ou le QR.</p>
+              <div className="mt-4 inline-block p-3 bg-white rounded-2xl border shadow-sm">
+                <QRCodeSVG value={WAVE_BUSINESS_URL} size={170} level="M" />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <a
+                  href={WAVE_BUSINESS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700"
+                >
+                  <ExternalLink className="w-4 h-4" /> Ouvrir le lien
+                </a>
+                <button
+                  onClick={copyWaveLink}
+                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50"
+                >
+                  <Copy className="w-4 h-4" /> {linkCopied ? 'Copié !' : 'Copier'}
+                </button>
+              </div>
+              <p className="mt-3 text-xs text-slate-500 bg-white border border-slate-200 rounded-xl px-3 py-2.5">
+                Vérifiez la notification Wave Business sur le téléphone, puis cliquez ci-dessous sur « Paiement Wave reçu ».
+              </p>
+            </div>
+          )}
+
           {selectedMethod === 'cash' && (
             <div className="space-y-4">
               <div className="text-center p-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border-2 border-green-200">
@@ -280,14 +356,11 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
           <button
             onClick={handleConfirmPayment}
             disabled={!canPay}
-            className={`w-full py-4 lg:py-5 rounded-2xl font-bold text-base lg:text-lg transition-all flex items-center justify-center gap-3 shadow-xl ${
-              canPay
-                ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-orange-500/50 hover:scale-105'
-                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-            }`}
+            aria-disabled={!canPay}
+            className="btn-primary w-full py-4 lg:py-5 text-base lg:text-lg shadow-xl"
           >
-            <CheckCircle className="w-6 h-6" />
-            Confirmer le paiement
+            <CheckCircle aria-hidden className="w-6 h-6" />
+            {selectedMethod === 'wave' ? 'Paiement Wave reçu — encaisser' : 'Confirmer le paiement'}
           </button>
         </div>
       </div>

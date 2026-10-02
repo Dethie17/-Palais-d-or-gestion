@@ -1,5 +1,6 @@
 import { Order } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
+import OrestoLogo from '@/components/brand/OrestoLogo';
 import { Receipt, Printer, Download, ShoppingCart, CheckCircle } from 'lucide-react';
 
 interface ReceiptPageProps {
@@ -8,13 +9,15 @@ interface ReceiptPageProps {
 }
 
 const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
+  const handlePrint = () => window.print();
+  const handleDownload = () => window.print();
   if (!order) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-slate-50 to-orange-50/20">
+      <div className="flex items-center justify-center min-h-[60vh] bg-gradient-to-br from-slate-50 to-orange-50/20 p-6">
         <div className="text-center">
-          <Receipt className="w-20 h-20 text-slate-300 mx-auto mb-4" />
+          <Receipt aria-hidden className="w-20 h-20 text-slate-300 mx-auto mb-4" />
           <p className="text-slate-600 mb-4">Aucune commande à afficher</p>
-          <button onClick={onNewOrder} className="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-orange-500/50 transition-all hover:scale-105">
+          <button onClick={onNewOrder} className="btn-primary">
             Nouvelle commande
           </button>
         </div>
@@ -30,21 +33,27 @@ const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg shadow-green-500/30 mb-3">
             <CheckCircle className="w-9 h-9 text-white" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-1">Paiement réussi !</h2>
-          <p className="text-slate-600 text-sm">La commande a été enregistrée</p>
+          <h2 className="text-2xl font-bold text-slate-800 mb-1">
+            {order.status === 'completed' ? 'Paiement réussi !' : 'Commande enregistrée'}
+          </h2>
+          <p className="text-slate-600 text-sm">
+            {order.status === 'completed'
+              ? 'La commande a été encaissée'
+              : 'En attente d’encaissement : faites marquer « Vendu » à la caisse pour l’inclure dans le CA'}
+          </p>
         </div>
 
         {/* Receipt ticket */}
         <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
           {/* Header */}
-          <div className="p-6 text-center border-b-2 border-dashed border-slate-300 bg-gradient-to-b from-orange-50 to-white">
+          <div className="p-6 text-center border-b-2 border-dashed border-slate-300 bg-gradient-to-b from-green-50 to-white">
             <div className="w-24 h-24 mx-auto mb-3 rounded-xl bg-white shadow-lg p-2 border border-slate-200">
-              <img src="/logo.png" alt="O RESTO" className="w-full h-full object-contain" />
+              <OrestoLogo variant="mark" imgClassName="w-full h-full object-contain" />
             </div>
             <h2 className="text-xl font-bold text-slate-800">O RESTO</h2>
-            <p className="text-xs text-slate-600 mt-1">10ème ISM thiès</p>
+            <p className="text-xs text-slate-600 mt-1">10ᵉ ISM, Thiès</p>
             <p className="text-xs text-slate-600">Thiès, Sénégal</p>
-            <p className="text-xs text-slate-600">Tél: +221 +221 78 473 35 35</p>
+            <p className="text-xs text-slate-600">Tél : +221 78 473 35 35</p>
             <div className="mt-4 pt-3 border-t border-dashed border-slate-300">
               <div className="inline-block px-4 py-2 bg-slate-800 rounded-lg mb-2">
                 <p className="text-sm font-bold text-white">{order.number}</p>
@@ -91,7 +100,7 @@ const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
             </div>
             <div className="flex justify-between text-2xl font-bold text-slate-800 pt-3 border-t-2 border-slate-300">
               <span>TOTAL</span>
-              <span className="bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">{formatCurrency(order.total)}</span>
+              <span className="text-green-700">{formatCurrency(order.total)}</span>
             </div>
             {order.amountReceived && (
               <>
@@ -121,21 +130,21 @@ const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
         </div>
 
         {/* Actions */}
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <button className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 hover:border-orange-300 transition-all">
-            <Printer className="w-5 h-5" />
+        <div className="mt-6 grid grid-cols-2 gap-3 no-print">
+          <button onClick={handlePrint} className="btn-secondary">
+            <Printer aria-hidden className="w-5 h-5" />
             Imprimer
           </button>
-          <button className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 hover:border-orange-300 transition-all">
-            <Download className="w-5 h-5" />
+          <button onClick={handleDownload} className="btn-secondary">
+            <Download aria-hidden className="w-5 h-5" />
             Télécharger
           </button>
         </div>
         <button
           onClick={onNewOrder}
-          className="w-full mt-3 py-4 rounded-xl bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold text-sm hover:shadow-xl hover:shadow-orange-500/50 transition-all hover:scale-105 flex items-center justify-center gap-2"
+          className="btn-primary w-full mt-3 py-4 no-print"
         >
-          <ShoppingCart className="w-5 h-5" />
+          <ShoppingCart aria-hidden className="w-5 h-5" />
           Nouvelle commande
         </button>
       </div>
