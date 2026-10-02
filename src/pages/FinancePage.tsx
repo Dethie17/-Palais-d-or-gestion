@@ -25,7 +25,7 @@ function startOf(period: Period): number {
 
 /**
  * Finance DG : comptabilité complète — ventes caisse, abonnements,
- * recharges cartes, solde à verser à l'ISM et TouchPoint.
+ * recharges cartes, solde à verser à l'ISM et InTouch.
  * Taux éditables par le DG.
  */
 const FinancePage = () => {
@@ -70,7 +70,7 @@ const FinancePage = () => {
   const walletMeals = debits.reduce((s, t) => s + t.amount, 0);
   // Comptabilité ISM 2026 : 2000 FCFA par abonnement payé (lycée comme
   // préscolaire-élémentaire) + ismSalesPct % des ventes caisse.
-  // École : 2000 / abo ; 0,5% TouchPoint (base électronique = abos + recharges).
+  // École : 2000 / abo ; 0,5% InTouch (base électronique = abos + recharges).
   const ism = ismPeriod(payments, caisse, subscriptions, formulas, financeSettings, since);
   const ismAbo = ism.ismAbo;
   const ismSalesDue = ism.ismSales;
@@ -118,7 +118,7 @@ const FinancePage = () => {
     rows.push(['Solde ISM à verser', String(ismTotal)]);
     rows.push([`Reversement école (${financeSettings.schoolPerSubscription} x ${paidAbo.length} abos)`, String(schoolDue)]);
     rows.push([`Autres ventes (${financeSettings.otherSalesPct}%)`, String(otherSalesDue)]);
-    rows.push([`TouchPoint (${financeSettings.touchpointPct}%)`, String(touchpointFees)]);
+    rows.push([`InTouch (${financeSettings.touchpointPct}%)`, String(touchpointFees)]);
     rows.push(['Dépenses', String(expensesTotal)]);
     rows.push(['Net (après parts et dépenses)', String(net)]);
     const csv = '﻿' + rows.map((r) => r.join(';')).join('\n');
@@ -147,7 +147,7 @@ const FinancePage = () => {
       `Solde ISM à verser : ${ismTotal} FCFA`,
       `Reversement ecole (${financeSettings.schoolPerSubscription} x ${paidAbo.length}) : ${schoolDue} FCFA`,
       `Autres ventes (${financeSettings.otherSalesPct}%) : ${otherSalesDue} FCFA`,
-      `TouchPoint (${financeSettings.touchpointPct}%) : ${touchpointFees} FCFA`,
+      `InTouch (${financeSettings.touchpointPct}%) : ${touchpointFees} FCFA`,
       `Dépenses : ${expensesTotal} FCFA`,
       `Net (après parts et dépenses) : ${net} FCFA`,
     ];
@@ -167,7 +167,7 @@ const FinancePage = () => {
               <Banknote className="w-4 h-4" /> Direction · Comptabilité
             </p>
             <h1 className="mt-1 text-3xl md:text-4xl font-black tracking-tight">Finance</h1>
-            <p className="text-sm text-slate-300 mt-1">Ventes, abonnements, solde ISM, école et TouchPoint.</p>
+            <p className="text-sm text-slate-300 mt-1">Ventes, abonnements, solde ISM, école et InTouch.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex gap-1 bg-white/10 border border-white/15 rounded-full p-1 backdrop-blur">
@@ -245,7 +245,7 @@ const FinancePage = () => {
             <p className="text-[11px] text-slate-500 mt-0.5">{financeSettings.otherSalesPct}% de la caisse</p>
           </div>
           <div className="p-4 rounded-2xl bg-slate-50 border shadow-sm">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">TouchPoint</p>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">InTouch</p>
             <p className="text-xl font-black mt-0.5">{formatCurrency(touchpointFees)}</p>
             <p className="text-[11px] text-slate-500 mt-0.5">{financeSettings.touchpointPct}% électronique</p>
           </div>
@@ -258,7 +258,7 @@ const FinancePage = () => {
               <label className="text-xs">ISM ventes %<input type="number" min={0} max={100} step="0.1" value={rates.ismSalesPct} onChange={(e) => setRates({ ...rates, ismSalesPct: Number(e.target.value) })} className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm" /></label>
               <label className="text-xs">École / abo<input type="number" min={0} value={rates.schoolPerSubscription} onChange={(e) => setRates({ ...rates, schoolPerSubscription: Number(e.target.value) })} className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm" /></label>
               <label className="text-xs">Autres ventes %<input type="number" min={0} max={100} step="0.1" value={rates.otherSalesPct} onChange={(e) => setRates({ ...rates, otherSalesPct: Number(e.target.value) })} className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm" /></label>
-              <label className="text-xs">TouchPoint %<input type="number" min={0} max={100} step="0.1" value={rates.touchpointPct} onChange={(e) => setRates({ ...rates, touchpointPct: Number(e.target.value) })} className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm" /></label>
+              <label className="text-xs">InTouch %<input type="number" min={0} max={100} step="0.1" value={rates.touchpointPct} onChange={(e) => setRates({ ...rates, touchpointPct: Number(e.target.value) })} className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm" /></label>
               <div className="flex items-end">
                 <button onClick={saveRates} className="w-full py-2 rounded-xl bg-slate-900 text-white text-sm font-bold">Enregistrer</button>
               </div>

@@ -28,6 +28,7 @@ const MenusPage = lazy(() => import('./pages/MenusPage'));
 const SubscriptionPage = lazy(() => import('./pages/SubscriptionPage'));
 const SubscriptionsAdminPage = lazy(() => import('./pages/SubscriptionsAdminPage'));
 const QRCodePage = lazy(() => import('./pages/QRCodePage'));
+const ParentQrPage = lazy(() => import('./pages/ParentQrPage'));
 const QrGalleryPage = lazy(() => import('./pages/QrGalleryPage'));
 const ValidationPage = lazy(() => import('./pages/ValidationPage'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
@@ -170,7 +171,7 @@ function AppContent() {
       case 'subscriptions':
         return <SubscriptionsAdminPage />;
       case 'qrcode':
-        if (user?.role === 'client') return <EspaceParentPage />;
+        if (user?.role === 'client') return <ParentQrPage />;
         return <QRCodePage />;
       case 'qrgallery':
         return <QrGalleryPage />;

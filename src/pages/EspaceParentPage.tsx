@@ -2,20 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { formatCurrency } from '@/lib/utils';
-import { getChildQrToken } from '@/lib/clientQr';
 import { initiateWavePayment, isMobileMethod, isValidSnPhone, isValidWaveCode, type WavePaymentRequest } from '@/lib/wave';
 import { CYCLES, CYCLE_LABEL, cycleOfClass, pricePerMeal } from '@/lib/schoolCycles';
 import { isOfficialFormula } from '@/lib/formulas';
 import type { Child, ORestoPayment, ORestoPaymentMethod, ORestoPaymentStatus, SchoolCycle, Subscription, WalletTx, WeeklyMenu } from '@/types/menu';
-import { QRCodeSVG } from 'qrcode.react';
 import WavePaymentModal from '@/components/WavePaymentModal';
 import PaymentReceiptModal from '@/components/PaymentReceiptModal';
 import TicketCard from '@/components/TicketCard';
+import ChildQrCard from '@/components/ChildQrCard';
 import { dayPhoto } from '@/data/cantineWeek';
 import { menuTicketTotal } from '@/lib/menus';
 import {
   CheckCircle, AlertCircle, Smartphone, Timer, Ticket, QrCode,
-  Copy, Download, Printer,
   Pencil, Trash2, X, Check,
 } from 'lucide-react';
 
@@ -617,13 +615,15 @@ const EspaceParentPage = () => {
                     sub={s}
                     pending={pendingByChild(k.id)}
                     balance={walletOf(k.id)}
+                    walletOf={walletOf}
                     formulaName={f?.name ?? 'Abonnement'}
                     formulaRules={f?.rules}
                     totalMeals={total}
                     days={s ? daysLeft(s) : 0}
                     onRenew={s ? () => handleRenew(s.id, 'intouch') : undefined}
                     onGotoQR={() => scrollTo(`qr-${k.id}`)}
-                    onGotoAbo={() => scrollTo('abonnement')}
+                    onRecharged={handleRecharged}
+                    onError={(t) => flash(false, t)}
                     updateChild={updateChild}
                     deleteChild={deleteChild}
                     flash={flash}
@@ -635,23 +635,6 @@ const EspaceParentPage = () => {
             <p className="mt-4 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-6 text-center">
               Aucune carte pour l’instant — inscrivez un enfant à l’étape 1, sa carte se crée aussitôt.
             </p>
-          )}
-          {kids.length > 0 && (
-            <div className="mt-4 rounded-3xl bg-slate-900 text-white p-5 md:p-6 shadow-xl border border-slate-800 overflow-hidden relative">
-              <div aria-hidden className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-emerald-500/15 blur-3xl" />
-              <div className="relative flex flex-wrap items-center gap-2">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300 flex items-center gap-2">
-                  <span aria-hidden className="w-1.5 h-8 rounded-full bg-gradient-to-b from-emerald-400 to-emerald-600" />
-                  Recharger une carte
-                </p>
-                <span className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full bg-white/15 text-emerald-200 tabular-nums">
-                  Solde total · {formatCurrency(totals.balance)}
-                </span>
-              </div>
-              <div className="relative mt-4 rounded-2xl bg-white text-slate-900 p-4 md:p-5 shadow-inner">
-                <RechargePanel kids={kids} walletOf={walletOf} onDone={handleRecharged} onError={(t) => flash(false, t)} />
-              </div>
-            </div>
           )}
         </section>
 
@@ -665,42 +648,18 @@ const EspaceParentPage = () => {
           </div>
           {kids.length > 0 ? (
             <ul className="mt-4 grid sm:grid-cols-2 gap-3">
-              {kids.map((k) => {
-                const token = k.qrToken || getChildQrToken(k.id);
-                return (
-                  <li key={k.id} id={`qr-${k.id}`} className="scroll-mt-24 bg-white rounded-3xl border-2 border-slate-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-                    <div className="flex items-center gap-3">
-                      <span className="w-11 h-11 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-lg font-black flex-shrink-0">
-                        {k.firstName.charAt(0).toUpperCase()}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-black text-slate-900 truncate">{k.firstName} {k.lastName}</p>
-                        <p className="text-xs text-slate-500 truncate">{k.className} · {CYCLE_LABEL[k.cycle ?? 'primaire']}</p>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex items-center gap-4 rounded-2xl bg-slate-50 border p-4">
-                      <div ref={(el) => { qrRefs.current[k.id] = el; }} className="p-2 border border-slate-200 bg-white rounded-xl flex-shrink-0">
-                        <QRCodeSVG value={token} size={104} level="M" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">N° QR Code</p>
-                        <p className="font-mono text-sm font-bold text-slate-800 tracking-wider truncate">{token}</p>
-                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                          <button onClick={() => copyToken(token)} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
-                            <Copy className="w-3 h-3" /> {copied === token ? 'Copié' : 'Copier'}
-                          </button>
-                          <button onClick={() => downloadPNG(k.id, token, `${k.firstName} ${k.lastName}`)} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
-                            <Download className="w-3 h-3" /> PNG
-                          </button>
-                          <button onClick={() => window.print()} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
-                            <Printer className="w-3 h-3" /> Imprimer
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
+              {kids.map((k) => (
+                <ChildQrCard
+                  key={k.id}
+                  k={k}
+                  anchorId={`qr-${k.id}`}
+                  qrRefCb={(el) => { qrRefs.current[k.id] = el; }}
+                  copied={copied}
+                  onCopy={copyToken}
+                  onPNG={downloadPNG}
+                  onPrint={() => window.print()}
+                />
+              ))}
             </ul>
           ) : (
             <p className="mt-4 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-6 text-center">
@@ -1301,26 +1260,29 @@ function QuickEnrollCycle({ cycleId, username, hasProfile, addChild, kidsCount, 
 
 /** Carte enfant dark (style CARTE ACTIVE) : une carte par enfant inscrit.
  * Abonné : repas restants + J- + Mon QR + Renouveler + progression.
- * Sans abonnement : solde carte + accès formule. Gestion intégrée.
+ * Sans abonnement : solde + recharge InTouch intégrée. Gestion intégrée.
  */
-function KidCard({ k, sub, pending, balance, formulaName, formulaRules, totalMeals, days, onRenew, onGotoQR, onGotoAbo, updateChild, deleteChild, flash }: {
+function KidCard({ k, sub, pending, balance, walletOf, formulaName, formulaRules, totalMeals, days, onRenew, onGotoQR, onRecharged, onError, updateChild, deleteChild, flash }: {
   k: Child;
   sub: Subscription | undefined;
   pending: boolean;
   balance: number;
+  walletOf: (id: string) => number;
   formulaName: string;
   formulaRules?: string;
   totalMeals: number;
   days: number;
   onRenew?: () => void;
   onGotoQR: () => void;
-  onGotoAbo: () => void;
+  onRecharged: (childId: string, amount: number) => void;
+  onError: (text: string) => void;
   updateChild: (id: string, updates: Partial<Pick<Child, 'firstName' | 'lastName' | 'className' | 'cycle'>>) => void;
   deleteChild: (id: string) => void;
   flash: (ok: boolean, text: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [showRecharge, setShowRecharge] = useState(false);
   const [fFirst, setFFirst] = useState('');
   const [fLast, setFLast] = useState('');
   const [fClass, setFClass] = useState('');
@@ -1392,11 +1354,26 @@ function KidCard({ k, sub, pending, balance, formulaName, formulaRules, totalMea
             <Smartphone className="w-4 h-4" /> Renouveler
           </button>
         ) : (
-          <button onClick={onGotoAbo} className="inline-flex items-center gap-1.5 px-5 py-2.5 min-h-[44px] rounded-xl bg-emerald-500 text-white text-sm font-bold hover:bg-emerald-400 active:scale-[0.99] transition-all">
-            Choisir une formule
+          <button onClick={() => setShowRecharge((v) => !v)} aria-expanded={showRecharge} className="inline-flex items-center gap-1.5 px-5 py-2.5 min-h-[44px] rounded-xl bg-emerald-500 text-white text-sm font-bold hover:bg-emerald-400 active:scale-[0.99] transition-all">
+            <Smartphone className="w-4 h-4" /> Recharger ma carte
           </button>
         )}
       </div>
+      {sub && (
+        <button onClick={() => setShowRecharge((v) => !v)} aria-expanded={showRecharge} className="relative mt-2 w-full py-2.5 min-h-[44px] rounded-xl bg-white/10 border border-white/15 text-sm font-bold hover:bg-white/15 transition-colors">
+          {showRecharge ? 'Fermer la recharge' : '+ Recharger ma carte'}
+        </button>
+      )}
+      {showRecharge && (
+        <div className="relative mt-3 rounded-2xl bg-white text-slate-900 p-4 shadow-inner">
+          <RechargePanel
+            kids={[k]}
+            walletOf={walletOf}
+            onDone={(id, amt) => { setShowRecharge(false); onRecharged(id, amt); }}
+            onError={onError}
+          />
+        </div>
+      )}
       {sub && (
         <div className="relative mt-4">
           <p className="text-xs font-bold text-slate-300 tabular-nums">Solde repas {sub.mealsRemaining}/{totalMeals}</p>

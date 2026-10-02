@@ -16,6 +16,7 @@ import {
   Settings,
   Banknote,
   Building2,
+  QrCode,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -42,6 +43,8 @@ const allNavItems: { page: PageName; label: string; icon: React.ReactNode; roles
   { page: 'establishments', label: 'Établissements', icon: <Building2 aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },
   { page: 'settings', label: 'Paramètres', icon: <Settings aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },
   { page: 'history', label: 'Historique', icon: <Receipt aria-hidden className="w-5 h-5" />, roles: ['personnel', 'gestionnaire', 'admin', 'caissier', 'manager'] },
+  // Parent : QR Codes en bas de navigation.
+  { page: 'qrcode', label: 'QR Codes', icon: <QrCode aria-hidden className="w-5 h-5" />, roles: ['client'] },
 ];
 
 const Sidebar = ({ currentPage, onNavigate, open, onClose }: SidebarProps) => {

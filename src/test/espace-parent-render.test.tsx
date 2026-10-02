@@ -66,7 +66,7 @@ describe('EspaceParentPage render (repro crash childId)', () => {
     expect(screen.getByText(/Je choisis l’abonnement/)).toBeTruthy();
     expect(screen.getAllByText(/Menu du jour/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/Historique des dépenses/)).toBeTruthy();
-    expect(screen.getByText(/Recharger une carte/)).toBeTruthy();
+    expect(screen.getByText(/Recharger ma carte/)).toBeTruthy();
   });
 
   it('semaine de référence affichée par défaut (menus validés + photos)', () => {
