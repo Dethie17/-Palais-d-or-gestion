@@ -1,19 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { formatCurrency } from '@/lib/utils';
 import { initiateWavePayment, isMobileMethod, isValidSnPhone, isValidWaveCode, type WavePaymentRequest } from '@/lib/wave';
 import { CYCLES, CYCLE_LABEL, cycleOfClass, pricePerMeal } from '@/lib/schoolCycles';
 import { isOfficialFormula } from '@/lib/formulas';
-import type { Child, ORestoPayment, ORestoPaymentMethod, ORestoPaymentStatus, SchoolCycle, Subscription, WalletTx, WeeklyMenu } from '@/types/menu';
+import type { Child, ORestoPayment, ORestoPaymentMethod, ORestoPaymentStatus, PageName, SchoolCycle, Subscription, WalletTx, WeeklyMenu } from '@/types/menu';
 import WavePaymentModal from '@/components/WavePaymentModal';
 import PaymentReceiptModal from '@/components/PaymentReceiptModal';
 import TicketCard from '@/components/TicketCard';
-import ChildQrCard from '@/components/ChildQrCard';
 import { dayPhoto } from '@/data/cantineWeek';
 import { menuTicketTotal } from '@/lib/menus';
 import {
-  CheckCircle, AlertCircle, Smartphone, Timer, Ticket, QrCode,
+  CheckCircle, AlertCircle, Smartphone, Timer, Ticket,
   Pencil, Trash2, X, Check,
 } from 'lucide-react';
 
@@ -71,7 +70,7 @@ function SectionTitle({ step, title, sub }: { step: string; title: string; sub?:
  * (paiement InTouch intégré au pavé formule) → 3 menu du jour payé
  * par la carte + tickets → 4 cartes (recharge + QR) → 5 historique.
  */
-const EspaceParentPage = () => {
+const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => void }) => {
   const { user } = useAuth();
   const {
     formulas, mySubscriptions, myPayments, myValidations,
@@ -87,12 +86,10 @@ const EspaceParentPage = () => {
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [histChild, setHistChild] = useState('all');
-  const [copied, setCopied] = useState<string | null>(null);
   /** Formule dont le panneau de paiement intégré est ouvert. */
   const [payFor, setPayFor] = useState<string | null>(null);
   const [ticketAlt, setTicketAlt] = useState<{ formulaId: string; name: string } | null>(null);
   const [dayBuyer, setDayBuyer] = useState<Record<string, string>>({});
-  const qrRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const username = user?.username ?? '';
   const allMine = mySubscriptions(username);
@@ -300,45 +297,7 @@ const EspaceParentPage = () => {
     }
   };
 
-  // ---------- QR helpers ----------
-  const copyToken = async (token: string) => {
-    try {
-      await navigator.clipboard.writeText(token);
-      setCopied(token);
-      window.setTimeout(() => setCopied(null), 2000);
-    } catch { /* presse-papiers indisponible */ }
-  };
-
-  const downloadPNG = (childId: string, token: string, label: string) => {
-    const svg = qrRefs.current[childId]?.querySelector('svg');
-    if (!svg) return;
-    const xml = new XMLSerializer().serializeToString(svg);
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 640;
-      canvas.height = 760;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#0f172a';
-      ctx.font = 'bold 36px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('O RESTO', canvas.width / 2, 56);
-      ctx.drawImage(img, 70, 90, 500, 500);
-      ctx.font = '28px monospace';
-      ctx.fillText(token, canvas.width / 2, 640);
-      ctx.font = '24px sans-serif';
-      ctx.fillStyle = '#64748b';
-      ctx.fillText(label, canvas.width / 2, 690);
-      const a = document.createElement('a');
-      a.download = `oresto-qr-${token}.png`;
-      a.href = canvas.toDataURL('image/png');
-      a.click();
-    };
-    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
-  };
+  // ---------- QR : voir la page « QR Codes » (navigation parent) ----------
 
   // ---------- Solde restant après chaque opération ----------
   const soldeAfterByTx = useMemo(() => {
@@ -621,7 +580,7 @@ const EspaceParentPage = () => {
                     totalMeals={total}
                     days={s ? daysLeft(s) : 0}
                     onRenew={s ? () => handleRenew(s.id, 'intouch') : undefined}
-                    onGotoQR={() => scrollTo(`qr-${k.id}`)}
+                    onGotoQR={() => onNavigate?.('qrcode')}
                     onRecharged={handleRecharged}
                     onError={(t) => flash(false, t)}
                     updateChild={updateChild}
@@ -634,36 +593,6 @@ const EspaceParentPage = () => {
           ) : (
             <p className="mt-4 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-6 text-center">
               Aucune carte pour l’instant — inscrivez un enfant à l’étape 1, sa carte se crée aussitôt.
-            </p>
-          )}
-        </section>
-
-        {/* ===== QR CODES des enfants ===== */}
-        <section id="qr" className="scroll-mt-24">
-          <div className="flex items-start gap-3">
-            <span className="w-9 h-9 rounded-2xl bg-slate-900 text-white flex items-center justify-center flex-shrink-0 shadow">
-              <QrCode className="w-4 h-4" />
-            </span>
-            <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-900">QR Codes</h2>
-          </div>
-          {kids.length > 0 ? (
-            <ul className="mt-4 grid sm:grid-cols-2 gap-3">
-              {kids.map((k) => (
-                <ChildQrCard
-                  key={k.id}
-                  k={k}
-                  anchorId={`qr-${k.id}`}
-                  qrRefCb={(el) => { qrRefs.current[k.id] = el; }}
-                  copied={copied}
-                  onCopy={copyToken}
-                  onPNG={downloadPNG}
-                  onPrint={() => window.print()}
-                />
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-4 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-6 text-center">
-              Les QR Codes apparaissent ici dès qu’un enfant est inscrit.
             </p>
           )}
         </section>

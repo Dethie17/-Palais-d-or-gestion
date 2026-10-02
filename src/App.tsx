@@ -160,13 +160,13 @@ function AppContent() {
     switch (currentPage) {
       case 'home':
         // Espace Parent unifié : un seul parcours continu pour le rôle client.
-        if (user?.role === 'client') return <EspaceParentPage />;
+        if (user?.role === 'client') return <EspaceParentPage onNavigate={navigateTo} />;
         return <HomePage onNavigate={navigateTo} />;
       case 'menus':
-        if (user?.role === 'client') return <EspaceParentPage />;
+        if (user?.role === 'client') return <EspaceParentPage onNavigate={navigateTo} />;
         return <MenusPage onNavigate={navigateTo} />;
       case 'subscription':
-        if (user?.role === 'client') return <EspaceParentPage />;
+        if (user?.role === 'client') return <EspaceParentPage onNavigate={navigateTo} />;
         return <SubscriptionPage onNavigate={navigateTo} />;
       case 'subscriptions':
         return <SubscriptionsAdminPage />;
@@ -185,7 +185,7 @@ function AppContent() {
       case 'settings':
         return <SettingsPage onNavigate={navigateTo} />;
       case 'history':
-        if (user?.role === 'client') return <EspaceParentPage />;
+        if (user?.role === 'client') return <EspaceParentPage onNavigate={navigateTo} />;
         return <OrderHistoryPage />;
       case 'dashboard':
         return <Dashboard onNavigate={navigateTo} />;
@@ -202,7 +202,7 @@ function AppContent() {
       case 'profile':
         return <ProfilePage />;
       case 'children':
-        if (user?.role === 'client') return <EspaceParentPage />;
+        if (user?.role === 'client') return <EspaceParentPage onNavigate={navigateTo} />;
         return <ChildrenPage />;
       case 'finance':
         return <FinancePage />;
