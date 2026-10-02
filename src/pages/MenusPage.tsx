@@ -4,7 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { PageName } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
-import { weeklyMenuTotal, publishedDays } from '@/lib/menus';
+import { menuTicketTotal, publishedDays } from '@/lib/menus';
 import { categories } from '@/data/mockData';
 import TicketCard from '@/components/TicketCard';
 import { CalendarDays, Ticket, Eye } from 'lucide-react';
@@ -72,7 +72,7 @@ const MenusPage = ({ onNavigate }: MenusPageProps) => {
                   name={menuDuJour.name || `Menu du ${menuDuJour.day}`}
                   description={menuDuJour.description}
                   items={menuDuJour.items}
-                  total={weeklyMenuTotal(menuDuJour.items)}
+                  total={menuTicketTotal(menuDuJour)}
                   highlight
                   action={canBuy ? (
                     <button onClick={() => onNavigate('subscription')} className="w-full flex items-center justify-center gap-1 px-4 py-2.5 rounded-xl bg-green-700 text-white text-sm font-bold hover:bg-green-800">
@@ -100,7 +100,7 @@ const MenusPage = ({ onNavigate }: MenusPageProps) => {
                   name={m.name || `Menu du ${m.day}`}
                   description={m.description}
                   items={m.items}
-                  total={weeklyMenuTotal(m.items)}
+                  total={menuTicketTotal(m)}
                   action={canBuy ? (
                     <button onClick={() => onNavigate('subscription')} className="w-full flex items-center justify-center gap-1 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700">
                       <Ticket className="w-4 h-4" /> Ticket

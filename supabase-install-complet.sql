@@ -543,8 +543,9 @@ CREATE TABLE IF NOT EXISTS weekly_menus (
   day TEXT PRIMARY KEY CHECK (day IN ('Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi')),
   name TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
-  -- Plats du jour composés par le DG : [{name, price}] — total calculé côté app.
+  -- Plats du jour (noms) + prix UNIQUE du ticket, saisis par le Personnel.
   items JSONB NOT NULL DEFAULT '[]',
+  price NUMERIC NOT NULL DEFAULT 0,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 

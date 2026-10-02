@@ -3,7 +3,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { useProducts } from '@/context/ProductContext';
 import { formatCurrency } from '@/lib/utils';
-import { weeklyMenuTotal, publishedDays } from '@/lib/menus';
+import { menuTicketTotal, publishedDays } from '@/lib/menus';
 import { isOfficialFormula } from '@/lib/formulas';
 import {
   QrCode, UtensilsCrossed, Wallet, History, CalendarDays,
@@ -215,7 +215,7 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
                           <span className="block font-bold text-sm text-slate-800 truncate">{m.name || `Menu du ${m.day}`}</span>
                           <span className="block text-xs text-slate-500 truncate">{m.items.map((it) => it.name).join(' • ')}</span>
                         </span>
-                        <span className="font-black text-sm text-orange-700 whitespace-nowrap flex-shrink-0">{formatCurrency(weeklyMenuTotal(m.items))}</span>
+                        <span className="font-black text-sm text-orange-700 whitespace-nowrap flex-shrink-0">{formatCurrency(menuTicketTotal(m))}</span>
                       </li>
                     ))}
                   </ul>
@@ -385,7 +385,7 @@ function ClientHeroStats({ kidsCount, mealsLeft, onChildren, onSub }: {
   );
 }
 
-function MenuDuJourCard({ menu, actionLabel, onAction }: { menu: { day: string; name: string; description?: string; items: { name: string; price: number }[] } | null; actionLabel?: string; onAction?: () => void }) {
+function MenuDuJourCard({ menu, actionLabel, onAction }: { menu: { day: string; name: string; description?: string; price?: number; items: { name: string; price: number }[] } | null; actionLabel?: string; onAction?: () => void }) {
   if (!menu || (menu.items ?? []).length === 0) {
     return (
       <div className="bg-white rounded-2xl shadow border-2 border-dashed border-slate-200 p-8 text-center">
@@ -394,7 +394,7 @@ function MenuDuJourCard({ menu, actionLabel, onAction }: { menu: { day: string; 
       </div>
     );
   }
-  const total = weeklyMenuTotal(menu.items);
+  const total = menuTicketTotal(menu);
   return (
     <div className="bg-white rounded-2xl shadow border border-orange-100 overflow-hidden">
       <div className="p-5">
@@ -403,7 +403,7 @@ function MenuDuJourCard({ menu, actionLabel, onAction }: { menu: { day: string; 
       </div>
       <ul className="mt-2 space-y-1 text-sm">
         {menu.items.map((it) => (
-          <li key={it.name} className="flex justify-between"><span className="flex items-center gap-1.5"><UtensilsCrossed className="w-3.5 h-3.5 text-slate-400" /> {it.name}</span><span className="font-semibold">{formatCurrency(it.price)}</span></li>
+          <li key={it.name} className="flex justify-between"><span className="flex items-center gap-1.5"><UtensilsCrossed className="w-3.5 h-3.5 text-slate-400" /> {it.name}</span></li>
         ))}
       </ul>
       <div className="mt-3 flex items-center justify-between">

@@ -12,9 +12,9 @@ import WavePaymentModal from '@/components/WavePaymentModal';
 import PaymentReceiptModal from '@/components/PaymentReceiptModal';
 import TicketCard from '@/components/TicketCard';
 import { dayPhoto } from '@/data/cantineWeek';
-import { weeklyMenuTotal } from '@/lib/menus';
+import { menuTicketTotal } from '@/lib/menus';
 import {
-  CheckCircle, AlertCircle, Smartphone, Timer, Ticket,
+  CheckCircle, AlertCircle, Smartphone, Timer, Ticket, QrCode,
   Copy, Download, Printer,
   Pencil, Trash2, X, Check,
 } from 'lucide-react';
@@ -52,8 +52,8 @@ const scrollTo = (id: string) => {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
-/** Titre d'étape premium : pastille numérotée émeraude + titre + sous-titre. */
-function SectionTitle({ step, title, sub }: { step: string; title: string; sub: string }) {
+/** Titre d'étape premium : pastille numérotée + titre. */
+function SectionTitle({ step, title, sub }: { step: string; title: string; sub?: string }) {
   return (
     <div className="flex items-start gap-3">
       <span className="w-9 h-9 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-sm font-black flex-shrink-0 shadow">
@@ -61,7 +61,7 @@ function SectionTitle({ step, title, sub }: { step: string; title: string; sub: 
       </span>
       <div className="min-w-0">
         <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-900">{title}</h2>
-        <p className="text-sm text-slate-500 mt-0.5">{sub}</p>
+        {sub && <p className="text-sm text-slate-500 mt-0.5">{sub}</p>}
       </div>
     </div>
   );
@@ -425,7 +425,7 @@ const EspaceParentPage = () => {
 
         {/* ===== 1. INSCRIPTION ===== */}
         <section id="inscription" className="scroll-mt-24">
-          <SectionTitle step="1" title="J’inscris mes enfants" sub="La carte et le QR Code de chaque enfant sont créés automatiquement." />
+          <SectionTitle step="1" title="J’inscris mes enfants" />
           <div className="grid md:grid-cols-2 gap-4 mt-4">
             {!profile && (
               <div className="md:col-span-2 rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
@@ -453,7 +453,7 @@ const EspaceParentPage = () => {
 
         {/* ===== 2. ABONNEMENT : les 3 formules ===== */}
         <section id="abonnement" className="scroll-mt-24">
-          <SectionTitle step="2" title="Je choisis l’abonnement" sub="1 repas par jour, le midi, du lundi au vendredi. Paiement InTouch dans le pavé." />
+          <SectionTitle step="2" title="Je choisis l’abonnement" />
           <div className="grid md:grid-cols-3 gap-4 mt-4 items-start">
             {aboFormulas.map((f) => (
               <FormulaCard
@@ -498,7 +498,7 @@ const EspaceParentPage = () => {
 
         {/* ===== 3. MENU : jour + semaine + tickets ===== */}
         <section id="menu" className="scroll-mt-24">
-          <SectionTitle step="3" title="Menu du jour" sub="Payé avec la carte de l’enfant : total débité, 1 repas crédité. Menus publiés par le Personnel." />
+          <SectionTitle step="3" title="Menu du jour" />
 
           {menuDuJour && (menuDuJour.items ?? []).length > 0 ? (
             <div className="mt-4 max-w-md">
@@ -510,7 +510,7 @@ const EspaceParentPage = () => {
                 walletOf={walletOf}
                 buyer={dayBuyer[menuDuJour.day] ?? kids[0]?.id ?? ''}
                 onBuyer={(id) => setDayBuyer((p) => ({ ...p, [menuDuJour.day]: id }))}
-                onBuy={() => handleBuyDayMenu(menuDuJour.day, weeklyMenuTotal(menuDuJour.items))}
+                onBuy={() => handleBuyDayMenu(menuDuJour.day, menuTicketTotal(menuDuJour))}
               />
             </div>
           ) : (
@@ -548,7 +548,7 @@ const EspaceParentPage = () => {
                   walletOf={walletOf}
                   buyer={dayBuyer[m.day] ?? kids[0]?.id ?? ''}
                   onBuyer={(id) => setDayBuyer((p) => ({ ...p, [m.day]: id }))}
-                  onBuy={() => handleBuyDayMenu(m.day, weeklyMenuTotal(m.items))}
+                  onBuy={() => handleBuyDayMenu(m.day, menuTicketTotal(m))}
                 />
               ))}
             </div>
@@ -600,83 +600,42 @@ const EspaceParentPage = () => {
           )}
         </section>
 
-        {/* ===== 4. CARTES ===== */}
+        {/* ===== 4. CARTES : une carte dark par enfant ===== */}
         <section id="cartes" className="scroll-mt-24">
-          <SectionTitle step="4" title="Mes cartes" sub="Rechargeables via InTouch, QR à présenter à la cantine. La carte sert aux tickets repas." />
-
-          {activeSubs.length > 0 && (
-            <ul className="mt-4 space-y-4">
-              {activeSubs.map((s) => {
-                const f = formulas.find((x) => x.id === s.formulaId);
-                const total = f?.mealsIncluded && f.mealsIncluded > 0 ? f.mealsIncluded : s.mealsRemaining;
-                const pct = total > 0 ? Math.min(100, Math.round((s.mealsRemaining / total) * 100)) : 0;
-                return (
-                  <li key={s.id} className="rounded-3xl bg-slate-900 text-white p-5 md:p-6 shadow-xl">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-xs font-bold uppercase tracking-widest text-emerald-300">
-                        • Carte active – {f?.name ?? 'Abonnement'}
-                      </p>
-                      <span className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full bg-white/15 text-emerald-200">
-                        J-{daysLeft(s)} restants
-                      </span>
-                    </div>
-                    <p className="mt-3 text-4xl font-black tracking-tight">{s.mealsRemaining} <span className="text-lg font-bold text-slate-300">repas restants</span></p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {childNameOf(s) ? `${childNameOf(s)} · ` : ''}Du {new Date(s.startDate).toLocaleDateString('fr-FR')} au {new Date(s.endDate).toLocaleDateString('fr-FR')}
-                    </p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {s.childId && (
-                        <button onClick={() => scrollTo(`carte-${s.childId}`)} className="inline-flex items-center gap-1.5 px-5 py-2.5 min-h-[44px] rounded-xl bg-white text-slate-900 text-sm font-bold hover:bg-slate-100">
-                          Mon QR
-                        </button>
-                      )}
-                      <button onClick={() => handleRenew(s.id, 'intouch')} className="inline-flex items-center gap-1.5 px-5 py-2.5 min-h-[44px] rounded-xl bg-emerald-500 text-white text-sm font-bold hover:bg-emerald-400">
-                        <Smartphone className="w-4 h-4" /> Renouveler
-                      </button>
-                    </div>
-                    <div className="mt-4">
-                      <p className="text-xs font-bold text-slate-300">Solde repas {s.mealsRemaining}/{total}</p>
-                      <div className="mt-1.5 h-2 rounded-full bg-white/15 overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-                        <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${pct}%` }} />
-                      </div>
-                      {f?.rules && <p className="mt-2 text-[11px] text-slate-400">Règle : {f.rules}</p>}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <SectionTitle step="4" title="Mes cartes" />
 
           {kids.length > 0 ? (
-            <ul className="mt-4 grid sm:grid-cols-2 gap-3">
-              {kids.map((k) => (
-                <KidCard
-                  key={k.id}
-                  k={k}
-                  sub={activeByChild(k.id)}
-                  pending={pendingByChild(k.id)}
-                  token={k.qrToken || getChildQrToken(k.id)}
-                  balance={walletOf(k.id)}
-                  copiedToken={copied}
-                  onCopy={copyToken}
-                  onPNG={downloadPNG}
-                  onPrint={() => window.print()}
-                  qrRefCb={(el) => { qrRefs.current[k.id] = el; }}
-                  updateChild={updateChild}
-                  deleteChild={deleteChild}
-                  flash={flash}
-                />
-              ))}
+            <ul className="mt-4 grid gap-4 lg:grid-cols-2">
+              {kids.map((k) => {
+                const s = activeByChild(k.id);
+                const f = s ? formulas.find((x) => x.id === s.formulaId) : undefined;
+                const total = f?.mealsIncluded && f.mealsIncluded > 0 ? f.mealsIncluded : (s?.mealsRemaining ?? 0);
+                return (
+                  <KidCard
+                    key={k.id}
+                    k={k}
+                    sub={s}
+                    pending={pendingByChild(k.id)}
+                    balance={walletOf(k.id)}
+                    formulaName={f?.name ?? 'Abonnement'}
+                    formulaRules={f?.rules}
+                    totalMeals={total}
+                    days={s ? daysLeft(s) : 0}
+                    onRenew={s ? () => handleRenew(s.id, 'intouch') : undefined}
+                    onGotoQR={() => scrollTo(`qr-${k.id}`)}
+                    onGotoAbo={() => scrollTo('abonnement')}
+                    updateChild={updateChild}
+                    deleteChild={deleteChild}
+                    flash={flash}
+                  />
+                );
+              })}
             </ul>
           ) : (
             <p className="mt-4 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-6 text-center">
               Aucune carte pour l’instant — inscrivez un enfant à l’étape 1, sa carte se crée aussitôt.
             </p>
           )}
-          {activeSubs.length === 0 && kids.length > 0 && (
-            <p className="mt-3 text-sm text-slate-500 text-center">Choisissez une formule à l’étape 2 pour activer la carte.</p>
-          )}
-
           {kids.length > 0 && (
             <div className="mt-4 rounded-3xl bg-slate-900 text-white p-5 md:p-6 shadow-xl border border-slate-800 overflow-hidden relative">
               <div aria-hidden className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-emerald-500/15 blur-3xl" />
@@ -689,9 +648,6 @@ const EspaceParentPage = () => {
                   Solde total · {formatCurrency(totals.balance)}
                 </span>
               </div>
-              <p className="relative mt-2 text-sm text-slate-300">
-                Carte, montant, numéro InTouch → code à 6 chiffres. Crédit immédiat, suivi dans l’historique.
-              </p>
               <div className="relative mt-4 rounded-2xl bg-white text-slate-900 p-4 md:p-5 shadow-inner">
                 <RechargePanel kids={kids} walletOf={walletOf} onDone={handleRecharged} onError={(t) => flash(false, t)} />
               </div>
@@ -699,9 +655,63 @@ const EspaceParentPage = () => {
           )}
         </section>
 
+        {/* ===== QR CODES des enfants ===== */}
+        <section id="qr" className="scroll-mt-24">
+          <div className="flex items-start gap-3">
+            <span className="w-9 h-9 rounded-2xl bg-slate-900 text-white flex items-center justify-center flex-shrink-0 shadow">
+              <QrCode className="w-4 h-4" />
+            </span>
+            <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-900">QR Codes</h2>
+          </div>
+          {kids.length > 0 ? (
+            <ul className="mt-4 grid sm:grid-cols-2 gap-3">
+              {kids.map((k) => {
+                const token = k.qrToken || getChildQrToken(k.id);
+                return (
+                  <li key={k.id} id={`qr-${k.id}`} className="scroll-mt-24 bg-white rounded-3xl border-2 border-slate-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-3">
+                      <span className="w-11 h-11 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-lg font-black flex-shrink-0">
+                        {k.firstName.charAt(0).toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-slate-900 truncate">{k.firstName} {k.lastName}</p>
+                        <p className="text-xs text-slate-500 truncate">{k.className} · {CYCLE_LABEL[k.cycle ?? 'primaire']}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-center gap-4 rounded-2xl bg-slate-50 border p-4">
+                      <div ref={(el) => { qrRefs.current[k.id] = el; }} className="p-2 border border-slate-200 bg-white rounded-xl flex-shrink-0">
+                        <QRCodeSVG value={token} size={104} level="M" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">N° QR Code</p>
+                        <p className="font-mono text-sm font-bold text-slate-800 tracking-wider truncate">{token}</p>
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                          <button onClick={() => copyToken(token)} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
+                            <Copy className="w-3 h-3" /> {copied === token ? 'Copié' : 'Copier'}
+                          </button>
+                          <button onClick={() => downloadPNG(k.id, token, `${k.firstName} ${k.lastName}`)} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
+                            <Download className="w-3 h-3" /> PNG
+                          </button>
+                          <button onClick={() => window.print()} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
+                            <Printer className="w-3 h-3" /> Imprimer
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="mt-4 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-6 text-center">
+              Les QR Codes apparaissent ici dès qu’un enfant est inscrit.
+            </p>
+          )}
+        </section>
+
         {/* ===== 5. HISTORIQUE ===== */}
         <section id="historique" className="scroll-mt-24">
-          <SectionTitle step="5" title="Historique des dépenses" sub="Toutes les dépenses, par enfant." />
+          <SectionTitle step="5" title="Historique des dépenses" />
           <div className="flex flex-wrap items-center gap-2 mt-4 mb-3">
             {[{ id: 'all', label: 'Tous' }, ...kids.map((k) => ({ id: k.id, label: k.firstName }))].map((o) => (
               <button
@@ -1119,11 +1129,8 @@ function RechargePanel({ kids, walletOf, onDone, onError }: {
             disabled={!ready}
             className="w-full py-3 min-h-[48px] rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-500 text-white text-sm font-bold hover:from-emerald-800 hover:to-emerald-600 active:scale-[0.99] transition-all inline-flex items-center justify-center gap-2 shadow-md shadow-emerald-600/25 disabled:opacity-40 disabled:shadow-none disabled:active:scale-100"
           >
-            <Smartphone className="w-4 h-4" /> Recharger{amount > 0 ? ` · ${formatCurrency(amount)}` : ''}
+            <Smartphone className="w-4 h-4" />             Recharger{amount > 0 ? ` · ${formatCurrency(amount)}` : ''}
           </button>
-          {!ready && (
-            <p className="mt-1.5 text-center text-[11px] text-slate-400">Choisissez la carte, le montant et un numéro InTouch valide pour continuer.</p>
-          )}
         </div>
       </div>
     );
@@ -1175,12 +1182,12 @@ function RechargePanel({ kids, walletOf, onDone, onError }: {
   );
 }
 
-/** Carte ticket du jour : photo, plats + prix, total, paiement par carte. */
+/** Carte ticket du jour : photo, plats (sans prix), prix unique, paiement par carte. */
 function MenuTicketCard({ menu, highlight, kids, walletOf, buyer, onBuyer, onBuy }: {
   menu: WeeklyMenu; highlight: boolean; kids: Child[]; walletOf: (id: string) => number;
   buyer: string; onBuyer: (id: string) => void; onBuy: () => void;
 }) {
-  const total = weeklyMenuTotal(menu.items);
+  const total = menuTicketTotal(menu);
   const sel = kids.find((k) => k.id === (buyer || kids[0]?.id));
   return (
     <TicketCard
@@ -1192,7 +1199,6 @@ function MenuTicketCard({ menu, highlight, kids, walletOf, buyer, onBuyer, onBuy
       total={total}
       highlight={highlight}
       highlightLabel={highlight ? 'MENU DU JOUR' : undefined}
-      showPrices
       action={
         kids.length > 0 && total > 0 ? (
           <>
@@ -1293,21 +1299,22 @@ function QuickEnrollCycle({ cycleId, username, hasProfile, addChild, kidsCount, 
   );
 }
 
-/** Carte enfant premium : identité, solde tickets, QR + gestion (modifier / retirer).
- * La gestion vit ici (étape 4) — l'inscription (étape 1) ne fait qu'inscrire.
- * Règle carte : le solde sert aux tickets repas, jamais aux abonnements.
+/** Carte enfant dark (style CARTE ACTIVE) : une carte par enfant inscrit.
+ * Abonné : repas restants + J- + Mon QR + Renouveler + progression.
+ * Sans abonnement : solde carte + accès formule. Gestion intégrée.
  */
-function KidCard({ k, sub, pending, token, balance, copiedToken, onCopy, onPNG, onPrint, qrRefCb, updateChild, deleteChild, flash }: {
+function KidCard({ k, sub, pending, balance, formulaName, formulaRules, totalMeals, days, onRenew, onGotoQR, onGotoAbo, updateChild, deleteChild, flash }: {
   k: Child;
   sub: Subscription | undefined;
   pending: boolean;
-  token: string;
   balance: number;
-  copiedToken: string | null;
-  onCopy: (token: string) => void;
-  onPNG: (childId: string, token: string, label: string) => void;
-  onPrint: () => void;
-  qrRefCb: (el: HTMLDivElement | null) => void;
+  formulaName: string;
+  formulaRules?: string;
+  totalMeals: number;
+  days: number;
+  onRenew?: () => void;
+  onGotoQR: () => void;
+  onGotoAbo: () => void;
   updateChild: (id: string, updates: Partial<Pick<Child, 'firstName' | 'lastName' | 'className' | 'cycle'>>) => void;
   deleteChild: (id: string) => void;
   flash: (ok: boolean, text: string) => void;
@@ -1317,6 +1324,7 @@ function KidCard({ k, sub, pending, token, balance, copiedToken, onCopy, onPNG, 
   const [fFirst, setFFirst] = useState('');
   const [fLast, setFLast] = useState('');
   const [fClass, setFClass] = useState('');
+  const pct = totalMeals > 0 && sub ? Math.min(100, Math.round((sub.mealsRemaining / totalMeals) * 100)) : 0;
 
   const startEdit = () => {
     setEditing(true);
@@ -1350,91 +1358,99 @@ function KidCard({ k, sub, pending, token, balance, copiedToken, onCopy, onPNG, 
   };
 
   return (
-    <li id={`carte-${k.id}`} className="scroll-mt-24 bg-white rounded-3xl border-2 border-slate-100 shadow-sm hover:shadow-lg transition-shadow overflow-hidden">
-      <div className="bg-gradient-to-r from-slate-900 to-slate-700 px-5 pt-4 pb-4 text-white">
-        <div className="flex items-center gap-3">
-          <span className="w-11 h-11 rounded-2xl bg-white/15 border border-white/20 text-white flex items-center justify-center text-lg font-black flex-shrink-0">
-            {k.firstName.charAt(0).toUpperCase()}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold truncate">{k.firstName} {k.lastName}</p>
-            <p className="text-xs text-slate-300 truncate">{k.className} · {CYCLE_LABEL[k.cycle ?? 'primaire']}</p>
-          </div>
-          <span className={`flex-shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-full ${sub ? 'bg-emerald-400 text-emerald-950' : pending ? 'bg-amber-300 text-amber-950' : 'bg-white/15 text-slate-200'}`}>
-            {sub ? `${sub.mealsRemaining} repas` : pending ? 'En attente' : 'Sans abo'}
-          </span>
-        </div>
-        <div className="mt-3">
-          <p className="text-2xl font-black tracking-tight tabular-nums">{formatCurrency(balance)}</p>
-          <p className="text-[11px] text-slate-300">Solde carte · tickets repas</p>
-        </div>
+    <li className="rounded-3xl bg-slate-900 text-white p-5 md:p-6 shadow-xl border border-slate-800 overflow-hidden relative">
+      <div aria-hidden className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-emerald-500/15 blur-3xl" />
+      <div className="relative flex flex-wrap items-center gap-2">
+        <p className="text-xs font-bold uppercase tracking-widest text-emerald-300 truncate">
+          • {sub ? `Carte active – ${formulaName}` : pending ? 'Carte – En attente' : 'Carte – Sans abonnement'}
+        </p>
+        <span className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full bg-white/15 text-emerald-200 whitespace-nowrap tabular-nums">
+          {sub ? `J-${days} restants` : formatCurrency(balance)}
+        </span>
       </div>
-      <div className="p-4">
-        <div className="flex items-center gap-3 rounded-2xl bg-slate-50 border p-3">
-          <div ref={qrRefCb} className="p-1.5 border border-slate-200 bg-white flex-shrink-0 rounded-lg">
-            <QRCodeSVG value={token} size={84} level="M" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="font-mono text-xs font-semibold text-slate-600 tracking-wider truncate">{token}</p>
-            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-              <button onClick={() => onCopy(token)} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
-                <Copy className="w-3 h-3" /> {copiedToken === token ? 'Copié' : 'Copier'}
-              </button>
-              <button onClick={() => onPNG(k.id, token, `${k.firstName} ${k.lastName}`)} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
-                <Download className="w-3 h-3" /> PNG
-              </button>
-              <button onClick={onPrint} className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-800">
-                <Printer className="w-3 h-3" /> Imprimer
-              </button>
-            </div>
-          </div>
-        </div>
-        {editing ? (
-          <div className="mt-3 space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <input value={fLast} onChange={(e) => setFLast(e.target.value)} aria-label="Nom" placeholder="Nom" className="px-3 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-emerald-600" />
-              <input value={fFirst} onChange={(e) => setFFirst(e.target.value)} aria-label="Prénom" placeholder="Prénom" className="px-3 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-emerald-600" />
-            </div>
-            <select value={fClass} onChange={(e) => setFClass(e.target.value)} aria-label="Classe" className="px-3 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm bg-white w-full">
-              <option value="">Choisir…</option>
-              {CYCLES.map((c) => (
-                <optgroup key={c.id} label={c.label}>
-                  {c.classes.map((cls) => <option key={cls} value={cls}>{cls}</option>)}
-                </optgroup>
-              ))}
-            </select>
-            <div className="flex gap-2 pt-1">
-              <button onClick={saveEdit} className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-bold">
-                <Check className="w-4 h-4" /> Enregistrer
-              </button>
-              <button onClick={() => setEditing(false)} className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-white border text-sm">
-                <X className="w-4 h-4" /> Annuler
-              </button>
-            </div>
-          </div>
-        ) : confirming ? (
-          <div className="mt-3 rounded-xl bg-red-50 border border-red-200 p-3">
-            <p className="text-sm font-semibold text-red-800">Retirer {k.firstName} {k.lastName} ?</p>
-            <div className="mt-2 flex gap-2">
-              <button onClick={() => { deleteChild(k.id); setConfirming(false); flash(true, `${k.firstName} ${k.lastName} retiré.`); }} className="flex-1 px-3 py-2 min-h-[44px] rounded-xl bg-red-600 text-white text-xs font-bold">
-                Oui, retirer
-              </button>
-              <button onClick={() => setConfirming(false)} className="flex-1 px-3 py-2 min-h-[44px] rounded-xl bg-white border text-xs">
-                Annuler
-              </button>
-            </div>
-          </div>
+      {sub ? (
+        <>
+          <p className="relative mt-3 text-4xl font-black tracking-tight tabular-nums">{sub.mealsRemaining} <span className="text-lg font-bold text-slate-300">repas restants</span></p>
+          <p className="relative mt-1 text-xs text-slate-400">
+            {k.firstName} {k.lastName} · {k.className} · Du {new Date(sub.startDate).toLocaleDateString('fr-FR')} au {new Date(sub.endDate).toLocaleDateString('fr-FR')}
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="relative mt-3 text-4xl font-black tracking-tight tabular-nums">{formatCurrency(balance)}</p>
+          <p className="relative mt-1 text-xs text-slate-400">
+            {k.firstName} {k.lastName} · {k.className} · {CYCLE_LABEL[k.cycle ?? 'primaire']}
+          </p>
+        </>
+      )}
+      <div className="relative mt-4 flex flex-wrap gap-2">
+        <button onClick={onGotoQR} className="inline-flex items-center gap-1.5 px-5 py-2.5 min-h-[44px] rounded-xl bg-white text-slate-900 text-sm font-bold hover:bg-slate-100 active:scale-[0.99] transition-all">
+          Mon QR
+        </button>
+        {sub && onRenew ? (
+          <button onClick={onRenew} className="inline-flex items-center gap-1.5 px-5 py-2.5 min-h-[44px] rounded-xl bg-emerald-500 text-white text-sm font-bold hover:bg-emerald-400 active:scale-[0.99] transition-all">
+            <Smartphone className="w-4 h-4" /> Renouveler
+          </button>
         ) : (
-          <div className="mt-3 flex gap-2">
-            <button onClick={startEdit} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl border text-xs font-bold hover:bg-slate-50">
-              <Pencil className="w-3.5 h-3.5" /> Modifier
-            </button>
-            <button onClick={askDelete} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50">
-              <Trash2 className="w-3.5 h-3.5" /> Retirer
-            </button>
-          </div>
+          <button onClick={onGotoAbo} className="inline-flex items-center gap-1.5 px-5 py-2.5 min-h-[44px] rounded-xl bg-emerald-500 text-white text-sm font-bold hover:bg-emerald-400 active:scale-[0.99] transition-all">
+            Choisir une formule
+          </button>
         )}
       </div>
+      {sub && (
+        <div className="relative mt-4">
+          <p className="text-xs font-bold text-slate-300 tabular-nums">Solde repas {sub.mealsRemaining}/{totalMeals}</p>
+          <div className="mt-1.5 h-2 rounded-full bg-white/15 overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+            <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${pct}%` }} />
+          </div>
+          {formulaRules && <p className="mt-2 text-[11px] text-slate-400">{formulaRules}</p>}
+        </div>
+      )}
+      {editing ? (
+        <div className="relative mt-4 space-y-2 rounded-2xl bg-white/5 border border-white/10 p-3">
+          <div className="grid grid-cols-2 gap-2">
+            <input value={fLast} onChange={(e) => setFLast(e.target.value)} aria-label="Nom" placeholder="Nom" className="px-3 py-2 min-h-[44px] rounded-xl bg-white/10 border border-white/15 text-sm text-white placeholder:text-slate-400 outline-none focus:border-emerald-400" />
+            <input value={fFirst} onChange={(e) => setFFirst(e.target.value)} aria-label="Prénom" placeholder="Prénom" className="px-3 py-2 min-h-[44px] rounded-xl bg-white/10 border border-white/15 text-sm text-white placeholder:text-slate-400 outline-none focus:border-emerald-400" />
+          </div>
+          <select value={fClass} onChange={(e) => setFClass(e.target.value)} aria-label="Classe" className="px-3 py-2 min-h-[44px] rounded-xl bg-white/10 border border-white/15 text-sm text-white w-full outline-none focus:border-emerald-400">
+            <option value="" className="text-slate-900">Choisir…</option>
+            {CYCLES.map((c) => (
+              <optgroup key={c.id} label={c.label}>
+                {c.classes.map((cls) => <option key={cls} value={cls} className="text-slate-900">{cls}</option>)}
+              </optgroup>
+            ))}
+          </select>
+          <div className="flex gap-2 pt-1">
+            <button onClick={saveEdit} className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-500 text-white text-sm font-bold">
+              <Check className="w-4 h-4" /> Enregistrer
+            </button>
+            <button onClick={() => setEditing(false)} className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-white/10 border border-white/15 text-sm">
+              <X className="w-4 h-4" /> Annuler
+            </button>
+          </div>
+        </div>
+      ) : confirming ? (
+        <div className="relative mt-4 rounded-xl bg-red-500/15 border border-red-500/30 p-3">
+          <p className="text-sm font-semibold text-red-200">Retirer {k.firstName} {k.lastName} ?</p>
+          <div className="mt-2 flex gap-2">
+            <button onClick={() => { deleteChild(k.id); setConfirming(false); flash(true, `${k.firstName} ${k.lastName} retiré.`); }} className="flex-1 px-3 py-2 min-h-[44px] rounded-xl bg-red-600 text-white text-xs font-bold">
+              Oui, retirer
+            </button>
+            <button onClick={() => setConfirming(false)} className="flex-1 px-3 py-2 min-h-[44px] rounded-xl bg-white/10 border border-white/15 text-xs">
+              Annuler
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="relative mt-4 flex gap-2">
+          <button onClick={startEdit} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl bg-white/10 border border-white/15 text-xs font-bold hover:bg-white/15 transition-colors">
+            <Pencil className="w-3.5 h-3.5" /> Modifier
+          </button>
+          <button onClick={askDelete} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl bg-white/10 border border-red-500/40 text-red-300 text-xs font-bold hover:bg-red-500/20 transition-colors">
+            <Trash2 className="w-3.5 h-3.5" /> Retirer
+          </button>
+        </div>
+      )}
     </li>
   );
 }

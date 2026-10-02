@@ -266,7 +266,7 @@ interface RestoContextType {
   deleteExpense: (id: string) => void;
   // ---- Menu de la semaine (informatif) ----
   weeklyMenus: WeeklyMenu[];
-  updateWeeklyMenu: (day: WeeklyMenu['day'], name: string, description: string, items?: WeeklyMenuItem[]) => void;
+  updateWeeklyMenu: (day: WeeklyMenu['day'], name: string, description: string, items?: WeeklyMenuItem[], price?: number) => void;
 }
 
 const RestoContext = createContext<RestoContextType | undefined>(undefined);
@@ -556,14 +556,14 @@ export function RestoProvider({ children }: { children: ReactNode }) {
             if (!Array.isArray(raw)) return [];
             return raw
               .filter((it): it is WeeklyMenuItem =>
-                !!it && typeof (it as WeeklyMenuItem).name === 'string' && Number.isFinite(Number((it as WeeklyMenuItem).price)))
-              .map((it) => ({ name: (it as WeeklyMenuItem).name.trim().slice(0, 60), price: Math.max(0, Math.floor(Number((it as WeeklyMenuItem).price))) }));
+                !!it && typeof (it as WeeklyMenuItem).name === 'string')
+              .map((it) => ({ name: (it as WeeklyMenuItem).name.trim().slice(0, 60), price: Math.max(0, Math.floor(Number((it as WeeklyMenuItem).price) || 0)) }));
           };
           const remote = WEEK_DAYS.map((d) => {
             const r = byDay.get(d);
             return r
-              ? { day: d, name: r.name ?? '', description: r.description ?? '', items: cleanItems((r as { items?: unknown }).items) }
-              : { day: d, name: '', description: '', items: [] };
+              ? { day: d, name: r.name ?? '', description: r.description ?? '', items: cleanItems((r as { items?: unknown }).items), price: Math.max(0, Math.floor(Number((r as { price?: unknown }).price) || 0)) }
+              : { day: d, name: '', description: '', items: [] as WeeklyMenuItem[], price: 0 };
           });
           // La base distante est la vérité quand le Personnel a publié ;
           // sinon (première installation) on présente la semaine de référence.
@@ -1845,14 +1845,15 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     supabase.from('finance_expenses').delete().eq('id', id).then(() => undefined, () => undefined);
   }, []);
 
-  const updateWeeklyMenu = useCallback((day: WeeklyMenu['day'], name: string, description: string, items: WeeklyMenuItem[] = []) => {
+  const updateWeeklyMenu = useCallback((day: WeeklyMenu['day'], name: string, description: string, items: WeeklyMenuItem[] = [], price?: number) => {
     const clean = items
-      .filter((it) => it && typeof it.name === 'string' && Number.isFinite(Number(it.price)))
-      .map((it) => ({ name: it.name.trim().slice(0, 60), price: Math.max(0, Math.floor(Number(it.price))) }))
+      .filter((it) => it && typeof it.name === 'string')
+      .map((it) => ({ name: it.name.trim().slice(0, 60), price: Math.max(0, Math.floor(Number(it.price) || 0)) }))
       .filter((it) => it.name)
       .slice(0, 8);
-    setWeeklyMenus((prev) => prev.map((m) => (m.day === day ? { ...m, name, description, items: clean } : m)));
-    supabase.from('weekly_menus').upsert({ day, name, description, items: clean }).then(() => undefined, () => undefined);
+    const dayPrice = Math.max(0, Math.floor(Number(price) || 0));
+    setWeeklyMenus((prev) => prev.map((m) => (m.day === day ? { ...m, name, description, items: clean, price: dayPrice } : m)));
+    supabase.from('weekly_menus').upsert({ day, name, description, items: clean, price: dayPrice }).then(() => undefined, () => undefined);
   }, []);
 
   const nowMsStats = Date.now();

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Product, ProductExtra, WEEK_DAYS, WeeklyMenuItem } from '@/types/menu';
 import { categories } from '@/data/mockData';
 import { formatCurrency } from '@/lib/utils';
-import { weeklyMenuTotal, sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete } from '@/lib/menus';
+import { sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete } from '@/lib/menus';
 import { validateFormulaPayload, pricePerMeal, isOfficialFormula } from '@/lib/formulas';
 import { Plus, Edit2, Trash2, X, Check, CalendarDays, UtensilsCrossed, Ticket, Pencil, Eye } from 'lucide-react';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -57,13 +57,13 @@ const MenuManagement = () => {
     setShowModal(true);
   };
 
-  type DayDraft = { name: string; description: string; items: WeeklyMenuItem[] };
+  type DayDraft = { name: string; description: string; price: string; items: WeeklyMenuItem[] };
   const [weekDraft, setWeekDraft] = useState<Record<string, DayDraft> | null>(null);
   const [weekSaved, setWeekSaved] = useState(false);
   const [pickProduct, setPickProduct] = useState<Record<string, string>>({});
-  const [customDish, setCustomDish] = useState<Record<string, { name: string; price: string }>>({});
+  const [customDish, setCustomDish] = useState<Record<string, string>>({});
   const baseWeek = (): Record<string, DayDraft> =>
-    Object.fromEntries(weeklyMenus.map((m) => [m.day, { name: m.name, description: m.description, items: (m.items ?? []).map((it) => ({ ...it })) }]));
+    Object.fromEntries(weeklyMenus.map((m) => [m.day, { name: m.name, description: m.description, price: m.price && m.price > 0 ? String(m.price) : '', items: (m.items ?? []).map((it) => ({ name: it.name, price: 0 })) }]));
   const weekForm: Record<string, DayDraft> = weekDraft ?? baseWeek();
   const setDay = (day: string, patch: Partial<DayDraft>) => {
     const cur = weekDraft ?? baseWeek();
@@ -81,12 +81,14 @@ const MenuManagement = () => {
     setDay(day, { items: cur.items.filter((_, i) => i !== idx) });
   };
   const composedCount = WEEK_DAYS.filter((d) => (weekForm[d]?.items ?? []).length > 0).length;
-  const weekComplete = isWeekComplete(WEEK_DAYS.map((d) => ({ day: d, items: weekForm[d]?.items ?? [] })));
+  const dayPriceOf = (d: string) => Math.max(0, Math.floor(Number(weekForm[d]?.price) || 0));
+  const pricedCount = WEEK_DAYS.filter((d) => dayPriceOf(d) > 0).length;
+  const weekComplete = isWeekComplete(WEEK_DAYS.map((d) => ({ day: d, items: weekForm[d]?.items ?? [] }))) && pricedCount === 5;
   const saveWeekMenus = () => {
     if (!weekComplete) return;
     WEEK_DAYS.forEach((d) => {
       const row = weekForm[d];
-      if (row) updateWeeklyMenu(d, row.name.trim(), row.description.trim(), row.items);
+      if (row) updateWeeklyMenu(d, row.name.trim(), row.description.trim(), row.items, dayPriceOf(d));
     });
     setWeekDraft(null);
     setWeekSaved(true);
@@ -182,9 +184,9 @@ const MenuManagement = () => {
         <p className="font-bold text-slate-800 flex items-center gap-2">
           <CalendarDays className="w-5 h-5 text-orange-500" /> Menus du jour — composition
         </p>
-        <p className="text-xs text-slate-500 mt-1">Composez chaque menu du jour plat par plat avec les prix : le cumul se calcule seul. La semaine s’affiche aux parents une fois les 5 jours composés et publiés.</p>
+        <p className="text-xs text-slate-500 mt-1">Composez chaque menu : plats (noms uniquement) + un prix unique par jour. La semaine s’affiche aux parents une fois les 5 jours composés, tarifiés et publiés.</p>
         {(() => {
-          const dayTotals = WEEK_DAYS.map((d) => weeklyMenuTotal(weekForm[d]?.items ?? []));
+          const dayTotals = WEEK_DAYS.map((d) => dayPriceOf(d));
           const weekTotal = dayTotals.reduce((s, t) => s + t, 0);
           const done = dayTotals.filter((t) => t > 0).length;
           return (
@@ -215,10 +217,9 @@ const MenuManagement = () => {
         <fieldset disabled={isDG} className="contents">
         <div className="mt-3 grid lg:grid-cols-2 gap-3">
           {WEEK_DAYS.map((d) => {
-            const row = weekForm[d] ?? { name: '', description: '', items: [] };
-            const total = weeklyMenuTotal(row.items);
+            const row = weekForm[d] ?? { name: '', description: '', price: '', items: [] };
             const picked = pickProduct[d] ?? '';
-            const custom = customDish[d] ?? { name: '', price: '' };
+            const custom = customDish[d] ?? '';
             return (
               <div key={d} className="rounded-2xl border-2 border-slate-100 p-4 hover:border-orange-200 transition-colors">
                 <div className="flex flex-wrap items-center gap-2">
@@ -232,9 +233,16 @@ const MenuManagement = () => {
                   />
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 whitespace-nowrap flex-shrink-0">{row.items.length} plat(s)</span>
                 </div>
-                <div className="mt-2 flex items-center justify-between rounded-xl bg-orange-50 border border-orange-100 px-3 py-2">
-                  <span className="text-[11px] font-black uppercase tracking-widest text-orange-700">Total menu</span>
-                  <span className="text-lg font-black text-slate-900">{formatCurrency(total)}</span>
+                <div className="mt-2 flex items-center gap-2 rounded-xl bg-orange-50 border border-orange-100 px-3 py-2">
+                  <label htmlFor={`prix-${d}`} className="text-[11px] font-black uppercase tracking-widest text-orange-700 whitespace-nowrap">Prix du ticket (FCFA)</label>
+                  <input
+                    id={`prix-${d}`}
+                    type="number" min={0} max={100000} step={100}
+                    value={row.price}
+                    onChange={(e) => setDay(d, { price: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                    placeholder="ex : 900"
+                    className="ml-auto w-32 px-3 py-1.5 rounded-xl border-2 border-orange-200 text-sm font-black text-right tabular-nums outline-none focus:border-orange-500 bg-white"
+                  />
                 </div>
                 <input
                   value={row.description}
@@ -249,7 +257,6 @@ const MenuManagement = () => {
                       <li key={`${it.name}-${i}`} className="px-3 py-1.5 flex items-center gap-2 text-sm">
                         <span className="w-5 h-5 rounded-lg bg-orange-100 text-orange-700 text-[11px] font-black flex items-center justify-center flex-shrink-0">{i + 1}</span>
                         <span className="font-semibold flex-1 truncate">{it.name}</span>
-                        <span className="font-bold text-slate-700 whitespace-nowrap">{formatCurrency(it.price)}</span>
                         <button
                           type="button"
                           onClick={() => removeDish(d, i)}
@@ -262,12 +269,6 @@ const MenuManagement = () => {
                     ))}
                   </ul>
                 )}
-                {row.items.length > 0 && (
-                  <div className="mt-2 pt-2 border-t-2 border-dashed border-slate-200 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-500">Cumul — {row.items.length} plat(s)</span>
-                    <span className="font-black text-slate-900">{formatCurrency(total)}</span>
-                  </div>
-                )}
                 <div className="mt-2 flex gap-2">
                   <select
                     value={picked}
@@ -276,7 +277,7 @@ const MenuManagement = () => {
                   >
                     <option value="">+ Plat du catalogue…</option>
                     {products.filter((p) => p.available).map((p) => (
-                      <option key={p.id} value={p.id}>{p.name} — {formatCurrency(p.price)}</option>
+                      <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
                   <button
@@ -284,7 +285,7 @@ const MenuManagement = () => {
                     onClick={() => {
                       const prod = products.find((p) => p.id === picked);
                       if (prod) {
-                        addDish(d, sanitizeMenuItem(prod.name, prod.price));
+                        addDish(d, sanitizeMenuItem(prod.name, 0));
                         setPickProduct((p) => ({ ...p, [d]: '' }));
                       }
                     }}
@@ -295,26 +296,19 @@ const MenuManagement = () => {
                 </div>
                 <div className="mt-2 flex gap-2">
                   <input
-                    value={custom.name}
-                    onChange={(e) => setCustomDish((p) => ({ ...p, [d]: { name: e.target.value, price: custom.price } }))}
+                    value={custom}
+                    onChange={(e) => setCustomDish((p) => ({ ...p, [d]: e.target.value }))}
                     placeholder="Plat libre (ex : Thiéboudienne)"
                     maxLength={60}
                     className="flex-1 min-w-0 px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500"
                   />
-                  <input
-                    type="number" min={0} max={100000}
-                    value={custom.price}
-                    onChange={(e) => setCustomDish((p) => ({ ...p, [d]: { name: custom.name, price: e.target.value } }))}
-                    placeholder="Prix"
-                    className="w-24 px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500"
-                  />
                   <button
                     type="button"
                     onClick={() => {
-                      const item = sanitizeMenuItem(custom.name, Number(custom.price));
+                      const item = sanitizeMenuItem(custom, 0);
                       if (item) {
                         addDish(d, item);
-                        setCustomDish((p) => ({ ...p, [d]: { name: '', price: '' } }));
+                        setCustomDish((p) => ({ ...p, [d]: '' }));
                       }
                     }}
                     className="px-3 py-2 rounded-xl bg-orange-100 text-orange-700 text-sm font-bold hover:bg-orange-200"
@@ -330,13 +324,13 @@ const MenuManagement = () => {
           <button
             onClick={saveWeekMenus}
             disabled={!weekComplete}
-            title={weekComplete ? 'Publier la semaine (visible page Menus)' : 'Composez les 5 jours pour publier'}
+            title={weekComplete ? 'Publier la semaine (visible page Menus)' : 'Composez et tarifez les 5 jours pour publier'}
             className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-700 disabled:bg-slate-200 disabled:text-slate-400"
           >
             Publier les menus de la semaine
           </button>
           <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${weekComplete ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-            {composedCount}/5 jours composés{weekComplete ? '' : ' — complétez tous les jours pour publier'}
+            {composedCount}/5 jours composés · {pricedCount}/5 tarifiés{weekComplete ? '' : ' — plats + prix requis pour publier'}
           </span>
           {weekSaved && <span className="text-xs font-bold text-green-700">Menus publiés ✓ (visibles page Menus)</span>}
         </div>

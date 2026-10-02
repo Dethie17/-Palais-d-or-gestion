@@ -10,6 +10,16 @@ export function weeklyMenuTotal(items: WeeklyMenuItem[] | null | undefined): num
 }
 
 /**
+ * Prix du ticket du jour : le prix UNIQUE saisi par le Personnel quand il est
+ * défini (> 0), sinon la somme des prix (compatibilité anciens stocks).
+ */
+export function menuTicketTotal(menu: { price?: number; items: WeeklyMenuItem[] | null | undefined }): number {
+  const solo = Math.floor(Number(menu?.price) || 0);
+  if (solo > 0) return solo;
+  return weeklyMenuTotal(menu?.items);
+}
+
+/**
  * Semaine publiable : les 5 jours (Lun → Ven) ont au moins un plat.
  * Tant que ce n'est pas le cas, la section Menus reste vide (état pro).
  */

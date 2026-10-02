@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { weeklyMenuTotal, sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete, publishedDays } from '@/lib/menus';
+import { weeklyMenuTotal, menuTicketTotal, sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete, publishedDays } from '@/lib/menus';
 
 describe('composition des menus du jour (DG)', () => {
   it('total = somme des prix (négatifs ignorés)', () => {
@@ -12,6 +12,12 @@ describe('composition des menus du jour (DG)', () => {
     ).toBe(1000);
     expect(weeklyMenuTotal([{ name: 'Offert', price: 0 }])).toBe(0);
     expect(weeklyMenuTotal([{ name: 'Erreur', price: -200 }])).toBe(0);
+  });
+
+  it('prix du ticket : prix unique du jour, sinon somme (compatibilité)', () => {
+    expect(menuTicketTotal({ price: 900, items: [{ name: 'A', price: 0 }] })).toBe(900);
+    expect(menuTicketTotal({ price: 0, items: [{ name: 'A', price: 500 }] })).toBe(500);
+    expect(menuTicketTotal({ items: [] })).toBe(0);
   });
 
   it('valide un plat : nom requis, prix entier 0–100 000', () => {
