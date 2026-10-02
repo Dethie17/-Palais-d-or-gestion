@@ -11,7 +11,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import WavePaymentModal from '@/components/WavePaymentModal';
 import PaymentReceiptModal from '@/components/PaymentReceiptModal';
 import TicketCard from '@/components/TicketCard';
-import { composedMenus } from '@/data/mockData';
+import { dayPhoto } from '@/data/cantineWeek';
 import { weeklyMenuTotal } from '@/lib/menus';
 import {
   CheckCircle, AlertCircle, Smartphone, Timer,
@@ -47,9 +47,6 @@ const ABO_AUDIENCE: Record<string, string> = {
 
 const DAY_ORDER = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'];
 const DAY_INDEX = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-
-/** Photo d’illustration du jour (vitrine cantine). */
-const dayPhoto = (day: string) => composedMenus.find((c) => c.day === day)?.image;
 
 const scrollTo = (id: string) => {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });

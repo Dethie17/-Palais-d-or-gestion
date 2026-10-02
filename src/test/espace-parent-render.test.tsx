@@ -69,8 +69,31 @@ describe('EspaceParentPage render (repro crash childId)', () => {
     expect(screen.getByText(/Recharger une carte/)).toBeTruthy();
   });
 
-  it('semaine vide tant que le Personnel ne publie rien (bel état vide)', () => {
+  it('semaine de référence affichée par défaut (menus validés + photos)', () => {
     seedChild();
+    renderPage();
+    expect(screen.getByText('Menu Élève')).toBeTruthy();
+    expect(screen.getByText('Menu Burger')).toBeTruthy();
+    expect(screen.getAllByText(/900 FCFA/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('semaine explicitement vidée par le Personnel (bel état vide)', () => {
+    localStorage.setItem(WEEK_KEY, JSON.stringify([
+      { day: 'Lundi', name: '', description: '', items: [] },
+      { day: 'Mardi', name: '', description: '', items: [] },
+      { day: 'Mercredi', name: '', description: '', items: [] },
+      { day: 'Jeudi', name: '', description: '', items: [] },
+      { day: 'Vendredi', name: '', description: '', items: [] },
+    ]));
+    seedChild();
+    // Le seed enfant ne touche pas aux menus : la semaine vidée survit.
+    localStorage.setItem(WEEK_KEY, JSON.stringify([
+      { day: 'Lundi', name: '', description: '', items: [] },
+      { day: 'Mardi', name: '', description: '', items: [] },
+      { day: 'Mercredi', name: '', description: '', items: [] },
+      { day: 'Jeudi', name: '', description: '', items: [] },
+      { day: 'Vendredi', name: '', description: '', items: [] },
+    ]));
     renderPage();
     expect(screen.getByText(/Menus en préparation/)).toBeTruthy();
     expect(screen.getByText(/Semaine pas encore publiée/)).toBeTruthy();
