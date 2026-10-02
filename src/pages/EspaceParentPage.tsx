@@ -711,7 +711,6 @@ function FormulaCard({ formulaId, name, audience, description, price, meals, day
       <h3 className="font-black text-slate-900 mt-2.5 leading-snug">{name}</h3>
       <p className="text-sm text-slate-500 mt-1">{description}</p>
       <p className="mt-4 text-3xl font-black tracking-tight text-slate-900 tabular-nums">{formatCurrency(price)}</p>
-      <p className="text-[13px] text-slate-500 mt-0.5">{meals} repas · {days} jours · <span className="font-bold text-emerald-700">≈ {formatCurrency(pricePerMeal(price, meals))} / repas</span></p>
       {!open ? (
         <button onClick={onOpen} className="mt-4 w-full py-3 min-h-[48px] rounded-xl font-bold text-sm text-white bg-gradient-to-r from-emerald-700 to-emerald-500 hover:from-emerald-800 hover:to-emerald-600 active:scale-[0.99] transition-all shadow-md shadow-emerald-600/20">
           Choisir · {formatCurrency(price)}
