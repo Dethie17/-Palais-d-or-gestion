@@ -27,14 +27,18 @@ interface DbUser {
 const CREATABLE_ROLES: UserRole[] = ['client', 'personnel', 'gestionnaire', 'admin'];
 
 /**
- * Paramètres — réservé au Directeur Général.
- * - Gérer les comptes : ajouter un gérant / personnel / client, supprimer,
- *   réinitialiser un mot de passe (table Supabase `users`).
+ * Établissement — Personnel de service (comptes du site + établissement)
+ * + Directeur Général (toute la plateforme).
+ * - Gérer les comptes : ajouter un client / personnel (/ gérant côté DG),
+ *   supprimer, réinitialiser un mot de passe (table Supabase `users`).
  * - Vue d'ensemble : abonnements, utilisateurs, historiques + raccourcis.
  */
 const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
   const { user } = useAuth();
   const { subscriptions, validations, payments } = useResto();
+  const isStaff = user?.role === 'personnel' || user?.role === 'caissier';
+  // Le personnel ne crée jamais de comptes Direction / Gérant.
+  const allowedRoles: UserRole[] = isStaff ? ['client', 'personnel'] : CREATABLE_ROLES;
 
   const [dbUsers, setDbUsers] = useState<DbUser[]>([]);
   const [offline, setOffline] = useState(false);
@@ -88,6 +92,10 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
     const username = newUsername.trim().toLowerCase();
     if (!username || !newPassword || newPassword.length < 6) {
       flash('err', 'Nom d’utilisateur requis et mot de passe de 6 caractères minimum.');
+      return;
+    }
+    if (isStaff && !(['client', 'personnel'] as string[]).includes(newRole)) {
+      flash('err', 'Le personnel ne peut créer que des comptes client ou personnel.');
       return;
     }
     if (isDemoAccount(username)) {
@@ -182,10 +190,12 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900 flex items-center gap-2">
-          <SettingsIcon className="w-6 h-6 text-slate-700" /> Paramètres
+          <SettingsIcon className="w-6 h-6 text-slate-700" /> Établissement
         </h1>
         <p className="text-slate-500 text-sm mt-1">
-          Réservé au <strong>Directeur Général</strong> — gérez les gérants, les accès et supervisez la plateforme.
+          {isStaff
+            ? <>Espace <strong>Personnel</strong> — comptes du site et établissement.</>
+            : <>Réservé à la <strong>Direction</strong> — gérez les accès et supervisez la plateforme.</>}
         </p>
       </div>
 
@@ -224,16 +234,16 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
         <>
           {/* Ajouter un compte */}
           <form onSubmit={handleAdd} className="bg-white rounded-2xl border p-5">
-            <p className="font-bold text-slate-800 flex items-center gap-2"><Plus className="w-5 h-5 text-green-700" /> Ajouter un compte (gérant, personnel, client…)</p>
+            <p className="font-bold text-slate-800 flex items-center gap-2"><Plus className="w-5 h-5 text-green-700" /> Ajouter un compte{isStaff ? ' (client, personnel)' : ' (gérant, personnel, client…)'}</p>
             <div className="mt-3 grid sm:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">Nom d’utilisateur</label>
-                <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="ex : gerant2" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm focus:border-green-600 outline-none" />
+                <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="ex : parent1" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm focus:border-green-600 outline-none" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">Rôle</label>
-                <select value={newRole} onChange={(e) => setNewRole(e.target.value as UserRole)} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm focus:border-green-600 outline-none bg-white">
-                  {CREATABLE_ROLES.map((r) => (
+                <select value={allowedRoles.includes(newRole) ? newRole : allowedRoles[0]} onChange={(e) => setNewRole(e.target.value as UserRole)} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm focus:border-green-600 outline-none bg-white">
+                  {allowedRoles.map((r) => (
                     <option key={r} value={r}>{getRoleDef(r).title}</option>
                   ))}
                 </select>

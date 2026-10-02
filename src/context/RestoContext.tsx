@@ -29,7 +29,6 @@ import {
 } from '@/lib/wave';
 import { getClientQrToken, isPersonalQrToken, getChildQrToken } from '@/lib/clientQr';
 import { inferCycleFromClass } from '@/lib/schoolCycles';
-import { composedMenus } from '@/data/mockData';
 
 const LS_KEYS = {
   establishments: 'o-resto-establishments-v1',
@@ -57,18 +56,15 @@ const LEGACY_LS_KEYS: Record<string, string> = {
   'o-resto-ticket-intents-v1': 'o-resto-ticket-intents',
 };
 
-// Menus de la semaine : pré-remplis avec la carte Miam's (Lun → Ven) pour que
-// l'espace parent affiche tous les menus dès l'installation. Le Gérant peut
-// les recomposer ensuite via Gestion Menu (MenuManagement).
-const DEFAULT_WEEKLY_MENUS: WeeklyMenu[] = WEEK_DAYS.map((day) => {
-  const composed = composedMenus.find((c) => c.day === day);
-  return {
-    day,
-    name: composed?.name ?? '',
-    description: composed?.description ?? '',
-    items: (composed?.items ?? []).map((it) => ({ name: it.name, price: it.price })),
-  };
-});
+// Menus de la semaine : VIDES tant que le Personnel n'a rien publié.
+// Règle : un jour n'existe que s'il a des plats (composés via Gestion Menu).
+// Aucun mock, aucune fausse liste — bel état vide côté parent.
+const DEFAULT_WEEKLY_MENUS: WeeklyMenu[] = WEEK_DAYS.map((day) => ({
+  day,
+  name: '',
+  description: '',
+  items: [],
+}));
 
 const DEFAULT_FINANCE_SETTINGS: FinanceSettings = {
   ismSubscriptionPct: 10, schoolPerSubscription: 2000, otherSalesPct: 5,
@@ -389,16 +385,14 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   const [financeExpenses, setFinanceExpenses] = useState<FinanceExpense[]>(() =>
     load<FinanceExpense[]>(LS_KEYS.financeExpenses, []),
   );
-  const [weeklyMenus, setWeeklyMenus] = useState<WeeklyMenu[]>(() => {
+  const [weeklyMenus, setWeeklyMenus] = useState<WeeklyMenu[]>(() =>
     // Migration douce : les menus enregistrés avant la composition (sans items) sont normalisés.
-    // Si le stock local est vide (5 jours sans plats), on repart sur la semaine pré-remplie.
-    const stored = load<WeeklyMenu[]>(LS_KEYS.weeklyMenus, DEFAULT_WEEKLY_MENUS).map((m) => ({
+    // Stock local vide = semaine vide (le Personnel publie via Gestion Menu).
+    load<WeeklyMenu[]>(LS_KEYS.weeklyMenus, DEFAULT_WEEKLY_MENUS).map((m) => ({
       ...m,
       items: Array.isArray((m as Partial<WeeklyMenu>).items) ? (m as WeeklyMenu).items : [],
-    }));
-    const hasAnyDish = stored.some((m) => (m.items ?? []).length > 0);
-    return hasAnyDish ? stored : DEFAULT_WEEKLY_MENUS;
-  });
+    })),
+  );
 
   useEffect(() => save(LS_KEYS.establishments, establishments), [establishments]);
   useEffect(() => save(LS_KEYS.formulas, formulas), [formulas]);
@@ -566,11 +560,9 @@ export function RestoProvider({ children }: { children: ReactNode }) {
               ? { day: d, name: r.name ?? '', description: r.description ?? '', items: cleanItems((r as { items?: unknown }).items) }
               : { day: d, name: '', description: '', items: [] };
           });
-          // Semaine distante vide (table initialisée sans plats) : on garde
-          // les menus locaux au lieu d'afficher une cantine vide aux parents.
-          if (remote.some((m) => m.items.length > 0)) {
-            setWeeklyMenus(remote);
-          }
+          // La base distante est la vérité : vide = rien publié par le
+          // Personnel → les parents voient le bel état vide, sans mock.
+          setWeeklyMenus(remote);
         }
         if (profRes.data && profRes.data.length > 0) {
           setParentProfiles(

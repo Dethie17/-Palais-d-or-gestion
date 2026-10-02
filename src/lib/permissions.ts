@@ -5,10 +5,11 @@ import { UserRole } from '@/context/AuthContext';
 // Chaque profil a un périmètre différent : le garde dans App.tsx s'en sert,
 // la Sidebar n'affiche que les pages autorisées.
 // Référentiel des profils : src/lib/roleTasks.ts
-// Directeur Général : pilotage + suivi (tableau de bord, finance,
-// abonnés & paiements en lecture seule, utilisateurs, paramètres).
-// Hors périmètre DG : caisse POS, validation, QR, abonnement parent,
-// mes enfants, tickets & formules, gestion menu (terrain : gérant/personnel).
+// Personnel de service : terrain cantine — accueil, gestion menu (composition
+// + publication semaine), validation repas, abonnés & encaissements,
+// QR élèves, utilisateurs, établissement (paramètres), historique.
+// Gérant de cantine : PAS d'accueil — tableau de bord, caisse POS (+ paiement,
+// reçu, commandes), menus récréation (lecture), historique.
 // Règle de caisse : SEUL le Gérant de cantine tient la Caisse (POS) au quotidien.
 const DG_PAGES: PageName[] = [
   'home', 'dashboard', 'finance', 'subscriptions',
@@ -18,14 +19,14 @@ export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // Parent : UN seul parcours continu (Espace Parent) + profil.
   // Anciennes pages conservées en redirect invisible vers 'home'.
   client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'history', 'profile'],
-  // Personnel : contrôle QR + validation, composition des menus, tickets (création + vente), encaissements, galerie QR, historique
-  personnel: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'history', 'profile'],
-  // Gérant : caisse POS + tableau de bord + historique (menus, abonnés, validation : DG/personnel)
-  gestionnaire: ['home', 'dashboard', 'history', 'pos', 'payment', 'receipt', 'orders', 'profile'],
+  // Personnel : cantine terrain — menus, validation, abonnés, QR, utilisateurs, établissement, historique
+  personnel: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'settings', 'history', 'profile'],
+  // Gérant : SANS accueil — tableau de bord, caisse POS, menus récréation (lecture), historique
+  gestionnaire: ['dashboard', 'pos', 'payment', 'receipt', 'orders', 'menus', 'history', 'profile'],
   // DG : pilotage + suivi uniquement
   admin: DG_PAGES,
   // Compatibilité anciens comptes : caissier → personnel, manager → DG
-  caissier: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'history', 'profile'],
+  caissier: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'settings', 'history', 'profile'],
   manager: DG_PAGES,
 };
 

@@ -2,9 +2,8 @@ import { PageName } from '@/types/menu';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { useProducts } from '@/context/ProductContext';
-import { composedMenus } from '@/data/mockData';
 import { formatCurrency } from '@/lib/utils';
-import { weeklyMenuTotal } from '@/lib/menus';
+import { weeklyMenuTotal, publishedDays } from '@/lib/menus';
 import {
   QrCode, UtensilsCrossed, Wallet, History, CalendarDays, ClipboardList,
   ScanLine, LayoutDashboard, Users, Banknote, ArrowRight, Clock,
@@ -68,7 +67,12 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
 
   const dayIdx = new Date().getDay();
   const isServiceDay = dayIdx >= 1 && dayIdx <= 5;
-  const menuDuJour = isServiceDay ? composedMenus[dayIdx - 1] : null;
+  const DAY_NAMES = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+  const todayName = DAY_NAMES[dayIdx];
+  const published = publishedDays(weeklyMenus);
+  const menuDuJour = isServiceDay
+    ? (published.find((m) => m.day === todayName) ?? published[0] ?? null)
+    : null;
   const todayValidations = validations.filter((v) => sameDay(new Date(v.validatedAt), new Date()));
   const acceptedToday = todayValidations.filter((v) => v.status === 'accepted');
   const rejectedToday = todayValidations.filter((v) => v.status === 'rejected');
@@ -377,38 +381,29 @@ function ClientHeroStats({ kidsCount, mealsLeft, onChildren, onSub }: {
   );
 }
 
-function MenuDuJourCard({ menu, actionLabel, onAction }: { menu: (typeof composedMenus)[number] | null; actionLabel?: string; onAction?: () => void }) {
-  if (!menu) {
+function MenuDuJourCard({ menu, actionLabel, onAction }: { menu: { day: string; name: string; description?: string; items: { name: string; price: number }[] } | null; actionLabel?: string; onAction?: () => void }) {
+  if (!menu || (menu.items ?? []).length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow border p-5 text-sm text-slate-500">
-        Pas de service aujourd’hui — la cantine sert du lundi au vendredi. Voir le catalogue.
+      <div className="bg-white rounded-2xl shadow border-2 border-dashed border-slate-200 p-8 text-center">
+        <p className="font-black text-slate-800">Menus en préparation</p>
+        <p className="mt-1 text-sm text-slate-500">Le Personnel compose la semaine — revenez bientôt. Service Lun → Ven.</p>
       </div>
     );
   }
+  const total = weeklyMenuTotal(menu.items);
   return (
     <div className="bg-white rounded-2xl shadow border border-orange-100 overflow-hidden">
-      {menu.image && (
-        <div className="relative h-40">
-          <img src={menu.image} alt={`${menu.name} — ${menu.day}`} loading="lazy" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-          <p className="absolute bottom-2 left-4 text-white font-bold flex items-center gap-2 drop-shadow">
-            <CalendarDays className="w-5 h-5" /> Menu de la semaine — {menu.day} : {menu.name}
-          </p>
-        </div>
-      )}
       <div className="p-5">
-      {!menu.image && (
-        <div className="flex items-center gap-2 font-bold text-slate-800">
-          <CalendarDays className="w-5 h-5 text-orange-500" /> Menu de la semaine — {menu.day} : {menu.name}
-        </div>
-      )}
+      <div className="flex items-center gap-2 font-bold text-slate-800">
+        <CalendarDays className="w-5 h-5 text-orange-500" /> Menu — {menu.day} : {menu.name || `Menu du ${menu.day}`}
+      </div>
       <ul className="mt-2 space-y-1 text-sm">
         {menu.items.map((it) => (
           <li key={it.name} className="flex justify-between"><span className="flex items-center gap-1.5"><UtensilsCrossed className="w-3.5 h-3.5 text-slate-400" /> {it.name}</span><span className="font-semibold">{formatCurrency(it.price)}</span></li>
         ))}
       </ul>
       <div className="mt-3 flex items-center justify-between">
-        <p className="font-extrabold text-lg">{formatCurrency(menu.total)}</p>
+        <p className="font-extrabold text-lg">{formatCurrency(total)}</p>
         {actionLabel && onAction && (
           <button onClick={onAction} className="px-4 py-2 rounded-xl bg-orange-500 text-white text-sm font-bold hover:bg-orange-600">
             {actionLabel}

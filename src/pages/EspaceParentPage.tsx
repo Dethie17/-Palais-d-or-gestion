@@ -66,7 +66,7 @@ const EspaceParentPage = () => {
     formulas, mySubscriptions, myPayments, myValidations,
     subscribe, paySubscription, confirmMobilePayment, resumeMobilePayment,
     renewSubscription, buyTicket, buyDayMenu, myChildren, addChild,
-    updateChild, deleteChild, weeklyMenus, topUpChild, confirmWalletTopUpMobile,
+    updateChild, deleteChild, weeklyMenus, confirmWalletTopUpMobile,
     parentProfileOf, walletOf, childTxs,
   } = useResto();
 
@@ -79,9 +79,6 @@ const EspaceParentPage = () => {
   const [copied, setCopied] = useState<string | null>(null);
   /** Formule dont le panneau de paiement intégré est ouvert. */
   const [payFor, setPayFor] = useState<string | null>(null);
-  const [rechargeChild, setRechargeChild] = useState('');
-  const [rechargePreset, setRechargePreset] = useState<number | null>(2000);
-  const [rechargeCustom, setRechargeCustom] = useState('');
   const [ticketAlt, setTicketAlt] = useState<{ formulaId: string; name: string } | null>(null);
   const [dayBuyer, setDayBuyer] = useState<Record<string, string>>({});
   const qrRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -169,36 +166,10 @@ const EspaceParentPage = () => {
     setTimeout(() => scrollTo('cartes'), 400);
   };
 
-  // ---------- Recharge carte ----------
-  const rechargeAmount = (() => {
-    const custom = parseInt(rechargeCustom.replace(/\D/g, ''), 10);
-    if (Number.isFinite(custom) && custom > 0) return custom;
-    return rechargePreset ?? 0;
-  })();
-
-  const handleRecharge = () => {
-    const childId = rechargeChild || kids[0]?.id;
-    if (!childId) {
-      flash(false, 'Inscrivez d’abord un enfant à l’étape 1.');
-      setTimeout(() => scrollTo('inscription'), 150);
-      return;
-    }
-    if (!rechargeAmount || rechargeAmount <= 0) {
-      flash(false, 'Choisissez ou saisissez un montant à recharger.');
-      return;
-    }
-    try {
-      const res = topUpChild(childId, rechargeAmount, 'intouch');
-      const wave = 'wave' in res ? res.wave : undefined;
-      if (wave) {
-        setConfirmError(null);
-        setWaveModal({ kind: 'topup', txId: res.tx.id, wave });
-        return;
-      }
-      flash(true, 'Recharge enregistrée.');
-    } catch (err) {
-      flash(false, err instanceof Error ? err.message : 'Recharge impossible.');
-    }
+  // ---------- Recharge carte : panneau InTouch intégré (comme les abonnements) ----------
+  const handleRecharged = (childId: string, amount: number) => {
+    const k = kids.find((x) => x.id === childId);
+    flash(true, `Carte de ${k?.firstName ?? 'l’enfant'} rechargée de ${formatCurrency(amount)} — nouveau solde : ${formatCurrency(walletOf(childId) + amount)}.`);
   };
 
   const handleResumeTopup = (tx: WalletTx) => {
@@ -230,7 +201,6 @@ const EspaceParentPage = () => {
       }
       setWaveModal(null);
       setConfirmError(null);
-      setRechargeCustom('');
       flash(true, text);
       return;
     }
@@ -427,8 +397,11 @@ const EspaceParentPage = () => {
   }, [myPayments, username, kids, childTxs, histChild, myValidations, allMine, soldeAfterByTx, childNameOf]);
 
   const sortedMenus = [...weeklyMenus].sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day));
-  const menuDuJour = sortedMenus.find((m) => m.day === todayName && (m.items ?? []).length > 0)
-    ?? sortedMenus.find((m) => (m.items ?? []).length > 0);
+  // Seuls les jours publiés par le Personnel (au moins un plat) existent.
+  // Semaine vide = bel état vide, aucun contenu inventé.
+  const publishedMenus = sortedMenus.filter((m) => (m.items ?? []).length > 0);
+  const menuDuJour = publishedMenus.find((m) => m.day === todayName)
+    ?? publishedMenus[0];
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -556,7 +529,7 @@ const EspaceParentPage = () => {
         {/* ===== 3. MENU : jour + semaine + tickets ===== */}
         <section id="menu" className="scroll-mt-24">
           <h2 className="text-xl md:text-2xl font-bold text-slate-900">3 · Menu du jour</h2>
-          <p className="text-sm text-slate-500 mt-1">Payé avec la carte crédit de l’enfant : le total est débité, 1 repas est crédité.</p>
+          <p className="text-sm text-slate-500 mt-1">Payé avec la carte de l’enfant : le total est débité, 1 repas est crédité. Menus publiés par le Personnel.</p>
 
           {menuDuJour && (menuDuJour.items ?? []).length > 0 ? (
             <div className="mt-4 max-w-md">
@@ -572,26 +545,45 @@ const EspaceParentPage = () => {
               />
             </div>
           ) : (
-            <p className="mt-4 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-6 text-center">
-              Menu pas encore publié.
-            </p>
+            <div className="mt-4 bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
+              <p className="text-lg font-black text-slate-800">Menus en préparation</p>
+              <p className="mt-1.5 text-sm text-slate-500 max-w-md mx-auto">
+                Le Personnel compose les menus de la semaine — service du midi, du lundi au vendredi.
+                Rien n’est affiché tant que la semaine n’est pas publiée. Revenez bientôt.
+              </p>
+            </div>
           )}
 
-          <h3 className="mt-8 font-bold text-slate-800">La semaine</h3>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
-            {sortedMenus.filter((m) => m.day !== menuDuJour?.day).map((m) => (
-              <MenuTicketCard
-                key={m.day}
-                menu={m}
-                highlight={false}
-                kids={kids}
-                walletOf={walletOf}
-                buyer={dayBuyer[m.day] ?? kids[0]?.id ?? ''}
-                onBuyer={(id) => setDayBuyer((p) => ({ ...p, [m.day]: id }))}
-                onBuy={() => handleBuyDayMenu(m.day, weeklyMenuTotal(m.items))}
-              />
-            ))}
-          </div>
+          <h3 className="mt-8 font-bold text-slate-800">
+            La semaine
+            {publishedMenus.length > 0 && (
+              <span className="ml-2 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 align-middle">
+                {publishedMenus.length}/5 jours publiés
+              </span>
+            )}
+          </h3>
+          {publishedMenus.filter((m) => m.day !== menuDuJour?.day).length === 0 ? (
+            <p className="mt-3 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-6 text-center">
+              {publishedMenus.length === 0
+                ? 'Semaine pas encore publiée par le Personnel.'
+                : 'Un seul jour publié pour l’instant.'}
+            </p>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
+              {publishedMenus.filter((m) => m.day !== menuDuJour?.day).map((m) => (
+                <MenuTicketCard
+                  key={m.day}
+                  menu={m}
+                  highlight={false}
+                  kids={kids}
+                  walletOf={walletOf}
+                  buyer={dayBuyer[m.day] ?? kids[0]?.id ?? ''}
+                  onBuyer={(id) => setDayBuyer((p) => ({ ...p, [m.day]: id }))}
+                  onBuy={() => handleBuyDayMenu(m.day, weeklyMenuTotal(m.items))}
+                />
+              ))}
+            </div>
+          )}
 
           <h3 className="mt-8 font-bold text-slate-800">Tickets repas <span className="font-normal text-sm text-slate-400">· prix fixe, payés par la carte</span></h3>
           {customTickets.length === 0 ? (
@@ -621,18 +613,18 @@ const EspaceParentPage = () => {
               )}
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
                 {customTickets.map((t) => (
-                  <div key={t.id} className="bg-white rounded-2xl border p-5 flex flex-col">
-                    <h4 className="font-bold text-slate-900">{t.name}</h4>
+                  <article key={t.id} className="bg-white rounded-2xl border-2 border-slate-100 p-5 md:p-6 flex flex-col shadow-sm hover:shadow-lg hover:border-slate-200 transition-all">
+                    <h4 className="font-bold text-slate-900 leading-snug">{t.name}</h4>
                     <p className="text-sm text-slate-500 mt-1">{t.description}</p>
-                    <p className="mt-3 text-2xl font-bold">{formatCurrency(t.price)}</p>
-                    <p className="text-sm text-slate-500">{t.mealsIncluded} repas · {t.durationDays} jours · ≈ {formatCurrency(pricePerMeal(t.price, t.mealsIncluded))} / repas</p>
-                    <button onClick={() => openTicketAlt(t.id, t.name)} className="mt-4 w-full py-3 min-h-[48px] rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700">
+                    <p className="mt-3 text-2xl font-black tracking-tight text-slate-900">{formatCurrency(t.price)}</p>
+                    <p className="text-[13px] text-slate-500 mt-0.5">{t.mealsIncluded} repas · {t.durationDays} jours · ≈ {formatCurrency(pricePerMeal(t.price, t.mealsIncluded))} / repas</p>
+                    <button onClick={() => openTicketAlt(t.id, t.name)} className="mt-4 w-full py-3 min-h-[48px] rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 active:scale-[0.99] transition-all">
                       Payer avec la carte · {formatCurrency(t.price)}
                     </button>
-                    <button onClick={() => handleBuyTicket(t.id, t.name)} className="mt-2 text-sm font-semibold text-emerald-700 underline underline-offset-2">
+                    <button onClick={() => handleBuyTicket(t.id, t.name)} className="mt-2 text-sm font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-800">
                       Ou payer via InTouch
                     </button>
-                  </div>
+                  </article>
                 ))}
               </div>
             </>
@@ -741,44 +733,21 @@ const EspaceParentPage = () => {
           )}
 
           {kids.length > 0 && (
-            <div className="mt-4 bg-white rounded-2xl border p-5">
-              <p className="font-bold text-slate-900">Recharger une carte</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {kids.map((k) => {
-                  const sel = (rechargeChild || kids[0].id) === k.id;
-                  return (
-                    <button
-                      key={k.id}
-                      onClick={() => setRechargeChild(k.id)}
-                      className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 ${sel ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}
-                    >
-                      {k.firstName} {k.lastName} · {formatCurrency(walletOf(k.id))}
-                    </button>
-                  );
-                })}
+            <div className="mt-4 rounded-3xl bg-slate-900 text-white p-5 md:p-6 shadow-xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-bold uppercase tracking-widest text-emerald-300">
+                  • Recharger une carte
+                </p>
+                <span className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full bg-white/15 text-emerald-200">
+                  Solde total · {formatCurrency(totals.balance)}
+                </span>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                {[1000, 2000, 5000, 10000].map((a) => (
-                  <button
-                    key={a}
-                    onClick={() => { setRechargePreset(a); setRechargeCustom(''); }}
-                    className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 ${rechargePreset === a && !rechargeCustom ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200'}`}
-                  >
-                    {formatCurrency(a)}
-                  </button>
-                ))}
-                <input
-                  inputMode="numeric"
-                  value={rechargeCustom}
-                  onChange={(e) => setRechargeCustom(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="Autre montant"
-                  aria-label="Montant libre en FCFA"
-                  className="px-3.5 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-xs font-bold w-36 outline-none focus:border-emerald-600"
-                />
+              <p className="mt-2 text-sm text-slate-300">
+                Choisissez la carte, le montant, puis validez avec votre code InTouch — comme pour les abonnements.
+              </p>
+              <div className="mt-4 rounded-2xl bg-white text-slate-900 p-4 md:p-5">
+                <RechargePanel kids={kids} walletOf={walletOf} onDone={handleRecharged} onError={(t) => flash(false, t)} />
               </div>
-              <button onClick={handleRecharge} className="mt-3 inline-flex items-center gap-2 px-6 py-3 min-h-[48px] rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700">
-                <Smartphone className="w-4 h-4" /> Recharger{rechargeAmount > 0 ? ` · ${formatCurrency(rechargeAmount)}` : ''}
-              </button>
             </div>
           )}
         </section>
@@ -1040,6 +1009,193 @@ function FormulaPaymentPanel({ formulaId, formulaName, price, kids, onStart, onP
         className="w-full py-3 min-h-[48px] rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-40"
       >
         {confirming ? 'Confirmation…' : 'Confirmer le paiement'}
+      </button>
+    </div>
+  );
+}
+
+/** Recharge carte : même finalisation InTouch que les abonnements.
+ * 1) carte + montant + téléphone → Valider (demande InTouch)
+ * 2) code à 6 chiffres → Confirmer (crédit immédiat + solde suivi).
+ */
+function RechargePanel({ kids, walletOf, onDone, onError }: {
+  kids: Child[]; walletOf: (id: string) => number;
+  onDone: (childId: string, amount: number) => void;
+  onError: (text: string) => void;
+}) {
+  const { topUpChild, confirmWalletTopUpMobile } = useResto();
+  const [childId, setChildId] = useState(kids[0]?.id ?? '');
+  const [preset, setPreset] = useState<number | null>(2000);
+  const [custom, setCustom] = useState('');
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
+  const [wave, setWave] = useState<WavePaymentRequest | null>(null);
+  const [txId, setTxId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (kids.length > 0 && !kids.some((k) => k.id === childId)) setChildId(kids[0].id);
+  }, [kids, childId]);
+
+  useEffect(() => {
+    if (!wave) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [wave]);
+
+  const parsedCustom = parseInt(custom.replace(/\D/g, ''), 10);
+  const amount = Number.isFinite(parsedCustom) && parsedCustom > 0 ? parsedCustom : (preset ?? 0);
+  const left = wave ? Math.max(0, new Date(wave.expiresAt).getTime() - now) : 0;
+  const countdown = `${String(Math.floor(left / 60000)).padStart(2, '0')}:${String(Math.floor((left % 60000) / 1000)).padStart(2, '0')}`;
+
+  const handleValidate = () => {
+    setError(null);
+    if (!childId) {
+      setError('Choisissez la carte à recharger.');
+      return;
+    }
+    if (!amount || amount <= 0) {
+      setError('Choisissez ou saisissez un montant à recharger.');
+      return;
+    }
+    if (!isValidSnPhone(phone)) {
+      setError('Numéro InTouch invalide (9 chiffres, ex : 77 123 45 67).');
+      return;
+    }
+    try {
+      const res = topUpChild(childId, amount, 'intouch');
+      const w = 'wave' in res ? res.wave : undefined;
+      if (!w) {
+        onDone(childId, amount);
+        return;
+      }
+      setTxId(res.tx.id);
+      setWave(w);
+    } catch (err) {
+      const text = err instanceof Error ? err.message : 'Recharge impossible.';
+      setError(text);
+      onError(text);
+    }
+  };
+
+  const handleConfirm = () => {
+    setError(null);
+    if (!txId) return;
+    if (!isValidWaveCode(code)) {
+      setError('Code à 6 chiffres requis.');
+      return;
+    }
+    setConfirming(true);
+    const { ok, message: text } = confirmWalletTopUpMobile(txId, code);
+    setConfirming(false);
+    if (!ok) {
+      setError(text);
+      return;
+    }
+    const doneChild = childId;
+    const doneAmount = amount;
+    setWave(null);
+    setTxId(null);
+    setCode('');
+    setCustom('');
+    onDone(doneChild, doneAmount);
+  };
+
+  if (!wave || !txId) {
+    return (
+      <div className="space-y-3">
+        <div>
+          <span className="text-xs font-bold text-slate-600">Carte à recharger</span>
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            {kids.map((k) => {
+              const sel = childId === k.id;
+              return (
+                <button
+                  key={k.id}
+                  onClick={() => setChildId(k.id)}
+                  aria-pressed={sel}
+                  className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all ${sel ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+                >
+                  {k.firstName} {k.lastName} · {formatCurrency(walletOf(k.id))}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div>
+          <span className="text-xs font-bold text-slate-600">Montant</span>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            {[1000, 2000, 5000, 10000].map((a) => (
+              <button
+                key={a}
+                onClick={() => { setPreset(a); setCustom(''); }}
+                aria-pressed={preset === a && !custom}
+                className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all ${preset === a && !custom ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400'}`}
+              >
+                {formatCurrency(a)}
+              </button>
+            ))}
+            <input
+              inputMode="numeric"
+              value={custom}
+              onChange={(e) => setCustom(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="Autre montant"
+              aria-label="Montant libre en FCFA"
+              className="px-3.5 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-xs font-bold w-36 outline-none focus:border-emerald-600"
+            />
+          </div>
+        </div>
+        <div>
+          <label htmlFor="recharge-tel" className="text-xs font-bold text-slate-600">Numéro InTouch</label>
+          <input
+            id="recharge-tel"
+            inputMode="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
+            placeholder="77 123 45 67"
+            className="mt-1 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-emerald-600"
+          />
+        </div>
+        {error && <p className="text-xs font-semibold text-red-600">{error}</p>}
+        <button onClick={handleValidate} className="w-full py-3 min-h-[48px] rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 inline-flex items-center justify-center gap-2">
+          <Smartphone className="w-4 h-4" /> Recharger{amount > 0 ? ` · ${formatCurrency(amount)}` : ''}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl bg-slate-900 text-white p-4 flex items-center justify-between gap-2">
+        <div>
+          <p className="text-xs text-slate-400">Montant envoyé · {wave.merchantName}</p>
+          <p className="text-xl font-bold">{wave.amountLabel}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-slate-400 flex items-center gap-1 justify-end"><Timer className="w-3.5 h-3.5" /> Expire</p>
+          <p className={`text-lg font-bold font-mono ${left === 0 ? 'text-red-400' : ''}`}>{countdown}</p>
+        </div>
+      </div>
+      <div>
+        <label htmlFor="recharge-code" className="text-xs font-bold text-slate-600">Code InTouch à 6 chiffres</label>
+        <input
+          id="recharge-code"
+          inputMode="numeric"
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          placeholder="••••••"
+          className="mt-1 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm text-center font-mono tracking-[0.3em] outline-none focus:border-emerald-600"
+        />
+      </div>
+      {error && <p className="text-xs font-semibold text-red-600">{error}</p>}
+      <button
+        onClick={handleConfirm}
+        disabled={confirming || left === 0}
+        className="w-full py-3 min-h-[48px] rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-40"
+      >
+        {confirming ? 'Confirmation…' : 'Confirmer la recharge'}
       </button>
     </div>
   );

@@ -10,13 +10,10 @@ import {
   X,
   User,
   Home,
-  Wallet,
-  QrCode,
   ScanLine,
   Users,
   ClipboardList,
   Settings,
-  Baby,
   Banknote,
 } from 'lucide-react';
 
@@ -28,7 +25,7 @@ interface SidebarProps {
 }
 
 const allNavItems: { page: PageName; label: string; icon: React.ReactNode; roles: UserRole[] }[] = [
-  { page: 'home', label: 'Accueil', icon: <Home aria-hidden className="w-5 h-5" />, roles: ['personnel', 'gestionnaire', 'admin', 'caissier', 'manager'] },
+  { page: 'home', label: 'Accueil', icon: <Home aria-hidden className="w-5 h-5" />, roles: ['personnel', 'admin', 'caissier', 'manager'] },
   // Parent : UNE seule entrée — le parcours continu (anciens modules en redirect invisible).
   { page: 'home', label: 'Espace Parent', icon: <Home aria-hidden className="w-5 h-5" />, roles: ['client'] },
   { page: 'subscriptions', label: 'Abonnés & paiements', icon: <Users aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },
@@ -36,11 +33,12 @@ const allNavItems: { page: PageName; label: string; icon: React.ReactNode; roles
   { page: 'qrgallery', label: 'QR Élèves', icon: <ClipboardList aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier'] },
   { page: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard aria-hidden className="w-5 h-5" />, roles: ['admin', 'gestionnaire', 'manager'] },
   { page: 'finance', label: 'Finance', icon: <Banknote aria-hidden className="w-5 h-5" />, roles: ['admin', 'manager'] },
-  { page: 'menu', label: 'Gestion des menus', icon: <ClipboardList aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier'] },
+  { page: 'menu', label: 'Gestion Menu', icon: <ClipboardList aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier'] },
   // Caisse tenue par le Gérant de cantine uniquement
-  { page: 'pos', label: 'Caisse (POS)', icon: <ShoppingCart aria-hidden className="w-5 h-5" />, roles: ['gestionnaire'] },
-  { page: 'users', label: 'Utilisateurs', icon: <Users aria-hidden className="w-5 h-5" />, roles: ['admin', 'manager'] },
-  { page: 'settings', label: 'Paramètres', icon: <Settings aria-hidden className="w-5 h-5" />, roles: ['admin', 'manager'] },
+  { page: 'pos', label: 'Vente (POS)', icon: <ShoppingCart aria-hidden className="w-5 h-5" />, roles: ['gestionnaire'] },
+  { page: 'menus', label: 'Menus récréation', icon: <UtensilsCrossed aria-hidden className="w-5 h-5" />, roles: ['gestionnaire'] },
+  { page: 'users', label: 'Utilisateurs', icon: <Users aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },
+  { page: 'settings', label: 'Établissement', icon: <Settings aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },
   { page: 'history', label: 'Historique', icon: <Receipt aria-hidden className="w-5 h-5" />, roles: ['personnel', 'gestionnaire', 'admin', 'caissier', 'manager'] },
 ];
 

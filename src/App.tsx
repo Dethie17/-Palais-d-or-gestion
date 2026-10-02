@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Menu, ShieldAlert } from 'lucide-react';
 import Sidebar from './components/layout/Sidebar';
 import SplashScreen from './components/SplashScreen';
@@ -55,6 +55,13 @@ function AppContent() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Gérant sans accueil : atterrissage direct sur le tableau de bord.
+  useEffect(() => {
+    if (user?.role === 'gestionnaire' && currentPage === 'home') {
+      setCurrentPage('dashboard');
+    }
+  }, [user?.role, currentPage]);
 
   // Afficher un loader pendant le chargement initial
   if (loading) {

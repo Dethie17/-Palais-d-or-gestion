@@ -28,10 +28,11 @@ export interface RoleDefinition {
 
 /**
  * Référentiel unique des profils O RESTO.
- * - La caisse comptant (POS) est tenue par le Gérant de cantine.
- * - Les menus du jour sont composés par le Personnel de service.
- * - Abonnements, utilisateurs et validation finale : Direction (DG).
- * - Le Directeur Général a accès complet à tout le logiciel.
+ * - La caisse comptant (POS) est tenue par le Gérant de cantine (sans accueil :
+ *   tableau de bord, vente POS, menus récréation en lecture, historique).
+ * - Les menus du jour sont composés et publiés par le Personnel de service,
+ *   qui gère aussi la validation repas, les utilisateurs et l'établissement.
+ * - Abonnements, finance et pilotage global : Direction (DG).
  * Utilisé par : Login, Sidebar, Accueil, Profil, Accès réservé.
  */
 const SERVICE_TASKS: RoleTask[] = [
@@ -40,6 +41,7 @@ const SERVICE_TASKS: RoleTask[] = [
   { label: 'Créer les tickets repas', page: 'menu', detail: 'Nom, prix, durée, repas — tous les champs' },
   { label: 'Encaisser abonnements & recharges', page: 'subscriptions', detail: 'Espèces au comptoir, confirmations' },
   { label: 'Voir passages du jour', page: 'validation', detail: 'Servis / refusés en temps réel' },
+  { label: 'Gérer utilisateurs & établissement', page: 'users', detail: 'Comptes du site, fiche établissement' },
   { label: 'Consulter historique service', page: 'history', detail: 'Tracer ce qui a été servi' },
 ];
 
@@ -73,24 +75,25 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     role: 'personnel',
     title: 'Personnel de service',
     icon: UtensilsCrossed,
-    mission: 'Contrôle des QR Code et fluidité du service.',
+    mission: 'Cantine terrain : menus, validation QR, utilisateurs et établissement.',
     color: 'from-green-700 to-emerald-600',
     tasks: SERVICE_TASKS,
-    forbidden: ['Encaisser / Caisse POS', 'Gérer le catalogue formules', 'Voir chiffre d’affaires'],
+    forbidden: ['Encaisser / Caisse POS', 'Voir chiffre d’affaires'],
     kpis: ['Servis aujourd’hui', 'Refusés aujourd’hui', 'Dernier passage'],
   },
   gestionnaire: {
     role: 'gestionnaire',
     title: 'Gérant de cantine',
     icon: Store,
-    mission: 'Caisse comptant et pilotage du jour : encaissements, tableau de bord, historique.',
+    mission: 'Vente au comptoir et pilotage du jour : caisse POS, tableau de bord, menus récréation, historique. Sans accueil.',
     color: 'from-slate-800 to-slate-900',
     tasks: [
       { label: 'Tableau de bord de ma cantine', page: 'dashboard', detail: 'Repas jour, abonnés actifs, alertes' },
-      { label: 'Caisse POS comptant', page: 'pos', detail: 'Vente directe, ticket, monnaie rendue' },
+      { label: 'Vente POS au comptoir', page: 'pos', detail: 'Vente directe, ticket, monnaie rendue' },
+      { label: 'Menus récréation (lecture)', page: 'menus', detail: 'Annoncer les plats, la vente se fait à la caisse' },
       { label: 'Consulter l’historique', page: 'history', detail: 'Commandes et passages du jour' },
     ],
-    forbidden: ['Gérer les menus (personnel)', 'Gérer les abonnements (Direction)', 'Valider les repas (personnel)', 'Gérer les utilisateurs (Direction)'],
+    forbidden: ['Gérer les menus cantine (personnel)', 'Gérer les abonnements (personnel / Direction)', 'Valider les repas (personnel)', 'Gérer les utilisateurs (personnel / Direction)'],
     kpis: ['Repas servis (jour)', 'Encaissé du jour', 'Alertes'],
   },
   admin: {
@@ -107,10 +110,10 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     role: 'caissier',
     title: 'Personnel de service',
     icon: UtensilsCrossed,
-    mission: 'Contrôle des QR Code et fluidité du service.',
+    mission: 'Cantine terrain : menus, validation QR, utilisateurs et établissement.',
     color: 'from-green-700 to-emerald-600',
     tasks: SERVICE_TASKS,
-    forbidden: ['Encaisser / Caisse POS', 'Gérer le catalogue formules', 'Voir chiffre d’affaires'],
+    forbidden: ['Encaisser / Caisse POS', 'Voir chiffre d’affaires'],
     kpis: ['Servis aujourd’hui', 'Refusés aujourd’hui', 'Dernier passage'],
   },
   manager: {

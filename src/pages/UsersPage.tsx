@@ -5,7 +5,7 @@ import { getClientQrToken } from '@/lib/clientQr';
 import { ShieldCheck, Building2, QrCode, Wallet, Baby, Phone, UserRound } from 'lucide-react';
 
 /**
- * Page Utilisateurs — Admin (tout) + Gestionnaire (son site).
+ * Page Utilisateurs — Personnel de service (site) + Direction (toute la plateforme).
  * - Parents & abonnés : fiche parent (nom, téléphone), enfants, QR Codes,
  *   formule active, repas restants et servis
  * - Sites couverts

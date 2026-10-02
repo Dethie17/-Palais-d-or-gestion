@@ -4,6 +4,18 @@ import { AuthProvider } from '@/context/AuthContext';
 import { RestoProvider, useResto } from '@/context/RestoContext';
 import EspaceParentPage from '@/pages/EspaceParentPage';
 
+const WEEK_KEY = 'o-resto-weeklymenus-v3';
+
+function seedPublishedWeek() {
+  localStorage.setItem(WEEK_KEY, JSON.stringify([
+    { day: 'Lundi', name: 'Menu Lundi', description: '', items: [{ name: 'Riz', price: 800 }, { name: 'Jus', price: 500 }] },
+    { day: 'Mardi', name: 'Menu Mardi', description: '', items: [{ name: 'Pâtes', price: 900 }] },
+    { day: 'Mercredi', name: '', description: '', items: [] },
+    { day: 'Jeudi', name: '', description: '', items: [] },
+    { day: 'Vendredi', name: '', description: '', items: [] },
+  ]));
+}
+
 beforeEach(() => {
   cleanup();
   localStorage.clear();
@@ -45,12 +57,23 @@ function renderPage() {
 }
 
 describe('EspaceParentPage render (repro crash childId)', () => {
-  it('rend les 5 sections sans planter', () => {
+  it('rend les 5 sections sans planter (semaine publiée)', () => {
+    seedPublishedWeek();
     seedChild();
+    // Le seed enfant réinitialise le provider : republier la semaine après.
+    seedPublishedWeek();
     renderPage();
     expect(screen.getByText(/Je choisis l’abonnement/)).toBeTruthy();
     expect(screen.getAllByText(/Menu du jour/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/Historique des dépenses/)).toBeTruthy();
+    expect(screen.getByText(/Recharger une carte/)).toBeTruthy();
+  });
+
+  it('semaine vide tant que le Personnel ne publie rien (bel état vide)', () => {
+    seedChild();
+    renderPage();
+    expect(screen.getByText(/Menus en préparation/)).toBeTruthy();
+    expect(screen.getByText(/Semaine pas encore publiée/)).toBeTruthy();
   });
 
   it('supporte un paiement distant sans abonnement lié (pas de crash childId)', () => {
