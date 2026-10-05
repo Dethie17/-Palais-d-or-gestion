@@ -3,11 +3,12 @@ import { WeeklyMenu, WeeklyMenuItem } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
 import { useResto } from '@/context/RestoContext';
 import { QRCodeSVG } from 'qrcode.react';
-import { WAVE_BUSINESS_URL, WAVE_BUSINESS_NAME } from '@/lib/wave';
+import { WAVE_BUSINESS_URL, WAVE_BUSINESS_NAME, INTOUCH_MERCHANT_NAME, INTOUCH_USSD_URL } from '@/lib/wave';
 
 import {
   CalendarDays, Utensils, Banknote, Smartphone, QrCode, CheckCircle,
-  XCircle, ArrowLeft, CreditCard, Copy, AlertCircle, ExternalLink
+  XCircle, ArrowLeft, CreditCard, Copy, AlertCircle, ExternalLink,
+  Loader2, RefreshCw
 } from 'lucide-react';
 
 const DAY_INDEX = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
@@ -22,11 +23,16 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
   const { weeklyMenus, createWalkInTicket } = useResto();
   const [step, setStep] = useState<POSStep>('select');
   const [selectedMenu, setSelectedMenu] = useState<WeeklyMenu | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wave'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wave' | 'intouch'>('cash');
   const [ticketToken, setTicketToken] = useState<string | null>(null);
   const [ticketReference, setTicketReference] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // InTouch state
+  const [intouchCode, setIntouchCode] = useState<string>('');
+  const [intouchConfirming, setIntouchConfirming] = useState(false);
+  const [intouchLinkCopied, setIntouchLinkCopied] = useState(false);
 
   const todayName = DAY_INDEX[new Date().getDay()];
   const todayMenu = weeklyMenus.find((m) => m.day === todayName && (m.items ?? []).length > 0);
@@ -40,7 +46,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
     setSuccess(null);
   };
 
-  const handlePaymentMethodChange = (method: 'cash' | 'wave') => {
+  const handlePaymentMethodChange = (method: 'cash' | 'wave' | 'intouch') => {
     setPaymentMethod(method);
     setError(null);
   };
@@ -80,11 +86,55 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
     }
   };
 
+  const copyIntouchLink = async () => {
+    try {
+      await navigator.clipboard.writeText(INTOUCH_USSD_URL || '#');
+      setIntouchLinkCopied(true);
+      setTimeout(() => setIntouchLinkCopied(false), 2000);
+    } catch {
+      /* presse-papiers indisponible */
+    }
+  };
+
+  const handleConfirmIntouch = async () => {
+    if (!selectedMenu || intouchCode.length !== 6) return;
+    setError(null);
+    setSuccess(null);
+    setIntouchConfirming(true);
+
+    try {
+      // En mode démo, on vérifie avec le code stocké
+      const { checkWaveCode } = await import('@/lib/wave');
+      const reference = `INT-${Date.now().toString(36).toUpperCase()}`;
+      const valid = checkWaveCode(reference, intouchCode.trim());
+
+      if (!valid) {
+        setError('Code invalide ou expiré. Réessayez.');
+        setIntouchConfirming(false);
+        return;
+      }
+
+      // Code valide : créer le ticket
+      const { token, reference } = createWalkInTicket(selectedMenu, 'intouch');
+      setTicketToken(token);
+      setTicketReference(reference);
+      setStep('qrcode');
+      setSuccess('Paiement InTouch validé ✓');
+    } catch {
+      setError('Erreur de validation. Réessayez.');
+    } finally {
+      setIntouchConfirming(false);
+    }
+  };
+
   const handleBack = () => {
     if (step === 'payment') {
       setStep('select');
       setSelectedMenu(null);
       setPaymentMethod('cash');
+      setIntouchCode('');
+      setIntouchConfirming(false);
+      setIntouchLinkCopied(false);
     } else if (step === 'qrcode') {
       setStep('payment');
       setTicketToken(null);
@@ -100,6 +150,9 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
     setTicketReference(null);
     setError(null);
     setSuccess(null);
+    setIntouchCode('');
+    setIntouchConfirming(false);
+    setIntouchLinkCopied(false);
   };
 
   const copyToken = () => {
@@ -221,7 +274,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <button
                 onClick={() => handlePaymentMethodChange('cash')}
                 className={`py-4 rounded-xl font-bold text-lg transition-all ${paymentMethod === 'cash'
@@ -239,6 +292,15 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
                 }`}
               >
                 <Smartphone className="w-6 h-6 mx-auto mb-1" /> Wave
+              </button>
+              <button
+                onClick={() => handlePaymentMethodChange('intouch')}
+                className={`py-4 rounded-xl font-bold text-lg transition-all ${paymentMethod === 'intouch'
+                  ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30'
+                  : 'bg-white border-2 border-slate-200 text-slate-700 hover:border-blue-300'
+                }`}
+              >
+                <Smartphone className="w-6 h-6 mx-auto mb-1" /> InTouch
               </button>
             </div>
 
@@ -280,6 +342,64 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
                   className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <CheckCircle className="w-5 h-5" /> Client a payé — Générer le ticket
+                </button>
+              </div>
+            )}
+
+            {paymentMethod === 'intouch' && (
+              <div className="space-y-4">
+                <div className="rounded-2xl border-2 border-purple-200 bg-gradient-to-b from-purple-50 to-white p-5 text-center">
+                  <p className="text-xs font-black uppercase tracking-widest text-purple-600 flex items-center justify-center gap-1.5">
+                    <Smartphone className="w-4 h-4" /> Paiement InTouch
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-slate-800">{INTOUCH_MERCHANT_NAME}</p>
+                  <p className="text-3xl lg:text-4xl font-black text-slate-900 mt-2">{formatCurrency(selectedMenu.price ?? 0)}</p>
+                  <p className="text-xs text-slate-500 mt-1">Le client paie exactement ce montant via InTouch.</p>
+                  <div className="mt-4 inline-block p-3 bg-white rounded-2xl border shadow-sm">
+                    <QRCodeSVG value={INTOUCH_USSD_URL || '#'} size={170} level="M" />
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={copyIntouchLink}
+                      className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50"
+                    >
+                      <Copy className="w-4 h-4" /> {intouchLinkCopied ? 'Copié !' : 'Copier USSD'}
+                    </button>
+                    <button
+                      onClick={() => setIntouchCode('')}
+                      className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50"
+                    >
+                      <RefreshCw className="w-4 h-4" /> Réinitialiser
+                    </button>
+                  </div>
+                  <p className="mt-3 text-xs text-slate-500 bg-white border border-slate-200 rounded-xl px-3 py-2.5">
+                    Le client compose *144# sur son téléphone, suit les instructions, puis vous cliquez sur « Client a payé ».
+                  </p>
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-sm font-semibold text-purple-800 mb-1">Code de confirmation InTouch (6 chiffres)</label>
+                  <input
+                    type="text"
+                    value={intouchCode}
+                    onChange={(e) => setIntouchCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="Ex: 123456"
+                    maxLength={6}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-purple-200 text-center text-2xl font-bold tracking-widest outline-none focus:border-purple-500"
+                    autoFocus
+                  />
+                </div>
+
+                <button
+                  onClick={handleConfirmIntouch}
+                  disabled={intouchCode.length !== 6}
+                  className="w-full py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {intouchConfirming ? (
+                    <span className="flex items-center justify-center gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Validation...</span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-2"><CheckCircle className="w-5 h-5" /> Valider le code InTouch</span>
+                  )}
                 </button>
               </div>
             )}

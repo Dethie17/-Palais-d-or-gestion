@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CartItem, Order, ProductExtra } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
-import { WAVE_BUSINESS_URL, WAVE_BUSINESS_NAME } from '@/lib/wave';
+import { WAVE_BUSINESS_URL, WAVE_BUSINESS_NAME, INTOUCH_MERCHANT_NAME, INTOUCH_USSD_URL } from '@/lib/wave';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   ArrowLeft,
@@ -13,7 +13,9 @@ import {
   Plus,
   Minus,
   ExternalLink,
-  Copy
+  Copy,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 
 interface PaymentPageProps {
@@ -25,6 +27,7 @@ interface PaymentPageProps {
 const paymentMethods = [
   { id: 'wave', label: 'Wave', icon: Smartphone, gradient: 'from-blue-500 to-cyan-600', available: true },
   { id: 'cash', label: 'Espèces (comptant)', icon: Banknote, gradient: 'from-green-500 to-emerald-600', available: true },
+  { id: 'intouch', label: 'InTouch', icon: Smartphone, gradient: 'from-purple-500 to-indigo-600', available: true },
   { id: 'mobile_money', label: 'Mobile Money', icon: CreditCard, gradient: 'from-amber-500 to-orange-600', available: true },
 ];
 
@@ -48,6 +51,9 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
   const [customerName, setCustomerName] = useState('');
   const [selectedExtras, setSelectedExtras] = useState<{ [key: string]: number }>({});
   const [linkCopied, setLinkCopied] = useState(false);
+  const [intouchCode, setIntouchCode] = useState('');
+  const [intouchConfirming, setIntouchConfirming] = useState(false);
+  const [intouchLinkCopied, setIntouchLinkCopied] = useState(false);
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const extrasTotal = Object.entries(selectedExtras).reduce((sum, [extraId, quantity]) => {
@@ -125,6 +131,16 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
       await navigator.clipboard.writeText(WAVE_BUSINESS_URL);
       setLinkCopied(true);
       window.setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      /* presse-papiers indisponible */
+    }
+  };
+
+  const copyIntouchLink = async () => {
+    try {
+      await navigator.clipboard.writeText(INTOUCH_USSD_URL);
+      setIntouchLinkCopied(true);
+      window.setTimeout(() => setIntouchLinkCopied(false), 2000);
     } catch {
       /* presse-papiers indisponible */
     }
@@ -325,6 +341,54 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
               <p className="mt-3 text-xs text-slate-500 bg-white border border-slate-200 rounded-xl px-3 py-2.5">
                 Vérifiez la notification Wave Business sur le téléphone, puis cliquez ci-dessous sur « Paiement Wave reçu ».
               </p>
+            </div>
+          )}
+
+          {selectedMethod === 'intouch' && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border-2 border-purple-200 bg-gradient-to-b from-purple-50 to-white p-5 text-center">
+                <p className="text-xs font-black uppercase tracking-widest text-purple-600 flex items-center justify-center gap-1.5">
+                  <Smartphone className="w-4 h-4" /> Paiement InTouch
+                </p>
+                <p className="mt-1 text-sm font-bold text-slate-800">{INTOUCH_MERCHANT_NAME}</p>
+                <p className="text-3xl lg:text-4xl font-black text-slate-900 mt-2">{formatCurrency(total)}</p>
+                <p className="text-xs text-slate-500 mt-1">Le client paie exactement ce montant via InTouch.</p>
+                <div className="mt-4 inline-block p-3 bg-white rounded-2xl border shadow-sm">
+                  <QRCodeSVG value={INTOUCH_USSD_URL} size={170} level="M" />
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <a
+                    href={INTOUCH_USSD_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-purple-600 text-white font-bold text-sm hover:bg-purple-700"
+                  >
+                    <ExternalLink className="w-4 h-4" /> Ouvrir le lien
+                  </a>
+                  <button
+                    onClick={copyIntouchLink}
+                    className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50"
+                  >
+                    <Copy className="w-4 h-4" /> {intouchLinkCopied ? 'Copié !' : 'Copier'}
+                  </button>
+                </div>
+                <p className="mt-3 text-xs text-slate-500 bg-white border border-slate-200 rounded-xl px-3 py-2.5">
+                  Le client compose *144# sur son téléphone, suit les instructions, puis saisissez le code de confirmation ci-dessous.
+                </p>
+              </div>
+
+              <div className="mt-4">
+                <label className="block text-sm font-semibold text-purple-800 mb-1">Code de confirmation InTouch (6 chiffres)</label>
+                <input
+                  type="text"
+                  value={intouchCode}
+                  onChange={(e) => setIntouchCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="Ex: 123456"
+                  maxLength={6}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-purple-200 text-center text-2xl font-bold tracking-widest outline-none focus:border-purple-500"
+                  autoFocus
+                />
+              </div>
             </div>
           )}
 

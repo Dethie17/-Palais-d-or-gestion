@@ -58,6 +58,10 @@ export const WAVE_BUSINESS_NAME =
   (import.meta.env.VITE_WAVE_BUSINESS_NAME as string | undefined) ??
   'O RESTO';
 
+export const INTOUCH_USSD_URL =
+  (import.meta.env.VITE_INTOUCH_USSD_URL as string | undefined) ??
+  'https://intouch.sn/ussd'; // Placeholder - à configurer selon la doc InTouch
+
 /** Expiration d'une demande de paiement mobile : 15 minutes. */
 export const WAVE_TTL_MS = 15 * 60 * 1000;
 
