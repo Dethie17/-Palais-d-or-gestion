@@ -38,7 +38,7 @@ const allNavItems: { page: PageName; label: string; icon: React.ReactNode; roles
   { page: 'menu', label: 'Gestion Menu', icon: <ClipboardList aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier'] },
   // Caisse tenue par le Gérant de cantine uniquement
   { page: 'pos', label: 'Vente (POS)', icon: <ShoppingCart aria-hidden className="w-5 h-5" />, roles: ['gestionnaire'] },
-  { page: 'menurecreation', label: 'Menu Récréation', icon: <UtensilsCrossed aria-hidden className="w-5 h-5" />, roles: ['gestionnaire'] },
+  { page: 'menurecreation', label: 'Menu Récréation', icon: <UtensilsCrossed aria-hidden className="w-5 h-5" />, roles: ['gestionnaire', 'personnel'] },
   { page: 'users', label: 'Utilisateurs', icon: <Users aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },
   { page: 'establishments', label: 'Établissements', icon: <Building2 aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },
   { page: 'settings', label: 'Paramètres', icon: <Settings aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },
