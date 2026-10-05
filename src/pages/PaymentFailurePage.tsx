@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { XCircle, ArrowLeft, AlertCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
