@@ -8,11 +8,18 @@
  * - INTOUCH_CALLBACK_SECRET : clé secrète fournie par InTouch pour vérifier la signature
  * - SUPABASE_URL : URL de votre projet Supabase
  * - SUPABASE_SERVICE_ROLE_KEY : clé service role Supabase (pour écriture DB)
+ * 
  */
 
 import type { Handler, HandlerEvent, HandlerContext } from '@netlify/functions';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
 
 interface InTouchCallbackPayload {
   transaction_id: string;
@@ -35,6 +42,22 @@ const supabase = createClient(
 );
 
 const CALLBACK_SECRET = process.env.INTOUCH_CALLBACK_SECRET || '';
+
+// Handle CORS preflight requests
+const handleCors = (event: HandlerEvent) => {
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
+      body: '',
+    };
+  }
+  return null;
+};
 
 function verifySignature(payload: InTouchCallbackPayload, secret: string): boolean {
   if (!secret) {
@@ -59,11 +82,18 @@ function getClientIp(event: HandlerEvent): string {
 }
 
 const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) => {
+  // Handle CORS preflight
+  const corsResponse = handleCors(event);
+  if (corsResponse) return corsResponse;
+
   // Seulement POST autorisé
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
-      headers: { 'Allow': 'POST' },
+      headers: { 
+        'Allow': 'POST',
+        ...corsHeaders,
+      },
       body: JSON.stringify({ error: 'Method not allowed' })
     };
   }
@@ -77,20 +107,32 @@ const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) =
     try {
       payload = JSON.parse(event.body || '{}');
     } catch {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) };
+      return { 
+        statusCode: 400, 
+        headers: corsHeaders,
+        body: JSON.stringify({ error: 'Invalid JSON' }) 
+      };
     }
 
     const { transaction_id, reference, amount, status, signature } = payload;
 
     if (!reference || !transaction_id) {
       console.error('❌ Payload InTouch invalide: référence manquante');
-      return { statusCode: 400, body: JSON.stringify({ error: 'Missing reference' }) };
+      return { 
+        statusCode: 400, 
+        headers: corsHeaders,
+        body: JSON.stringify({ error: 'Missing reference' }) 
+      };
     }
 
     // Vérification signature
     if (!verifySignature(payload, CALLBACK_SECRET)) {
       console.error('❌ Signature InTouch invalide', { reference, clientIp });
-      return { statusCode: 401, body: JSON.stringify({ error: 'Invalid signature' }) };
+      return { 
+        statusCode: 401, 
+        headers: corsHeaders,
+        body: JSON.stringify({ error: 'Invalid signature' }) 
+      };
     }
 
     console.log(`✅ InTouch callback valide: ${reference} - ${status} - ${amount} FCFA`);
@@ -104,14 +146,22 @@ const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) =
 
     if (findError) {
       console.error('❌ Erreur recherche paiement:', findError);
-      return { statusCode: 500, body: JSON.stringify({ error: 'DB error' }) };
+      return { 
+        statusCode: 500, 
+        headers: corsHeaders,
+        body: JSON.stringify({ error: 'DB error' }) 
+      };
     }
 
     const payment = payments?.[0];
     if (!payment) {
       console.warn('⚠️ Paiement non trouvé pour référence:', reference);
       // On ne bloque pas - InTouch peut envoyer callback avant création locale
-      return { statusCode: 200, body: JSON.stringify({ received: true, note: 'Payment not found locally, logged for reconciliation' }) };
+      return { 
+        statusCode: 200, 
+        headers: corsHeaders,
+        body: JSON.stringify({ received: true, note: 'Payment not found locally, logged for reconciliation' }) 
+      };
     }
 
     // Mise à jour selon le statut
@@ -132,7 +182,11 @@ const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) =
 
     if (updateError) {
       console.error('❌ Erreur mise à jour paiement:', updateError);
-      return { statusCode: 500, body: JSON.stringify({ error: 'Update failed' }) };
+      return { 
+        statusCode: 500, 
+        headers: corsHeaders,
+        body: JSON.stringify({ error: 'Update failed' }) 
+      };
     }
 
     console.log(`✅ Paiement ${payment.id} mis à jour: ${newStatus}`);
@@ -170,6 +224,7 @@ const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) =
 
     return {
       statusCode: 200,
+      headers: corsHeaders,
       body: JSON.stringify({ 
         success: true, 
         payment_id: payment.id,
@@ -181,6 +236,7 @@ const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) =
     console.error('💥 Erreur callback InTouch:', err);
     return {
       statusCode: 500,
+      headers: corsHeaders,
       body: JSON.stringify({ error: 'Internal server error' })
     };
   }
