@@ -37,6 +37,9 @@ const EstablishmentsPage = lazy(() => import('./pages/EstablishmentsPage'));
 const ChildrenPage = lazy(() => import('./pages/ChildrenPage'));
 const FinancePage = lazy(() => import('./pages/FinancePage'));
 const EspaceParentPage = lazy(() => import('./pages/EspaceParentPage'));
+const MenuRecreationPage = lazy(() => import('./pages/MenuRecreationPage'));
+const PaymentSuccessPage = lazy(() => import('./pages/PaymentSuccessPage'));
+const PaymentFailurePage = lazy(() => import('./pages/PaymentFailurePage'));
 
 function PageLoader() {
   return (
@@ -57,6 +60,16 @@ function AppContent() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Gestion des URLs directes (ex: /paiement/success, /paiement/echec)
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path === '/paiement/success') {
+      setCurrentPage('paymentsuccess');
+    } else if (path === '/paiement/echec') {
+      setCurrentPage('paymentfailure');
+    }
+  }, []);
 
   // Sans accueil : Gérant et DG atterrissent direct sur le tableau de bord.
   useEffect(() => {
@@ -206,6 +219,12 @@ function AppContent() {
         return <ChildrenPage />;
       case 'finance':
         return <FinancePage />;
+      case 'menurecreation':
+        return <MenuRecreationPage onNavigate={navigateTo} />;
+      case 'paymentsuccess':
+        return <PaymentSuccessPage onNavigate={navigateTo} />;
+      case 'paymentfailure':
+        return <PaymentFailurePage onNavigate={navigateTo} />;
       default:
         return <HomePage onNavigate={navigateTo} />;
     }

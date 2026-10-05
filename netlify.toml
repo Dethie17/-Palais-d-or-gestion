@@ -1,15 +1,29 @@
-[build]
-  # Commande de build
-  command = "npm run build"
-  
-  # Répertoire de publication (sortie du build)
-  publish = "dist"
-  
-  # Variables d'environnement pour le build
-  [build.environment]
-    NODE_VERSION = "18"
+# Netlify Configuration pour O RESTO
+# Déployer sur Netlify : connectez ce repo et configurez les variables d'env
 
-# Redirections pour SPA (Single Page Application)
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+# Functions Netlify (DOIT être AVANT le fallback SPA)
+[[redirects]]
+  from = "/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Routes paiement (DOIVENT être AVANT le fallback SPA)
+[[redirects]]
+  from = "/paiement/success"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/paiement/echec"
+  to = "/index.html"
+  status = 200
+
+# Redirections SPA (React Router) - DOIT ÊTRE EN DERNIER
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -21,35 +35,21 @@
   [headers.values]
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
-    X-XSS-Protection = "1; mode=block"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    # Caméra autorisée pour le scan QR (Validation repas) — micro/geoloc bloqués
-    Permissions-Policy = "camera=(self), microphone=(), geolocation=()"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
 
-# Cache pour les assets statiques
-[[headers]]
-  for = "/assets/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
+# Configuration fonctions Netlify
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["**/*.ts", "**/*.js"]
+  external_node_modules = ["@supabase/supabase-js"]
 
-# Cache pour les images
-[[headers]]
-  for = "/*.jpg"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/*.png"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/*.svg"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-# Pas de cache pour le HTML
-[[headers]]
-  for = "/*.html"
-  [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
+# Variables d'environnement requises (à configurer dans Netlify Dashboard > Site settings > Environment variables) :
+# 
+# SUPABASE_URL = https://votre-projet.supabase.co
+# SUPABASE_SERVICE_ROLE_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (clé service_role, pas anon)
+# INTOUCH_CALLBACK_SECRET = votre_cle_secrete_fournie_par_intouch
+# 
+# Optionnel - pour les emails/notifications :
+# SENDGRID_API_KEY = SG.xxx
+# FROM_EMAIL = noreply@orestosn.com

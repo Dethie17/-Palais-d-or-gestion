@@ -96,9 +96,11 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
     const uid = typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const orderNumber = `CMD-${new Date().getFullYear().toString().slice(2)}${String(Date.now()).slice(-6)}`;
+    const qrToken = `ORESTO-ORDER:${uid}:${orderNumber}:${total}:${Date.now()}`;
     const order: Order = {
       id: uid,
-      number: `CMD-${new Date().getFullYear().toString().slice(2)}${String(Date.now()).slice(-6)}`,
+      number: orderNumber,
       items: cart,
       extras: orderExtras.length > 0 ? orderExtras : undefined,
       subtotal,
@@ -111,6 +113,7 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
       paymentMethod: paymentMethods.find((m) => m.id === selectedMethod)?.label,
       amountReceived: selectedMethod === 'cash' ? received : undefined,
       change: selectedMethod === 'cash' && received >= total ? change : undefined,
+      qrToken,
     };
     onPaymentComplete(order);
   };

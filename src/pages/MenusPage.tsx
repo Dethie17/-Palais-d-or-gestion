@@ -1,11 +1,7 @@
-import { useState } from 'react';
-import { useProducts } from '@/context/ProductContext';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { PageName } from '@/types/menu';
-import { formatCurrency } from '@/lib/utils';
 import { menuTicketTotal, publishedDays } from '@/lib/menus';
-import { categories } from '@/data/mockData';
 import TicketCard from '@/components/TicketCard';
 import { CalendarDays, Ticket, Eye } from 'lucide-react';
 
@@ -16,10 +12,8 @@ interface MenusPageProps {
 const DAY_INDEX = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
 const MenusPage = ({ onNavigate }: MenusPageProps) => {
-  const { products } = useProducts();
   const { user } = useAuth();
   const { weeklyMenus } = useResto();
-  const [filter, setFilter] = useState('Tous');
   const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   const todayName = DAY_INDEX[new Date().getDay()];
 
@@ -28,7 +22,6 @@ const MenusPage = ({ onNavigate }: MenusPageProps) => {
   const canBuy = user?.role === 'client';
   const isStaffReadOnly = user?.role !== 'client';
 
-  const list = products.filter((p) => (filter === 'Tous' || p.category === filter) && p.available);
   // Seuls les jours composés par le DG (au moins un plat) sont affichés.
   // Semaine vide tant que rien n'est publié → bel état vide, aucune fausse liste.
   const published = publishedDays(weeklyMenus);
@@ -110,46 +103,6 @@ const MenusPage = ({ onNavigate }: MenusPageProps) => {
               ))}
             </div>
           </div>
-        </>
-      )}
-
-      {/* Menu récréation : réservé au staff (annonce des plats).
-          L'espace parent reste propre : semaine + abonnements + QR uniquement. */}
-      {user?.role !== 'client' && (
-        <>
-          <h2 className="font-bold text-slate-800 pt-2">Menu récréation</h2>
-
-          <div className="flex gap-2 flex-wrap">
-            {categories.map((c) => (
-              <button
-                key={c}
-                onClick={() => setFilter(c)}
-                className={`px-4 py-2 rounded-full text-sm font-semibold ${filter === c ? 'bg-green-700 text-white' : 'bg-white border text-slate-600'}`}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
-
-          {list.length === 0 ? (
-            <div className="bg-white rounded-2xl p-10 text-center border text-slate-500">
-              Aucun plat disponible pour ce filtre aujourd’hui.
-            </div>
-          ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {list.map((p) => (
-                <div key={p.id} className="bg-white rounded-2xl overflow-hidden border shadow-sm">
-                  {p.image && <img src={p.image} alt={p.name} className="h-36 w-full object-cover" />}
-                  <div className="p-4">
-                    <p className="text-xs font-semibold text-green-700 uppercase">{p.category}</p>
-                    <h3 className="font-bold text-slate-800">{p.name}</h3>
-                    {p.description && <p className="text-sm text-slate-500 mt-1 line-clamp-2">{p.description}</p>}
-                    <p className="mt-2 font-extrabold text-slate-800">{formatCurrency(p.price)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </>
       )}
     </div>

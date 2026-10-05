@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { Order } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
 import OrestoLogo from '@/components/brand/OrestoLogo';
-import { Receipt, Printer, Download, ShoppingCart, CheckCircle } from 'lucide-react';
+import { Receipt, Printer, Download, ShoppingCart, CheckCircle, QrCode, Copy } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface ReceiptPageProps {
   order: Order | null;
@@ -11,6 +13,16 @@ interface ReceiptPageProps {
 const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
   const handlePrint = () => window.print();
   const handleDownload = () => window.print();
+  const [qrCopied, setQrCopied] = useState(false);
+  
+  const copyQrToken = () => {
+    if (order?.qrToken) {
+      navigator.clipboard.writeText(order.qrToken);
+      setQrCopied(true);
+      setTimeout(() => setQrCopied(false), 2000);
+    }
+  };
+  
   if (!order) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] bg-gradient-to-br from-slate-50 to-orange-50/20 p-6">
@@ -39,7 +51,7 @@ const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
           <p className="text-slate-600 text-sm">
             {order.status === 'completed'
               ? 'La commande a été encaissée'
-              : 'En attente d’encaissement : faites marquer « Vendu » à la caisse pour l’inclure dans le CA'}
+              : 'En attente d\'encaissement : faites marquer « Vendu » à la caisse pour l\'inclure dans le CA'}
           </p>
         </div>
 
@@ -117,6 +129,29 @@ const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
               </>
             )}
           </div>
+
+          {/* QR Code pour vérification */}
+          {order.qrToken && (
+            <div className="px-6 pb-6 border-t-2 border-dashed border-slate-300 pt-4 space-y-3">
+              <div className="text-center">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-center gap-1">
+                  <QrCode className="w-4 h-4" /> QR Vérification Commande
+                </p>
+                <div className="inline-block p-3 bg-white rounded-xl border shadow-sm">
+                  <QRCodeSVG value={order.qrToken} size={150} level="M" />
+                </div>
+                <p className="text-xs text-slate-500 font-mono truncate max-w-xs mx-auto break-all">{order.qrToken}</p>
+                <button
+                  onClick={copyQrToken}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  {qrCopied ? 'Copié !' : 'Copier le code'}
+                </button>
+                <p className="text-xs text-slate-500 mt-1">Scannez pour vérifier la commande</p>
+              </div>
+            </div>
+          )}
 
           {/* Payment info */}
           <div className="px-6 pb-6 border-t-2 border-dashed border-slate-300 pt-4 text-center space-y-2">

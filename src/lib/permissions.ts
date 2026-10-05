@@ -21,8 +21,8 @@ export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'history', 'profile'],
   // Personnel : cantine terrain — menus, validation, abonnés, QR, utilisateurs, établissements, paramètres, historique
   personnel: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile'],
-  // Gérant : SANS accueil — tableau de bord, caisse POS, menus récréation (lecture), historique
-  gestionnaire: ['dashboard', 'pos', 'payment', 'receipt', 'orders', 'menus', 'history', 'profile'],
+  // Gérant : SANS accueil — tableau de bord, caisse POS, menu récréation, historique
+  gestionnaire: ['dashboard', 'pos', 'payment', 'receipt', 'orders', 'menurecreation', 'history', 'profile'],
   // DG : pilotage + suivi uniquement
   admin: DG_PAGES,
   // Compatibilité anciens comptes : caissier → personnel, manager → DG
@@ -47,7 +47,6 @@ export const ROLE_LABEL: Record<UserRole, string> = {
 /** Libellés pro des modules pour les écrans "Périmètre d'accès". */
 export const PAGE_LABEL: Record<PageName, string> = {
   home: 'Accueil',
-  menus: 'Menus',
   subscription: 'Abonnement',
   subscriptions: 'Abonnés & paiements',
   qrcode: 'Mon QR Code',
@@ -66,4 +65,5 @@ export const PAGE_LABEL: Record<PageName, string> = {
   profile: 'Profil',
   children: 'Mes enfants',
   finance: 'Finance',
+  menurecreation: 'Menu Récréation',
 };

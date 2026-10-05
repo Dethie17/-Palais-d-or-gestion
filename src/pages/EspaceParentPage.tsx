@@ -1,19 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
+import { useProducts } from '@/context/ProductContext';
 import { formatCurrency } from '@/lib/utils';
 import { initiateWavePayment, isMobileMethod, isValidSnPhone, isValidWaveCode, type WavePaymentRequest } from '@/lib/wave';
 import { CYCLES, CYCLE_LABEL, cycleOfClass, pricePerMeal } from '@/lib/schoolCycles';
 import { isOfficialFormula } from '@/lib/formulas';
-import type { Child, ORestoPayment, ORestoPaymentMethod, ORestoPaymentStatus, PageName, SchoolCycle, Subscription, WalletTx, WeeklyMenu } from '@/types/menu';
+import type { Child, Product, ORestoPayment, ORestoPaymentMethod, ORestoPaymentStatus, PageName, SchoolCycle, Subscription, WalletTx, WeeklyMenu } from '@/types/menu';
+import { mockProducts } from '@/data/mockData';
 import WavePaymentModal from '@/components/WavePaymentModal';
 import PaymentReceiptModal from '@/components/PaymentReceiptModal';
 import TicketCard from '@/components/TicketCard';
 import { dayPhoto } from '@/data/cantineWeek';
 import { menuTicketTotal } from '@/lib/menus';
+import { categories } from '@/data/mockData';
 import {
   CheckCircle, AlertCircle, Smartphone, Timer, Ticket,
   Pencil, Trash2, X, Check,
+  ShoppingCart, Plus, Minus, CreditCard, Utensils,
+  Pizza, Coffee, IceCream, Salad, Sandwich, Cookie, ChefHat, Croissant
 } from 'lucide-react';
 
 const METHOD_LABEL: Record<string, string> = {
@@ -33,6 +38,16 @@ const STATUS_STYLE: Record<ORestoPaymentStatus, string> = {
 const STATUS_LABEL: Record<ORestoPaymentStatus, string> = {
   pending: 'En attente', paid: 'Payé', failed: 'Échoué', cancelled: 'Annulé', refunded: 'Remboursé',
 };
+
+const KIOSK_CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  'Tous': <Utensils className="w-5 h-5" />,
+  'recreation': <ChefHat className="w-5 h-5" />,
+  'pause': <Coffee className="w-5 h-5" />,
+  'recréation': <ChefHat className="w-5 h-5" />,
+  'récréation': <ChefHat className="w-5 h-5" />,
+};
+
+const KIOSK_CATEGORIES = ['Tous', 'recreation', 'pause'] as const;
 
 /** Les 3 formules fixes de la section Abonnement. */
 const ABO_IDS = ['F1', 'F2', 'F3'] as const;
@@ -65,17 +80,635 @@ function SectionTitle({ step, title, sub }: { step: string; title: string; sub?:
 }
 
 /**
+ * Kiosque POS pour l'Espace Parent - version adaptée du POS gérant
+ * Affiche les produits récréation/pause avec panier par enfant, paiement par carte prépayée
+ */
+function KioskPOS({ 
+  kids, 
+  kioskProducts, 
+  walletOf, 
+  buyKiosk, 
+  kioskCart, 
+  setKioskCart, 
+  flash, 
+  formatCurrency 
+}: {
+  kids: Child[];
+  kioskProducts: Product[];
+  walletOf: (id: string) => number;
+  buyKiosk: (username: string, childId: string, items: { productId: string; productName: string; price: number; qty: number }[]) => { order: any; balance: number };
+  kioskCart: Record<string, { productId: string; productName: string; price: number; qty: number }[]>;
+  setKioskCart: React.Dispatch<React.SetStateAction<Record<string, { productId: string; productName: string; price: number; qty: number }[]>>>;
+  flash: (ok: boolean, text: string) => void;
+  formatCurrency: (amount: number) => string;
+}) {
+  const [activeCategory, setActiveCategory] = useState<'Tous' | 'recreation' | 'pause'>('Tous');
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(kids[0]?.id ?? null);
+  const [animatingId, setAnimatingId] = useState<string | null>(null);
+  const [showCart, setShowCart] = useState(false);
+
+  const filteredProducts = activeCategory === 'Tous' 
+    ? kioskProducts 
+    : kioskProducts.filter((p) => p.category === activeCategory);
+
+  const cart = selectedChildId ? (kioskCart[selectedChildId] || []) : [];
+  const balance = selectedChildId ? walletOf(selectedChildId) : 0;
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
+
+  const addToCart = (product: Product) => {
+    if (!selectedChildId) {
+      flash(false, 'Sélectionnez un enfant d\'abord.');
+      return;
+    }
+    const currentBalance = walletOf(selectedChildId);
+    const inCart = cart.find((it) => it.productId === product.id);
+    const currentQty = inCart?.qty || 0;
+    if (currentBalance < product.price * (currentQty + 1)) {
+      flash(false, `Solde insuffisant pour ${product.name}.`);
+      return;
+    }
+    setAnimatingId(product.id);
+    setTimeout(() => setAnimatingId(null), 300);
+
+    setKioskCart((prev) => {
+      const childCart = prev[selectedChildId!] || [];
+      const existing = childCart.find((item) => item.productId === product.id);
+      if (existing) {
+        return {
+          ...prev,
+          [selectedChildId!]: childCart.map((item) =>
+            item.productId === product.id ? { ...item, qty: item.qty + 1 } : item
+          ),
+        };
+      }
+      return {
+        ...prev,
+        [selectedChildId!]: [...childCart, { productId: product.id, productName: product.name, price: product.price, qty: 1 }],
+      };
+    });
+  };
+
+  const updateQuantity = (productId: string, delta: number) => {
+    if (!selectedChildId) return;
+    setKioskCart((prev) => {
+      const childCart = prev[selectedChildId] || [];
+      return {
+        ...prev,
+        [selectedChildId]: childCart
+          .map((item) => {
+            if (item.productId === productId) {
+              const newQty = item.qty + delta;
+              if (newQty <= 0) return null;
+              // Vérifier le solde
+              if (delta > 0 && balance < item.price * newQty) {
+                flash(false, `Solde insuffisant pour ${item.productName}.`);
+                return item;
+              }
+              return { ...item, qty: newQty };
+            }
+            return item;
+          })
+          .filter((item): item is { productId: string; productName: string; price: number; qty: number } => item !== null),
+      };
+    });
+  };
+
+  const removeFromCart = (productId: string) => {
+    if (!selectedChildId) return;
+    setKioskCart((prev) => {
+      const childCart = prev[selectedChildId] || [];
+      return {
+        ...prev,
+        [selectedChildId]: childCart.filter((item) => item.productId !== productId),
+      };
+    });
+  };
+
+  const handlePay = () => {
+    if (!selectedChildId) {
+      flash(false, 'Sélectionnez un enfant.');
+      return;
+    }
+    if (!cart.length) {
+      flash(false, 'Panier vide.');
+      return;
+    }
+    try {
+      const { order, balance: newBalance } = buyKiosk(username, selectedChildId, cart);
+      setKioskCart((prev) => ({ ...prev, [selectedChildId]: [] }));
+      const k = kids.find((x) => x.id === selectedChildId);
+      flash(true, `Commande kiosque passée pour ${k?.firstName ?? 'l\'enfant'} — ${order.items.length} article(s). Nouveau solde : ${formatCurrency(newBalance)}.`);
+      setShowCart(false);
+    } catch (err) {
+      flash(false, err instanceof Error ? err.message : 'Commande impossible.');
+    }
+  };
+
+  const selectedChild = kids.find((k) => k.id === selectedChildId);
+
+  if (!kids.length) {
+    return (
+      <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
+        <p className="text-lg font-black text-slate-800">Aucun enfant inscrit</p>
+        <p className="mt-1.5 text-sm text-slate-500 max-w-md mx-auto">
+          Inscrivez un enfant à l\'étape 1 pour utiliser le kiosque.
+        </p>
+      </div>
+    );
+  }
+
+  if (kioskProducts.length === 0) {
+    return (
+      <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
+        <p className="text-lg font-black text-slate-800">Kiosque en préparation</p>
+        <p className="mt-1.5 text-sm text-slate-500 max-w-md mx-auto">
+          Le Personnel ajoute les articles de récréation (snacks, boissons) dans Gestion Menu.
+          Rien n\'est affiché tant qu\'aucun article n\'est disponible. Revenez bientôt.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col lg:flex-row h-[600px] lg:h-[700px] animate-fade-in gap-4">
+      {/* Product catalog - Left side */}
+      <div className="flex-1 flex flex-col min-w-0 lg:border-r border-slate-200 bg-white rounded-2xl overflow-hidden shadow-sm">
+        <div className="p-4 lg:p-6 border-b border-slate-200">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-xl lg:text-2xl font-bold text-slate-800">Kiosque Récréation & Pause</h1>
+              <p className="text-sm text-slate-600 mt-0.5">{filteredProducts.length} article(s) disponible(s)</p>
+            </div>
+            {selectedChild && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
+                <span className="text-xs font-bold text-emerald-700">{selectedChild.firstName} {selectedChild.lastName}</span>
+                <span className="text-sm font-black text-emerald-800 tabular-nums">{formatCurrency(balance)}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2 overflow-x-auto tiny-scrollbar pb-1" role="tablist" aria-label="Catégories kiosque">
+            {KIOSK_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat as 'Tous' | 'recreation' | 'pause')}
+                aria-pressed={activeCategory === cat}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
+                  activeCategory === cat
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {KIOSK_CATEGORY_ICONS[cat]}
+                {cat === 'recreation' ? 'Récréation' : cat === 'pause' ? 'Pause' : 'Tous'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar bg-gradient-to-br from-slate-50 to-orange-50/20">
+          {filteredProducts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <p className="text-lg font-bold text-slate-800">Aucun article dans cette catégorie</p>
+              <p className="mt-1 text-sm text-slate-600">Sélectionnez une autre catégorie.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4">
+              {filteredProducts.map((product) => (
+                <button
+                  key={product.id}
+                  onClick={() => addToCart(product)}
+                  aria-label={`Ajouter ${product.name} au panier, ${formatCurrency(product.price)}`}
+                  className={`bg-white rounded-2xl border-2 border-slate-200 overflow-hidden text-left hover:shadow-xl hover:border-emerald-600 transition-all group ${
+                    animatingId === product.id ? 'animate-cart-pop' : ''
+                  }`}
+                  disabled={selectedChildId && walletOf(selectedChildId) < product.price}
+                >
+                  <div className="h-28 lg:h-32 overflow-hidden relative">
+                    <img 
+                      src={product.image} 
+                      alt={product.name} 
+                      loading="lazy" 
+                      width={300} 
+                      height={200} 
+                      onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }} 
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    {selectedChildId && walletOf(selectedChildId) < product.price && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+                        <span className="text-white text-sm font-bold bg-red-600 px-3 py-1 rounded-full">Solde insuffisant</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 lg:p-4">
+                    <h3 className="text-sm lg:text-base font-bold text-slate-800 truncate mb-1">{product.name}</h3>
+                    <p className="text-base lg:text-lg font-bold text-emerald-700">
+                      {formatCurrency(product.price)}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Cart - Right side */}
+      <div className={`lg:w-[420px] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden ${kids.length === 1 ? 'lg:hidden' : ''}`}>
+        <div className="p-5 lg:p-6 border-b border-slate-200 bg-gradient-to-r from-emerald-50 to-teal-50">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">Panier</h2>
+              <span className="text-sm text-slate-600">{cart.length} article(s) · {cartCount} pièce(s)</span>
+            </div>
+            {kids.length > 1 && (
+              <select
+                value={selectedChildId || ''}
+                onChange={(e) => setSelectedChildId(e.target.value || null)}
+                className="px-3 py-2 rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-emerald-600 min-w-[180px]"
+              >
+                {kids.map((k) => (
+                  <option key={k.id} value={k.id}>{k.firstName} {k.lastName} · {formatCurrency(walletOf(k.id))}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto order-scrollbar p-4 lg:p-5 space-y-3">
+          {cart.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12">
+              <ShoppingCart className="w-16 h-16 mb-4 opacity-20" />
+              <p className="text-sm font-medium">Panier vide</p>
+              <p className="text-xs mt-1 text-center">Choisissez des articles à gauche</p>
+            </div>
+          ) : (
+            cart.map((item) => (
+              <div key={item.productId} className="flex gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200 hover:border-emerald-300 transition-colors">
+                <img src={item.productName && kioskProducts.find(p => p.name === item.productName)?.image || '/placeholder.svg'} alt={item.productName} className="w-16 h-16 rounded-xl object-cover flex-shrink-0 shadow-md" onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <h3 className="text-sm font-bold text-slate-800 truncate">{item.productName}</h3>
+                    <button onClick={() => removeFromCart(item.productId)} className="text-slate-400 hover:text-red-600 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-2">{formatCurrency(item.price)} / unité</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => updateQuantity(item.productId, -1)} className="w-8 h-8 rounded-lg bg-white border-2 border-slate-200 flex items-center justify-center text-slate-700 hover:border-emerald-400 hover:text-emerald-600 transition-colors">
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="text-sm font-bold text-slate-800 w-8 text-center">{item.qty}</span>
+                      <button onClick={() => updateQuantity(item.productId, 1)} className="w-8 h-8 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white flex items-center justify-center hover:shadow-lg hover:shadow-emerald-500/30 transition-all">
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <span className="text-base font-bold text-slate-800">{formatCurrency(item.price * item.qty)}</span>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {cart.length > 0 && (
+          <div className="p-5 lg:p-6 border-t border-slate-200 space-y-4 bg-gradient-to-r from-emerald-50 to-teal-50">
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between text-slate-600">
+                <span>Sous-total</span><span className="font-semibold">{formatCurrency(subtotal)}</span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>Solde carte</span><span className="font-semibold text-emerald-700">{formatCurrency(balance)}</span>
+              </div>
+              <div className="flex justify-between text-xl font-bold text-slate-800 pt-3 border-t-2 border-slate-200">
+                <span>Total</span>
+                <span className="bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">{formatCurrency(subtotal)}</span>
+              </div>
+              {subtotal > balance && (
+                <p className="text-xs font-semibold text-red-600 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" /> Solde insuffisant de {formatCurrency(subtotal - balance)}
+                </p>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setKioskCart((prev) => ({ ...prev, [selectedChildId!]: [] }))} className="flex-1 py-3.5 rounded-xl border-2 border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-100 transition-colors">
+                Vider
+              </button>
+              <button
+                onClick={handlePay}
+                disabled={subtotal > balance || !selectedChildId}
+                className="flex-[2] py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-semibold text-sm hover:shadow-xl hover:shadow-emerald-500/50 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+              >
+                <CreditCard className="w-5 h-5" />
+                Payer avec la carte
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Grille produits Kiosque (style MenusPage) : catégories + grille produits avec ajout au panier par enfant.
+ * Affiche produits catégories 'recreation' et 'pause', paiement par carte prépayée.
+ */
+function KioskProductGrid({ 
+  kids, 
+  kioskProducts, 
+  walletOf, 
+  buyKiosk, 
+  flash, 
+  formatCurrency,
+  username
+}: {
+  kids: Child[];
+  kioskProducts: Product[];
+  walletOf: (id: string) => number;
+  buyKiosk: (username: string, childId: string, items: { productId: string; productName: string; price: number; qty: number }[]) => { order: any; balance: number };
+  flash: (ok: boolean, text: string) => void;
+  formatCurrency: (amount: number) => string;
+  username: string;
+}) {
+  const [activeCategory, setActiveCategory] = useState<'Tous' | 'recreation' | 'pause'>('Tous');
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(kids[0]?.id ?? null);
+  const [cart, setCart] = useState<Record<string, { productId: string; productName: string; price: number; qty: number }[]>>({});
+  const [animatingId, setAnimatingId] = useState<string | null>(null);
+
+  const filteredProducts = activeCategory === 'Tous' 
+    ? kioskProducts 
+    : kioskProducts.filter((p) => p.category === activeCategory || p.category === 'récréation' || p.category === 'recréation');
+
+  const childCart = selectedChildId ? (cart[selectedChildId] || []) : [];
+  const balance = selectedChildId ? walletOf(selectedChildId) : 0;
+  const subtotal = childCart.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const cartCount = childCart.reduce((sum, item) => sum + item.qty, 0);
+
+  const addToCart = (product: Product) => {
+    if (!selectedChildId) {
+      flash(false, 'Sélectionnez un enfant d\'abord.');
+      return;
+    }
+    setAnimatingId(product.id);
+    setTimeout(() => setAnimatingId(null), 300);
+
+    setCart((prev) => {
+      const cCart = prev[selectedChildId!] || [];
+      const existing = cCart.find((item) => item.productId === product.id);
+      if (existing) {
+        return {
+          ...prev,
+          [selectedChildId!]: cCart.map((item) =>
+            item.productId === product.id ? { ...item, qty: item.qty + 1 } : item
+          ),
+        };
+      }
+      return {
+        ...prev,
+        [selectedChildId!]: [...cCart, { productId: product.id, productName: product.name, price: product.price, qty: 1 }],
+      };
+    });
+  };
+
+  const updateQuantity = (productId: string, delta: number) => {
+    if (!selectedChildId) return;
+    setCart((prev) => {
+      const cCart = prev[selectedChildId] || [];
+      return {
+        ...prev,
+        [selectedChildId]: cCart
+          .map((item) => {
+            if (item.productId === productId) {
+              const newQty = item.qty + delta;
+              if (newQty <= 0) return null;
+              return { ...item, qty: newQty };
+            }
+            return item;
+          })
+          .filter((item): item is { productId: string; productName: string; price: number; qty: number } => item !== null),
+      };
+    });
+  };
+
+  const removeFromCart = (productId: string) => {
+    if (!selectedChildId) return;
+    setCart((prev) => {
+      const cCart = prev[selectedChildId] || [];
+      return {
+        ...prev,
+        [selectedChildId]: cCart.filter((item) => item.productId !== productId),
+      };
+    });
+  };
+
+  const handlePay = () => {
+    if (!selectedChildId) {
+      flash(false, 'Sélectionnez un enfant.');
+      return;
+    }
+    if (!childCart.length) {
+      flash(false, 'Panier vide.');
+      return;
+    }
+    try {
+      const { order, balance: newBalance } = buyKiosk(username, selectedChildId, childCart);
+      setCart((prev) => ({ ...prev, [selectedChildId]: [] }));
+      const k = kids.find((x) => x.id === selectedChildId);
+      flash(true, `Commande kiosque passée pour ${k?.firstName ?? 'l\'enfant'} — ${order.items.length} article(s). Nouveau solde : ${formatCurrency(newBalance)}.`);
+      // Scroll vers le haut pour voir le toast de confirmation
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      flash(false, err instanceof Error ? err.message : 'Commande impossible.');
+    }
+  };
+
+  const selectedChild = kids.find((k) => k.id === selectedChildId);
+
+  if (!kids.length) {
+    return (
+      <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
+        <p className="text-lg font-black text-slate-800">Aucun enfant inscrit</p>
+        <p className="mt-1.5 text-sm text-slate-500 max-w-md mx-auto">
+          Inscrivez un enfant à l\'étape 1 pour utiliser le kiosque.
+        </p>
+      </div>
+    );
+  }
+
+  if (kioskProducts.length === 0) {
+    return (
+      <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
+        <p className="text-lg font-black text-slate-800">Kiosque en préparation</p>
+        <p className="mt-1.5 text-sm text-slate-500 max-w-md mx-auto">
+          Le Personnel ajoute les articles de récréation (snacks, boissons) dans Gestion Menu.
+          Rien n\'est affiché tant qu\'aucun article n\'est disponible. Revenez bientôt.
+        </p>
+      </div>
+    );
+  }
+
+  const KIOSK_CATEGORY_ICONS: Record<string, React.ReactNode> = {
+    'Tous': <Utensils className="w-5 h-5" />,
+    'recreation': <ChefHat className="w-5 h-5" />,
+    'pause': <Coffee className="w-5 h-5" />,
+    'récréation': <ChefHat className="w-5 h-5" />,
+    'recréation': <ChefHat className="w-5 h-5" />,
+  };
+  const KIOSK_CATEGORIES = ['Tous', 'recreation', 'pause'] as const;
+
+  return (
+    <div className="space-y-4">
+      {/* Category tabs */}
+      <div className="flex flex-wrap gap-2 overflow-x-auto tiny-scrollbar pb-1" role="tablist" aria-label="Catégories kiosque">
+        {KIOSK_CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setActiveCategory(cat as 'Tous' | 'recreation' | 'pause')}
+            aria-pressed={activeCategory === cat}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
+              activeCategory === cat
+                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            {KIOSK_CATEGORY_ICONS[cat]}
+            {cat === 'recreation' ? 'Récréation' : cat === 'pause' ? 'Pause' : 'Tous'}
+          </button>
+        ))}
+      </div>
+
+      {/* Product grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4">
+        {filteredProducts.length === 0 ? (
+          <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
+            <p className="text-lg font-bold text-slate-800">Aucun article dans cette catégorie</p>
+            <p className="mt-1 text-sm text-slate-600">Sélectionnez une autre catégorie.</p>
+          </div>
+        ) : (
+          filteredProducts.map((product) => (
+            <button
+              key={product.id}
+              onClick={() => addToCart(product)}
+              aria-label={`Ajouter ${product.name} au panier, ${formatCurrency(product.price)}`}
+              className={`bg-white rounded-2xl border-2 border-slate-200 overflow-hidden text-left hover:shadow-xl hover:border-emerald-600 transition-all group ${
+                animatingId === product.id ? 'animate-cart-pop' : ''
+              }`}
+            >
+              <div className="h-28 lg:h-32 overflow-hidden relative">
+                <img 
+                  src={product.image} 
+                  alt={product.name} 
+                  loading="lazy" 
+                  width={300} 
+                  height={200} 
+                  onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }} 
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+              </div>
+              <div className="p-3 lg:p-4">
+                <h3 className="text-sm lg:text-base font-bold text-slate-800 truncate mb-1">{product.name}</h3>
+                <p className="text-base lg:text-lg font-bold text-emerald-700">
+                  {formatCurrency(product.price)}
+                </p>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+
+      {/* Cart summary - fixed at bottom on mobile, side on desktop */}
+      {childCart.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 lg:relative lg:sticky lg:top-24 lg:bottom-auto z-40 bg-white border-t border-slate-200 shadow-xl p-4 lg:p-6 rounded-t-2xl lg:rounded-2xl animate-slide-up">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">Panier ({cartCount} pièce(s))</h3>
+              <p className="text-sm text-slate-600">{selectedChild?.firstName} {selectedChild?.lastName} · Solde: {formatCurrency(balance)}</p>
+            </div>
+            {kids.length > 1 && (
+              <select
+                value={selectedChildId || ''}
+                onChange={(e) => setSelectedChildId(e.target.value || null)}
+                className="px-3 py-2 rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-emerald-600 min-w-[180px]"
+              >
+                {kids.map((k) => (
+                  <option key={k.id} value={k.id}>{k.firstName} {k.lastName} · {formatCurrency(walletOf(k.id))}</option>
+                ))}
+              </select>
+            )}
+          </div>
+          <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+            {childCart.map((item) => (
+              <div key={item.productId} className="flex gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <img src={item.productName && kioskProducts.find(p => p.name === item.productName)?.image || '/placeholder.svg'} alt={item.productName} className="w-12 h-12 rounded-xl object-cover flex-shrink-0 shadow-md" onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <h4 className="text-sm font-bold text-slate-800 truncate">{item.productName}</h4>
+                    <button onClick={() => removeFromCart(item.productId)} className="text-slate-400 hover:text-red-600 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-2">{formatCurrency(item.price)} / unité</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => updateQuantity(item.productId, -1)} className="w-7 h-7 rounded-lg bg-white border-2 border-slate-200 flex items-center justify-center text-slate-700 hover:border-emerald-400 hover:text-emerald-600 transition-colors">
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-sm font-bold text-slate-800 w-7 text-center">{item.qty}</span>
+                      <button onClick={() => updateQuantity(item.productId, 1)} className="w-7 h-7 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white flex items-center justify-center hover:shadow-lg hover:shadow-emerald-500/30 transition-all">
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <span className="text-sm font-bold text-slate-800">{formatCurrency(item.price * item.qty)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 space-y-2 text-sm border-t border-slate-200 pt-3">
+            <div className="flex justify-between text-slate-600">
+              <span>Sous-total</span><span className="font-semibold">{formatCurrency(subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-slate-600">
+              <span>Solde carte</span><span className="font-semibold text-emerald-700">{formatCurrency(balance)}</span>
+            </div>
+            <div className="flex justify-between text-lg font-bold text-slate-800 pt-2 border-t-2 border-slate-200">
+              <span>Total</span>
+              <span className="bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">{formatCurrency(subtotal)}</span>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setCart((prev) => ({ ...prev, [selectedChildId!]: [] }))} className="flex-1 py-3 rounded-xl border-2 border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-100 transition-colors">
+                Vider
+              </button>
+              <button
+                onClick={handlePay}
+                className="flex-[2] py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-semibold text-sm hover:shadow-xl hover:shadow-emerald-500/50 transition-all flex items-center justify-center gap-2"
+              >
+                <CreditCard className="w-5 h-5" />
+                Payer avec la carte
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Espace Parent — parcours fluide :
  * 1 inscription (carte crédit + QR créés seuls) → 2 abonnement
  * (paiement InTouch intégré au pavé formule) → 3 menu du jour payé
- * par la carte + tickets → 4 cartes (recharge + QR) → 5 historique.
+ * par la carte + tickets → 4 Kiosque Récréation & Pause → 5 cartes (recharge + QR) → 6 historique.
  */
 const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => void }) => {
   const { user } = useAuth();
   const {
     formulas, mySubscriptions, myPayments, myValidations,
     subscribe, paySubscription, confirmMobilePayment, resumeMobilePayment,
-    renewSubscription, buyTicket, buyDayMenu, myChildren, addChild,
+    renewSubscription, buyTicket, buyDayMenu, buyKiosk, myChildren, addChild,
     updateChild, deleteChild, weeklyMenus, confirmWalletTopUpMobile,
     parentProfileOf, walletOf, childTxs,
   } = useResto();
@@ -90,6 +723,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
   const [payFor, setPayFor] = useState<string | null>(null);
   const [ticketAlt, setTicketAlt] = useState<{ formulaId: string; name: string } | null>(null);
   const [dayBuyer, setDayBuyer] = useState<Record<string, string>>({});
+  const [kioskCart, setKioskCart] = useState<Record<string, { productId: string; productName: string; price: number; qty: number }[]>>({});
 
   const username = user?.username ?? '';
   const allMine = mySubscriptions(username);
@@ -151,6 +785,12 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     allMine.some((s) => s.status === 'pending' && s.childId === childId);
 
   const todayName = DAY_INDEX[new Date().getDay()];
+
+  // Produits kiosque (catégorie pause/récréation) — fusion mock + Supabase/localStorage pour garantir l'affichage
+  const { products: allProducts } = useProducts();
+  const kioskMockProducts = mockProducts.filter((p) => p.available && (p.category === 'recreation' || p.category === 'pause'));
+  const kioskProducts = [...new Map([...allProducts, ...kioskMockProducts].map(p => [p.id, p])).values()]
+    .filter((p) => p.available && (p.category === 'pause' || p.category === 'recreation' || p.category === 'récréation' || p.category === 'recréation'));
 
   // ---------- Paiement formule depuis le panneau intégré ----------
   const startFormulaPayment = (formulaId: string, childId: string) => {
@@ -557,9 +1197,23 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
           )}
         </section>
 
-        {/* ===== 4. CARTES : une carte dark par enfant ===== */}
+        {/* ===== 4. KIOSQUE RÉCRÉATION & PAUSE ===== */}
+        <section id="kiosque" className="scroll-mt-24">
+          <SectionTitle step="4" title="Kiosque Récréation & Pause" sub="Snacks & boissons payés par la carte prépayée — prêts à récupérer à la cantine" />
+          <KioskProductGrid
+            kids={kids}
+            kioskProducts={kioskProducts}
+            walletOf={walletOf}
+            buyKiosk={buyKiosk}
+            flash={flash}
+            formatCurrency={formatCurrency}
+            username={username}
+          />
+        </section>
+
+        {/* ===== 5. CARTES : une carte dark par enfant ===== */}
         <section id="cartes" className="scroll-mt-24">
-          <SectionTitle step="4" title="Mes cartes" />
+          <SectionTitle step="5" title="Mes cartes" />
 
           {kids.length > 0 ? (
             <ul className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -580,7 +1234,6 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
                     totalMeals={total}
                     days={s ? daysLeft(s) : 0}
                     onRenew={s ? () => handleRenew(s.id, 'intouch') : undefined}
-                    onGotoQR={() => onNavigate?.('qrcode')}
                     onRecharged={handleRecharged}
                     onError={(t) => flash(false, t)}
                     updateChild={updateChild}
@@ -597,9 +1250,9 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
           )}
         </section>
 
-        {/* ===== 5. HISTORIQUE ===== */}
+        {/* ===== 6. HISTORIQUE ===== */}
         <section id="historique" className="scroll-mt-24">
-          <SectionTitle step="5" title="Historique des dépenses" />
+          <SectionTitle step="6" title="Historique des dépenses" />
           <div className="flex flex-wrap items-center gap-2 mt-4 mb-3">
             {[{ id: 'all', label: 'Tous' }, ...kids.map((k) => ({ id: k.id, label: k.firstName }))].map((o) => (
               <button
@@ -1190,7 +1843,7 @@ function QuickEnrollCycle({ cycleId, username, hasProfile, addChild, kidsCount, 
  * Abonné : repas restants + J- + Mon QR + Renouveler + progression.
  * Sans abonnement : solde + recharge InTouch intégrée. Gestion intégrée.
  */
-function KidCard({ k, sub, pending, balance, walletOf, formulaName, formulaRules, totalMeals, days, onRenew, onGotoQR, onRecharged, onError, updateChild, deleteChild, flash }: {
+function KidCard({ k, sub, pending, balance, walletOf, formulaName, formulaRules, totalMeals, days, onRenew, onRecharged, onError, updateChild, deleteChild, flash }: {
   k: Child;
   sub: Subscription | undefined;
   pending: boolean;
@@ -1274,9 +1927,6 @@ function KidCard({ k, sub, pending, balance, walletOf, formulaName, formulaRules
         </>
       )}
       <div className="relative mt-4 flex flex-wrap gap-2">
-        <button onClick={onGotoQR} className="inline-flex items-center gap-1.5 px-5 py-2.5 min-h-[44px] rounded-xl bg-white text-slate-900 text-sm font-bold hover:bg-slate-100 active:scale-[0.99] transition-all">
-          Mon QR
-        </button>
         {sub && onRenew ? (
           <button onClick={onRenew} className="inline-flex items-center gap-1.5 px-5 py-2.5 min-h-[44px] rounded-xl bg-emerald-500 text-white text-sm font-bold hover:bg-emerald-400 active:scale-[0.99] transition-all">
             <Smartphone className="w-4 h-4" /> Renouveler

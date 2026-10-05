@@ -48,11 +48,11 @@ export interface Order {
   customerName?: string;
   amountReceived?: number;
   change?: number;
+  qrToken?: string;
 }
 
 export type PageName =
   | 'home'
-  | 'menus'
   | 'subscription'
   | 'subscriptions'
   | 'qrcode'
@@ -70,7 +70,10 @@ export type PageName =
   | 'establishments'
   | 'children'
   | 'finance'
-  | 'qrgallery';
+  | 'qrgallery'
+  | 'menurecreation'
+  | 'paymentsuccess'
+  | 'paymentfailure';
 
 // ---------- O RESTO — modèle issu du cahier des charges ----------
 
@@ -218,7 +221,28 @@ export interface FinanceExpense {
   createdBy?: string;
 }
 
-// ---------- Menu de la semaine (informatif, renseigné par le gérant) ----------
+// ---------- Kiosque récréation & pause : commandes payées par la carte ----------
+
+export interface KioskOrderItem {
+  productId: string;
+  name: string;
+  price: number;
+  qty: number;
+}
+
+export type KioskOrderStatus = 'pending' | 'served' | 'cancelled';
+
+export interface KioskOrder {
+  id: string;
+  childId: string;
+  parentUsername: string;
+  items: KioskOrderItem[];
+  total: number;
+  status: KioskOrderStatus;
+  reference: string;
+  createdAt: string;
+  servedAt?: string;
+}
 
 export const WEEK_DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'] as const;
 export type WeekDay = (typeof WEEK_DAYS)[number];

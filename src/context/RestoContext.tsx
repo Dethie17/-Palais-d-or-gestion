@@ -267,6 +267,9 @@ interface RestoContextType {
   // ---- Menu de la semaine (informatif) ----
   weeklyMenus: WeeklyMenu[];
   updateWeeklyMenu: (day: WeeklyMenu['day'], name: string, description: string, items?: WeeklyMenuItem[], price?: number) => void;
+  // ---- Ticket visiteur (walk-in) ----
+  walkInTickets: { token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string }[];
+  createWalkInTicket: (menu: WeeklyMenu, method: 'cash' | 'intouch' | 'wave') => { token: string; reference: string; ticket: { token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string } };
 }
 
 const RestoContext = createContext<RestoContextType | undefined>(undefined);
@@ -398,6 +401,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       items: Array.isArray((m as Partial<WeeklyMenu>).items) ? (m as WeeklyMenu).items : [],
     }));
   });
+  const [walkInTickets, setWalkInTickets] = useState<{ token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string }[]>([]);
 
   useEffect(() => save(LS_KEYS.establishments, establishments), [establishments]);
   useEffect(() => save(LS_KEYS.formulas, formulas), [formulas]);
@@ -1294,6 +1298,89 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     [childrenList, wallets, subscriptions],
   );
 
+  // Kiosque Récréation & Pause : achat d'articles (snacks/boissons) payés par la carte prépayée
+  // Crée une commande kiosque pour le personnel + débit immédiat du wallet enfant.
+  const buyKiosk = useCallback(
+    (clientUsername: string, childId: string, items: { productId: string; productName: string; price: number; qty: number }[]) => {
+      const child = childrenList.find((c) => c.id === childId);
+      if (!child) throw new Error('Enfant introuvable');
+      if (!items.length) throw new Error('Panier vide');
+      const total = items.reduce((sum, it) => sum + it.price * it.qty, 0);
+      const balance = wallets.find((w) => w.childId === childId)?.balance ?? 0;
+      // Pas de blocage solde insuffisant : on autorise le débit (solde peut devenir négatif)
+      const now = new Date();
+      const rand = Math.floor(Math.random() * 36 * 36).toString(36).toUpperCase();
+      const tx: WalletTx = {
+        id: uid('W'), childId, kind: 'debit', amount: total,
+        method: 'card', status: 'paid',
+        reference: `KIOSK-${Date.now().toString(36).toUpperCase()}${rand}`,
+        label: `Kiosque récréation/pause — ${items.map(i => `${i.productName}×${i.qty}`).join(', ')}`,
+        createdAt: now.toISOString(),
+      };
+      const orderRef = `KIOSK-${Date.now().toString(36).toUpperCase()}`;
+      const kioskOrder = {
+        id: `kiosk-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        childId,
+        parentUsername: clientUsername,
+        items: items.map(it => ({ productId: it.productId, name: it.productName, price: it.price, qty: it.qty })),
+        total,
+        status: 'pending' as const,
+        reference: orderRef,
+        createdAt: now.toISOString(),
+        servedAt: null,
+      };
+      const nextBalance = balance - total;
+      setWalletTxs((prev) => [...prev, tx]);
+      setWallets((prev) => prev.map((w) => (w.childId === childId ? { ...w, balance: nextBalance } : w)));
+      // Persist wallet
+      supabase.from('wallet_transactions').insert({
+        id: tx.id, child_id: tx.childId, kind: tx.kind, amount: tx.amount,
+        method: 'card', status: 'paid', reference: tx.reference, label: tx.label,
+      }).then(() => undefined, () => undefined);
+      supabase.from('wallets').upsert({ child_id: childId, balance: nextBalance })
+        .then(() => undefined, () => undefined);
+      // Persist kiosk order (best-effort)
+      supabase.from('kiosk_orders').insert({
+        id: kioskOrder.id,
+        child_id: childId,
+        parent_username: clientUsername,
+        items: kioskOrder.items,
+        total: kioskOrder.total,
+        status: 'pending',
+        reference: orderRef,
+        created_at: now.toISOString(),
+        served_at: null,
+      }).then(() => undefined, () => undefined);
+      return { order: kioskOrder, balance: nextBalance };
+    },
+    [childrenList, wallets],
+  );
+
+  // Créer un ticket visiteur (walk-in) pour le menu du jour — génère un QR TICKET-XXXXXX
+  const createWalkInTicket = useCallback(
+    (menu: WeeklyMenu, method: 'cash' | 'intouch' | 'wave') => {
+      const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const token = `TICKET-${Date.now().toString(36).toUpperCase()}${rand}`;
+      const reference = `WLK-${Date.now().toString(36).toUpperCase()}`;
+      const now = new Date();
+      const ticket = {
+        token,
+        reference,
+        menuName: menu.name || `Menu du ${menu.day}`,
+        menuDay: menu.day,
+        price: menu.price ?? 0,
+        items: menu.items ?? [],
+        method,
+        status: method === 'cash' ? 'paid' : 'pending',
+        createdAt: now.toISOString(),
+      };
+      // Stocker le ticket pour validation ultérieure
+      setWalkInTickets((prev) => [...prev, ticket]);
+      return { token, reference, ticket };
+    },
+    [],
+  );
+
   // Vente au comptoir par le Gérant : ticket ou abonnement pour un client nommé.
   // Espèces : activation / crédit immédiats + reçu (sans passer par un pending stale).
   // Externe : demande pending à confirmer via coche manuelle.
@@ -1383,7 +1470,6 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           childId,
         };
         setValidations((prev) => [...prev, validation]);
-        // Audit anti-fraude persisté (rejets aussi en base)
         supabase.from('validations').insert({
           id: validation.id,
           qr_token: validation.qrToken,
@@ -1395,6 +1481,39 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         }).then(() => undefined, () => undefined);
         return { ok: false, message, validation };
       };
+
+      // --- Ticket visiteur (walk-in) : QR format "TICKET-XXXXXX" ---
+      if (token.startsWith('TICKET-')) {
+        const ticketRef = token;
+        const existing = validations.find((v) => v.qrToken === ticketRef);
+        if (existing) {
+          if (existing.status === 'accepted') {
+            return fail('Ce ticket a déjà été servi.', existing.clientUsername);
+          }
+          return fail('Ticket déjà scanné (en attente).', existing.clientUsername);
+        }
+        // Créer validation acceptée pour ticket visiteur
+        const validation: MealValidation = {
+          id: uid('V'),
+          qrToken: ticketRef,
+          clientUsername: 'visiteur',
+          establishmentId,
+          validatedAt: now.toISOString(),
+          status: 'accepted',
+          childId: undefined,
+        };
+        setValidations((prev) => [...prev, validation]);
+        supabase.from('validations').insert({
+          id: validation.id,
+          qr_token: validation.qrToken,
+          client_username: validation.clientUsername,
+          establishment_id: validation.establishmentId,
+          status: 'accepted',
+          reason: null,
+          child_id: null,
+        }).then(() => undefined, () => undefined);
+        return { ok: true, message: 'Repas visiteur validé ✓', validation };
+      }
 
       // QR enfant : carte prépayée (abonnement enfant d'abord, sinon débit wallet)
       const child = childrenList.find((c) => c.qrToken.toUpperCase() === token);
@@ -1892,6 +2011,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         renewSubscription,
         buyTicket,
         buyDayMenu,
+        buyKiosk,
         counterSale,
         validateMeal,
         stats,
@@ -1918,6 +2038,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         deleteExpense,
         weeklyMenus,
         updateWeeklyMenu,
+        createWalkInTicket,
+        walkInTickets,
       }}
     >
       {children}
