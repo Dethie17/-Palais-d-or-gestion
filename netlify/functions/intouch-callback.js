@@ -11,9 +11,8 @@
  * 
  */
 
-import type { Handler, HandlerEvent, HandlerContext } from '@netlify/functions';
-import { createClient } from '@supabase/supabase-js';
-import crypto from 'crypto';
+const { createClient } = require('@supabase/supabase-js');
+const crypto = require('crypto');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,45 +20,14 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-interface InTouchCallbackPayload {
-  transaction_id: string;
-  reference: string;
-  amount: number;
-  status: 'success' | 'failed' | 'pending';
-  phone: string;
-  merchant_number: string;
-  timestamp: string;
-  signature: string;
-  // Champs supplémentaires possibles selon la doc InTouch
-  operator?: 'orange' | 'free' | 'expresso' | 'wave';
-  fees?: number;
-  net_amount?: number;
-}
-
 const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 const CALLBACK_SECRET = process.env.INTOUCH_CALLBACK_SECRET || '';
 
-// Handle CORS preflight requests
-const handleCors = (event: HandlerEvent) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      },
-      body: '',
-    };
-  }
-  return null;
-};
-
-function verifySignature(payload: InTouchCallbackPayload, secret: string): boolean {
+function verifySignature(payload, secret) {
   if (!secret) {
     console.warn('⚠️ INTOUCH_CALLBACK_SECRET non configuré - signature non vérifiée');
     return true; // En dev, on accepte sans signature
@@ -75,13 +43,28 @@ function verifySignature(payload: InTouchCallbackPayload, secret: string): boole
   return payload.signature === expectedSignature;
 }
 
-function getClientIp(event: HandlerEvent): string {
+function getClientIp(event) {
   return event.headers['x-forwarded-for']?.split(',')[0]?.trim() 
     || event.headers['x-real-ip'] 
     || 'unknown';
 }
 
-const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) => {
+function handleCors(event) {
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
+      body: '',
+    };
+  }
+  return null;
+}
+
+const handler = async (event, context) => {
   // Handle CORS preflight
   const corsResponse = handleCors(event);
   if (corsResponse) return corsResponse;
@@ -103,7 +86,7 @@ const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) =
 
   try {
     // Parse du body
-    let payload: InTouchCallbackPayload;
+    let payload;
     try {
       payload = JSON.parse(event.body || '{}');
     } catch {
@@ -166,7 +149,7 @@ const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) =
 
     // Mise à jour selon le statut
     const newStatus = status === 'success' ? 'paid' : status === 'failed' ? 'failed' : 'pending';
-    const updates: Record<string, unknown> = {
+    const updates = {
       status: newStatus,
       updated_at: new Date().toISOString(),
     };
@@ -242,4 +225,4 @@ const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) =
   }
 };
 
-export { handler };
+module.exports = { handler };
