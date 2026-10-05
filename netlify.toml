@@ -4,13 +4,9 @@
 [build]
   command = "npm run build"
   publish = "dist"
-  functions = "netlify/functions"
 
-# Functions Netlify (DOIT être AVANT le fallback SPA)
-[[redirects]]
-  from = "/.netlify/functions/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+# Les fonctions Netlify sont servies nativement sur /.netlify/functions/*
+# Aucune redirection ne doit intercepter ce chemin.
 
 # Routes paiement (DOIVENT être AVANT le fallback SPA)
 [[redirects]]
@@ -36,13 +32,12 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Permissions-Policy = "camera=(self), microphone=(), geolocation=()"
 
 # Configuration fonctions Netlify
 [functions]
+  directory = "netlify/functions"
   node_bundler = "esbuild"
-  included_files = ["**/*.ts", "**/*.js"]
-  external_node_modules = ["@supabase/supabase-js"]
 
 # Variables d'environnement requises (à configurer dans Netlify Dashboard > Site settings > Environment variables) :
 # 
