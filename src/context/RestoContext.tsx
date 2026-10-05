@@ -1815,6 +1815,36 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     supabase.from('children').delete().eq('id', id).then(() => undefined, () => undefined);
   }, []);
 
+  const deleteParent = useCallback((username: string) => {
+    // Supprimer les enfants du parent
+    const childrenToDelete = childrenList.filter((c) => c.parentUsername === username);
+    childrenToDelete.forEach((child) => {
+      setChildrenList((prev) => prev.filter((c) => c.id !== child.id));
+      setWallets((prev) => prev.filter((w) => w.childId !== child.id));
+      setWalletTxs((prev) => prev.filter((t) => t.childId !== child.id));
+    });
+    supabase.from('children').delete().eq('parent_username', username).then(() => undefined, () => undefined);
+
+    // Supprimer les abonnements
+    setSubscriptions((prev) => prev.filter((s) => s.clientUsername !== username));
+    supabase.from('subscriptions').delete().eq('client_username', username).then(() => undefined, () => undefined);
+
+    // Supprimer les paiements
+    setPayments((prev) => prev.filter((p) => p.client_username !== username));
+    supabase.from('oresto_payments').delete().eq('client_username', username).then(() => undefined, () => undefined);
+
+    // Supprimer les validations
+    setValidations((prev) => prev.filter((v) => v.clientUsername !== username));
+    supabase.from('validations').delete().eq('client_username', username).then(() => undefined, () => undefined);
+
+    // Supprimer le profil parent
+    setParentProfiles((prev) => prev.filter((p) => p.parentUsername !== username));
+    supabase.from('parent_profiles').delete().eq('parent_username', username).then(() => undefined, () => undefined);
+
+    // Supprimer le wallet (via enfants déjà supprimés)
+    // Les wallets sont déjà supprimés via les enfants
+  }, [childrenList, subscriptions, payments, validations, parentProfiles]);
+
   // Recharge QR Carte : cash = crédit immédiat, externe = pending à confirmer
   const topUpChild = useCallback(
     (childId: string, amount: number, method: ORestoPaymentMethod) => {
@@ -2028,6 +2058,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         addChild,
         updateChild,
         deleteChild,
+        deleteParent,
         topUpChild,
         confirmWalletTopUp,
         confirmWalletTopUpMobile,

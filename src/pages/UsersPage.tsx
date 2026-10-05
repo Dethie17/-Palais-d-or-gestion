@@ -10,7 +10,7 @@ import { ShieldCheck, Baby, Phone, UserRound, Search, UtensilsCrossed } from 'lu
  */
 const UsersPage = () => {
   const { user } = useAuth();
-  const { subscriptions, formulas, validations, myChildren, parentProfiles } = useResto();
+  const { subscriptions, formulas, validations, myChildren, parentProfiles, deleteParent } = useResto();
   const me = getRoleDef(user?.role);
   const [search, setSearch] = useState('');
 
@@ -119,6 +119,19 @@ const UsersPage = () => {
                     <span className="text-slate-400">Sans abonnement actif</span>
                   )}
                 </div>
+                {me.title === 'Personnel de service' && (
+                  <button
+                    onClick={() => {
+                      if (confirm(`Supprimer le compte de ${prof?.firstName} ${prof?.lastName} (${c}) et toutes ses données ?`)) {
+                        deleteParent(c);
+                      }
+                    }}
+                    className="ml-auto px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                    title="Supprimer ce parent (test)"
+                  >
+                    🗑️ Supprimer
+                  </button>
+                )}
               </li>
             );
           })}
