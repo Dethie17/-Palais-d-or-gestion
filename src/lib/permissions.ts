@@ -18,7 +18,7 @@ const DG_PAGES: PageName[] = [
 export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // Parent : UN seul parcours continu (Espace Parent) + profil.
   // Anciennes pages conservées en redirect invisible vers 'home'.
-  client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'history', 'profile'],
+  client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'history', 'profile', 'paymentsuccess', 'paymentfailure'],
   // Personnel : cantine terrain — menus, validation, abonnés, QR, utilisateurs, établissements, paramètres, historique
   personnel: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile'],
   // Gérant : SANS accueil — tableau de bord, caisse POS, menu récréation, historique
@@ -66,4 +66,6 @@ export const PAGE_LABEL: Record<PageName, string> = {
   children: 'Mes enfants',
   finance: 'Finance',
   menurecreation: 'Menu Récréation',
+  paymentsuccess: 'Paiement réussi',
+  paymentfailure: 'Paiement échoué',
 };
