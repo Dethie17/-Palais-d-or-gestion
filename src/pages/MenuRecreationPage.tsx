@@ -105,8 +105,8 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
     try {
       // En mode démo, on vérifie avec le code stocké
       const { checkWaveCode } = await import('@/lib/wave');
-      const reference = `INT-${Date.now().toString(36).toUpperCase()}`;
-      const valid = checkWaveCode(reference, intouchCode.trim());
+      const intouchRef = `INT-${Date.now().toString(36).toUpperCase()}`;
+      const valid = checkWaveCode(intouchRef, intouchCode.trim());
 
       if (!valid) {
         setError('Code invalide ou expiré. Réessayez.');
