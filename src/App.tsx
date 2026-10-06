@@ -62,14 +62,27 @@ function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Gestion des URLs directes (ex: /paiement/success, /paiement/echec)
+  const [intendedPath, setIntendedPath] = useState<string | null>(null);
   useEffect(() => {
     const path = window.location.pathname;
     if (path === '/paiement/success') {
       setCurrentPage('paymentsuccess');
+      setIntendedPath('paymentsuccess');
     } else if (path === '/paiement/echec') {
       setCurrentPage('paymentfailure');
+      setIntendedPath('paymentfailure');
     }
   }, []);
+
+  // Après login, retourner à la page demandée
+  useEffect(() => {
+    if (isAuthenticated && intendedPath) {
+      setCurrentPage(intendedPath as PageName);
+      setIntendedPath(null);
+      // Nettoyer l'URL du navigateur
+      window.history.replaceState({}, '', '/');
+    }
+  }, [isAuthenticated, intendedPath]);
 
   // Sans accueil : Gérant et DG atterrissent direct sur le tableau de bord.
   useEffect(() => {
