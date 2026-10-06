@@ -33,9 +33,9 @@ const FAMILY_STYLE: Record<RoleFamily, { gradient: string; badge: string; title:
   },
   personnel: {
     gradient: 'from-emerald-600 to-teal-700',
-    badge: 'Espace service',
-    title: 'En service',
-    subtitle: 'Validez les QR Code et faites passer tout le monde vite.',
+    badge: 'Supervision cantine',
+    title: 'Tableau de bord',
+    subtitle: 'Menus, validation, caisse, paiements et utilisateurs en un coup d’œil.',
   },
   gestionnaire: {
     gradient: 'from-slate-800 to-slate-900',
