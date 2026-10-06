@@ -130,7 +130,7 @@ const QrGalleryPage = () => {
           </button>
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-bold hover:bg-orange-600"
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-500 text-white text-sm font-bold hover:bg-slate-600"
           >
             <Printer className="w-4 h-4" /> Imprimer
           </button>

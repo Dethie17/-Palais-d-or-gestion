@@ -158,7 +158,7 @@ export function isValidWaveCode(code: string): boolean {
 /**
  * Vérifie le code saisi. Exige le code généré à l'initiation sur cet appareil.
  * Sans code attendu (stockage vidé / autre appareil) : refusé — passez par
- * la coche manuelle du gérant (confirmation externe vérifiée).
+ * la coche manuelle du caissier (confirmation externe vérifiée).
  */
 export function checkWaveCode(reference: string, code: string): boolean {
   const clean = code.trim();

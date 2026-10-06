@@ -17,6 +17,7 @@ import {
   WEEK_DAYS,
   SchoolCycle,
   ParentProfile,
+  KioskOrder,
 } from '@/types/menu';
 import { supabase } from '@/lib/supabase';
 import {
@@ -96,8 +97,8 @@ const DEFAULT_FORMULAS: Formula[] = [
 ];
 
 // Tarifs officiels 2026 (flyer) : appliqués en douceur aux formules F1/F2/F3/T1/C10,
-// sans écraser les formules personnalisées du Gérant ni l'historique.
-// Migration unique (flag localStorage) : le Gérant peut ensuite réajuster ses prix.
+// sans écraser les formules personnalisées du Caissier ni l'historique.
+// Migration unique (flag localStorage) : le Caissier peut ensuite réajuster ses prix.
 const OFFICIAL_TARIFFS_2026: Record<string, Formula> = Object.fromEntries(
   DEFAULT_FORMULAS.map((f) => [f.id, f]),
 );
@@ -181,7 +182,7 @@ interface RestoContextType {
   // Réserve une formule : crée un abonnement "en attente de paiement" (sans paiement)
   subscribe: (clientUsername: string, formulaId: string, childId?: string) => Subscription;
   // Paie un abonnement en attente.
-  // - Espèces : reste en attente jusqu'à encaissement au comptoir (Gérant).
+  // - Espèces : reste en attente jusqu'à encaissement au comptoir (Caissier).
   // - Wave : crée une demande de paiement mobile (pending) ;
   //   l'abonnement s'active à la confirmation du code à 6 chiffres.
   paySubscription: (
@@ -198,7 +199,7 @@ interface RestoContextType {
   confirmCashPayment: (paymentId: string) => boolean;
   // Encaissement comptant en une passe (back-office/comptoir), sans pending stale
   collectCashPayment: (subscriptionId: string) => ORestoPayment | null;
-  // Staff (Gérant) : confirme la réception d'un paiement EXTERNE (Wave/OM/espèces/carte)
+  // Staff (Caissier) : confirme la réception d'un paiement EXTERNE (Wave/OM/espèces/carte)
   // → paiement soldé + abonnement activé ou repas ticket crédités. Coche manuelle.
   confirmManualPayment: (paymentId: string) => boolean;
   // Annule un abonnement en attente (et son paiement en attente)
@@ -227,7 +228,7 @@ interface RestoContextType {
     day: string,
     total: number,
   ) => { addedMeals: number };
-  // Vente au comptoir (Gérant) : formules + tickets pour un client nommé.
+  // Vente au comptoir (Caissier) : formules + tickets pour un client nommé.
   // - Espèces : activation / crédit immédiats + reçu imprimable.
   // - Wave : demande mobile en attente, le client confirme avec son code.
   counterSale: (
@@ -251,6 +252,8 @@ interface RestoContextType {
   addChild: (parentUsername: string, firstName: string, lastName: string, className: string, cycle?: SchoolCycle) => Child;
   updateChild: (id: string, updates: Partial<Pick<Child, 'firstName' | 'lastName' | 'className' | 'cycle'>>) => void;
   deleteChild: (id: string) => void;
+  deleteParent: (username: string) => void;
+  buyKiosk: (clientUsername: string, childId: string, items: { productId: string; productName: string; price: number; qty: number }[]) => { order: KioskOrder; balance: number };
   // Recharge QR Carte : espèces = crédit immédiat, externe = pending à confirmer
   topUpChild: (childId: string, amount: number, method: ORestoPaymentMethod) => { tx: WalletTx; wave?: WavePaymentRequest };
   confirmWalletTopUp: (txId: string) => boolean;
@@ -353,7 +356,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   const [formulas, setFormulas] = useState<Formula[]>(() => {
     const stored = load(LS_KEYS.formulas, DEFAULT_FORMULAS);
     try {
-      // Migration tarifs flyer 2026 : une seule fois, conserve les formules du Gérant
+      // Migration tarifs flyer 2026 : une seule fois, conserve les formules du Caissier
       if (!localStorage.getItem(TARIFF_MIGRATION_FLAG)) {
         const migrated = applyOfficialTariffs(stored);
         try { localStorage.setItem(TARIFF_MIGRATION_FLAG, '1'); } catch { /* ignore */ }
@@ -452,7 +455,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           .map((r) => r.id as string);
         if (formRes.data && formRes.data.length > 0) {
           // Tolérant aux schémas anciens (sans kind/old_price) : les valeurs
-          // officielles comblent les trous, sans écraser les prix du Gérant.
+          // officielles comblent les trous, sans écraser les prix du Caissier.
           const mapped = formRes.data.map((r) => {
             const official = OFFICIAL_TARIFFS_2026[r.id];
             const kind = r.kind === 'ticket' || r.kind === 'subscription' ? r.kind : official?.kind ?? 'subscription';
@@ -530,7 +533,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         if (setRes.data && setRes.data.length > 0) {
           const map = Object.fromEntries(setRes.data.map((r) => [r.key, r.value]));
           setFinanceSettingsState((prev) => {
-            const migrated = { ...prev } as Record<string, unknown>;
+            const migrated = { ...prev } as Record<string, unknown> & FinanceSettings;
             // Migration depuis l'ancien schéma (ism_sales_pct → nouvelles clés 2026)
             delete migrated.ismSalesPct;
             const next: FinanceSettings = {
@@ -764,7 +767,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   const needsExternalConfirm = (method: ORestoPaymentMethod) => method !== 'cash' && method !== 'balance';
 
   // Paiement d'un abonnement en attente (avec déduplication).
-  // Espèces → pending (encaissement au comptoir par le Gérant).
+  // Espèces → pending (encaissement au comptoir par le Caissier).
   // Wave/OM/carte → demande pending à confirmer (manuelle ou code Wave).
   // 'balance' REFUSÉ : un abonnement ne se paie jamais avec la carte
   // (la carte sert aux tickets repas). InTouch / espèces uniquement.
@@ -886,7 +889,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       if (payment.status === 'paid') return { ok: true, message: 'Paiement déjà confirmé.' };
       if (payment.status !== 'pending') return { ok: false, message: 'Ce paiement ne peut plus être confirmé.' };
       if (!isMobileMethod(payment.method)) {
-        return { ok: false, message: 'Ce moyen se confirme au comptoir (coche manuelle du gérant).' };
+        return { ok: false, message: 'Ce moyen se confirme au comptoir (coche manuelle du caissier).' };
       }
       // Expiration 15 min de la demande (wave.ts)
       const created = new Date(payment.createdAt).getTime();
@@ -979,8 +982,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     [subscriptions, formulas],
   );
 
-  // Staff (Gérant) : confirme la réception d'un paiement EXTERNE (Wave/OM/espèces/carte).
-  // Coche manuelle : le gérant vérifie sur son téléphone Wave puis coche.
+  // Staff (Caissier) : confirme la réception d'un paiement EXTERNE (Wave/OM/espèces/carte).
+  // Coche manuelle : le caissier vérifie sur son téléphone Wave puis coche.
   // → paiement soldé + abonnement activé ou repas ticket crédités.
   const confirmManualPayment = useCallback(
     (paymentId: string) => {
@@ -1085,7 +1088,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         status: payment.status,
         reference: payment.reference,
       }).then(() => undefined, () => undefined);
-      // Espèces : le Gérant encaisse au comptoir (Abonnés & paiements).
+      // Espèces : le Caissier encaisse au comptoir (Abonnés & paiements).
       // Wave : code à 6 chiffres. OM/carte : coche manuelle (pas de code).
       if (!needsExternalConfirm(method)) return { payment };
       if (isMobileMethod(method)) {
@@ -1307,7 +1310,10 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       if (!items.length) throw new Error('Panier vide');
       const total = items.reduce((sum, it) => sum + it.price * it.qty, 0);
       const balance = wallets.find((w) => w.childId === childId)?.balance ?? 0;
-      // Pas de blocage solde insuffisant : on autorise le débit (solde peut devenir négatif)
+      // Solde insuffisant : on bloque le débit (impossible de passer en négatif)
+      if (balance < total) {
+        throw new Error(`Solde insuffisant (${balance} FCFA disponibles, ${total} FCFA requis)`);
+      }
       const now = new Date();
       const rand = Math.floor(Math.random() * 36 * 36).toString(36).toUpperCase();
       const tx: WalletTx = {
@@ -1381,7 +1387,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // Vente au comptoir par le Gérant : ticket ou abonnement pour un client nommé.
+  // Vente au comptoir par le Caissier : ticket ou abonnement pour un client nommé.
   // Espèces : activation / crédit immédiats + reçu (sans passer par un pending stale).
   // Externe : demande pending à confirmer via coche manuelle.
   const counterSale = useCallback(
@@ -1830,7 +1836,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     supabase.from('subscriptions').delete().eq('client_username', username).then(() => undefined, () => undefined);
 
     // Supprimer les paiements
-    setPayments((prev) => prev.filter((p) => p.client_username !== username));
+    setPayments((prev) => prev.filter((p) => p.clientUsername !== username));
     supabase.from('oresto_payments').delete().eq('client_username', username).then(() => undefined, () => undefined);
 
     // Supprimer les validations
@@ -1908,7 +1914,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     return true;
   }, [walletTxs, walletOf]);
 
-  // Coche manuelle gérant : recharge externe vérifiée sur son téléphone
+  // Coche manuelle caissier : recharge externe vérifiée sur son téléphone
   const confirmWalletTopUp = useCallback((txId: string) => {
     const tx = walletTxs.find((t) => t.id === txId);
     if (!tx) return false;
@@ -1921,7 +1927,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     if (!tx) return { ok: false, message: 'Recharge introuvable.' };
     if (tx.status === 'paid') return { ok: true, message: 'Recharge déjà confirmée.' };
     if (tx.status !== 'pending') return { ok: false, message: 'Cette recharge ne peut plus être confirmée.' };
-    if (!isMobileMethod(tx.method)) return { ok: false, message: 'Recharge espèces : coche manuelle du gérant.' };
+    if (!isMobileMethod(tx.method)) return { ok: false, message: 'Recharge espèces : coche manuelle du caissier.' };
     const created = new Date(tx.createdAt).getTime();
     if (Number.isFinite(created) && Date.now() - created > WAVE_TTL_MS) {
       setWalletTxs((prev) => prev.map((t) => (t.id === txId ? { ...t, status: 'failed' as const } : t)));

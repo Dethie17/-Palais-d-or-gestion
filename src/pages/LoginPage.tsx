@@ -33,7 +33,7 @@ const ROLE_HIGHLIGHTS: Record<UserRole, { icon: LucideIcon; label: string }[]> =
   ],
   admin: [
     { icon: LayoutDashboard, label: 'Rapports' },
-    { icon: Settings, label: 'Gérants' },
+    { icon: Settings, label: 'Caissiers' },
   ],
   caissier: [
     { icon: ScanLine, label: 'Scan caméra' },
@@ -41,14 +41,14 @@ const ROLE_HIGHLIGHTS: Record<UserRole, { icon: LucideIcon; label: string }[]> =
   ],
   manager: [
     { icon: LayoutDashboard, label: 'Rapports' },
-    { icon: Settings, label: 'Gérants' },
+    { icon: Settings, label: 'Caissiers' },
   ],
 };
 
 /**
  * Accueil à cartes de profils.
  * - Parent : self-service (connexion + création de compte).
- * - Personnel, gérant, DG : connexion seule, champs vides —
+ * - Personnel, caissier, DG : connexion seule, champs vides —
  *   identifiants fournis par le DG via Paramètres → Comptes.
  */
 const LoginPage = () => {
@@ -196,7 +196,7 @@ const LoginPage = () => {
     return (
       <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
         <div className="absolute -top-32 -left-32 w-96 h-96 bg-green-700/30 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -right-24 w-[28rem] h-[28rem] bg-orange-600/20 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -right-24 w-[28rem] h-[28rem] bg-slate-600/20 rounded-full blur-3xl" />
 
         <div className="relative max-w-6xl mx-auto px-4 py-10 md:py-14">
           <div className="text-center mb-8">
@@ -249,11 +249,11 @@ const LoginPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
-      <div className={`absolute -top-32 -right-24 w-96 h-96 rounded-full blur-3xl bg-gradient-to-br ${activeRole?.color ?? 'from-green-600 to-orange-600'} opacity-20`} />
+      <div className={`absolute -top-32 -right-24 w-96 h-96 rounded-full blur-3xl bg-gradient-to-br ${activeRole?.color ?? 'from-green-600 to-slate-600'} opacity-20`} />
       <div className="relative w-full max-w-md">
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden animate-scale-in">
           {/* Bandeau profil */}
-          <div className={`bg-gradient-to-r ${activeRole?.color ?? 'from-green-600 to-orange-600'} px-6 pt-5 pb-6 text-white relative overflow-hidden`}>
+          <div className={`bg-gradient-to-r ${activeRole?.color ?? 'from-green-600 to-slate-600'} px-6 pt-5 pb-6 text-white relative overflow-hidden`}>
             <div className="absolute -right-10 -top-10 w-44 h-44 bg-white/10 rounded-full blur-2xl" />
             <button
               onClick={backToRoles}
@@ -413,7 +413,7 @@ const LoginPage = () => {
             <button
               type="submit"
               disabled={submitting || !!lockUntil}
-              className={`w-full py-4 bg-gradient-to-r ${activeRole?.color ?? 'from-green-600 to-orange-600'} text-white rounded-xl font-bold text-lg hover:shadow-lg transition-all hover:scale-[1.02] disabled:opacity-70 disabled:hover:scale-100 flex items-center justify-center gap-2`}
+              className={`w-full py-4 bg-gradient-to-r ${activeRole?.color ?? 'from-green-600 to-slate-600'} text-white rounded-xl font-bold text-lg hover:shadow-lg transition-all hover:scale-[1.02] disabled:opacity-70 disabled:hover:scale-100 flex items-center justify-center gap-2`}
             >
               {submitting
                 ? <Loader2 className="w-5 h-5 animate-spin" />

@@ -18,7 +18,7 @@ import PaymentReceiptModal from '@/components/PaymentReceiptModal';
 
 const METHODS: { id: ORestoPaymentMethod; label: string; hint: string }[] = [
   { id: 'wave', label: 'Wave', hint: 'Paiement mobile instantané — activation automatique après le code à 6 chiffres.' },
-  { id: 'cash', label: 'Espèces', hint: 'Payez au comptoir — le Gérant encaisse et active la carte aussitôt.' },
+  { id: 'cash', label: 'Espèces', hint: 'Payez au comptoir — le Caissier encaisse et active la carte aussitôt.' },
 ];
 
 const METHOD_LABEL: Record<string, string> = {
@@ -58,7 +58,7 @@ const FORMULA_META: Record<string, { badge?: string; badgeStyle?: string; audien
   },
   F3: {
     badge: 'Second cycle',
-    badgeStyle: 'bg-orange-600 text-white',
+    badgeStyle: 'bg-slate-600 text-white',
     audience: 'Lycée · 6ème → Terminale',
     icon: GraduationCap,
     tagline: 'Le repas costaud des grands',
@@ -149,7 +149,7 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
     }
     setMessage({
       ok: true,
-      text: `Réservation enregistrée (${payment.reference} — ${formatCurrency(payment.amount)}). Présentez-vous au comptoir : le Gérant activera la carte après encaissement.`,
+      text: `Réservation enregistrée (${payment.reference} — ${formatCurrency(payment.amount)}). Présentez-vous au comptoir : le Caissier activera la carte après encaissement.`,
     });
   };
 
@@ -198,7 +198,7 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
       return;
     }
     if (method === 'cash') {
-      setMessage({ ok: true, text: `Renouvellement réservé (${result.payment.reference}). Payez au comptoir : le Gérant prolongera la carte aussitôt.` });
+      setMessage({ ok: true, text: `Renouvellement réservé (${result.payment.reference}). Payez au comptoir : le Caissier prolongera la carte aussitôt.` });
       return;
     }
     setMessage({ ok: true, text: `Renouvellement réservé (${result.payment.reference}), en attente de confirmation.` });
@@ -265,7 +265,7 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
       <div className="bg-gradient-to-br from-slate-900 via-emerald-950 to-green-800 text-white overflow-hidden mt-6 md:mt-8">
         <div className="max-w-6xl mx-auto px-4 md:px-8 pt-8 pb-10 md:pt-12 md:pb-12 relative">
           <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-emerald-500/20 blur-3xl" />
-          <div className="absolute -bottom-24 left-1/3 w-80 h-80 rounded-full bg-orange-500/10 blur-3xl" />
+          <div className="absolute -bottom-24 left-1/3 w-80 h-80 rounded-full bg-slate-500/10 blur-3xl" />
           <div className="relative">
             <div className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em]">
               <span className="px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-emerald-200">Espace parents</span>
@@ -426,7 +426,7 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
               const CycleIcon = cycle.id === 'lycee' ? GraduationCap : Baby;
               return (
                 <div key={cycle.id} className="bg-white rounded-3xl border-2 border-slate-100 overflow-hidden">
-                  <div className={`px-5 md:px-6 py-4 flex flex-wrap items-center gap-3 ${cycle.id === 'lycee' ? 'bg-gradient-to-r from-amber-500 to-orange-600' : 'bg-gradient-to-r from-emerald-600 to-teal-600'}`}>
+                  <div className={`px-5 md:px-6 py-4 flex flex-wrap items-center gap-3 ${cycle.id === 'lycee' ? 'bg-gradient-to-r from-amber-500 to-slate-600' : 'bg-gradient-to-r from-emerald-600 to-teal-600'}`}>
                     <span className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
                       <CycleIcon className="w-6 h-6 text-white" />
                     </span>
@@ -474,10 +474,10 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
               {customTickets.map((t) => {
                 const isCarnet = t.mealsIncluded > 1;
                 return (
-                  <div key={t.id} className={`bg-white rounded-3xl border-2 p-6 flex flex-col shadow-sm ${isCarnet ? 'border-orange-300 ring-4 ring-orange-100' : 'border-slate-100'}`}>
+                  <div key={t.id} className={`bg-white rounded-3xl border-2 p-6 flex flex-col shadow-sm ${isCarnet ? 'border-slate-300 ring-4 ring-slate-100' : 'border-slate-100'}`}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-3">
-                        <span className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isCarnet ? 'bg-gradient-to-br from-orange-500 to-amber-500' : 'bg-slate-900'}`}>
+                        <span className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isCarnet ? 'bg-gradient-to-br from-slate-500 to-amber-500' : 'bg-slate-900'}`}>
                           <Ticket className="w-6 h-6 text-white" />
                         </span>
                         <div>
@@ -488,11 +488,11 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
                     </div>
                     <div className="mt-4 flex items-end gap-2">
                       <span className="text-3xl font-black text-slate-900">{formatCurrency(t.price)}</span>
-                      <span className="text-sm font-bold text-orange-600 mb-1">· {t.mealsIncluded} repas · {t.durationDays} jours</span>
+                      <span className="text-sm font-bold text-slate-600 mb-1">· {t.mealsIncluded} repas · {t.durationDays} jours</span>
                     </div>
                     <p className="text-xs text-slate-400 mt-1">≈ {formatCurrency(pricePerMeal(t.price, t.mealsIncluded))} / repas</p>
                     {t.rules && <p className="text-[11px] text-slate-400 mt-2 italic">{t.rules}</p>}
-                    <button onClick={() => handleBuyTicket(t.id, t.name)} className={`mt-4 w-full py-3 rounded-xl font-bold text-sm transition ${isCarnet ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md' : 'bg-slate-900 text-white hover:bg-slate-700'}`}>
+                    <button onClick={() => handleBuyTicket(t.id, t.name)} className={`mt-4 w-full py-3 rounded-xl font-bold text-sm transition ${isCarnet ? 'bg-slate-500 text-white hover:bg-slate-600 shadow-md' : 'bg-slate-900 text-white hover:bg-slate-700'}`}>
                       {isCarnet ? 'Acheter le carnet' : 'Acheter ce ticket'} · {formatCurrency(t.price)}
                     </button>
                   </div>
@@ -661,7 +661,7 @@ function QuickEnrollCycle({ cycleId, username, hasProfile, addChild, kidsCount, 
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
-          <span className={`w-10 h-10 rounded-2xl flex items-center justify-center ${cycleId === 'lycee' ? 'bg-orange-600' : 'bg-emerald-600'}`}>
+          <span className={`w-10 h-10 rounded-2xl flex items-center justify-center ${cycleId === 'lycee' ? 'bg-slate-600' : 'bg-emerald-600'}`}>
             <CycleIcon className="w-5 h-5 text-white" />
           </span>
           <div>
@@ -809,7 +809,7 @@ function ActiveCard({ sub, formulaName, included, durationDays, rules, days, pri
   const planLabel = durationDays <= 7 ? 'ABONNEMENT SEMAINE' : 'ABONNEMENT MENSUEL';
   return (
     <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 text-white rounded-3xl overflow-hidden shadow-xl border border-slate-800">
-      <div className={`px-5 md:px-6 py-3.5 flex flex-wrap items-center justify-between gap-2 ${urgent ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-to-r from-emerald-500 to-teal-500'}`}>
+      <div className={`px-5 md:px-6 py-3.5 flex flex-wrap items-center justify-between gap-2 ${urgent ? 'bg-gradient-to-r from-amber-500 to-slate-500' : 'bg-gradient-to-r from-emerald-500 to-teal-500'}`}>
         <p className="font-extrabold text-sm flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
           {planLabel} — {formulaName}
@@ -852,7 +852,7 @@ function ActiveCard({ sub, formulaName, included, durationDays, rules, days, pri
           </div>
           <div className="h-3 rounded-full bg-white/15 overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${pct <= 20 ? 'bg-gradient-to-r from-red-400 to-orange-400' : 'bg-gradient-to-r from-emerald-400 to-teal-300'}`}
+              className={`h-full rounded-full transition-all ${pct <= 20 ? 'bg-gradient-to-r from-red-400 to-slate-400' : 'bg-gradient-to-r from-emerald-400 to-teal-300'}`}
               style={{ width: `${pct}%` }}
             />
           </div>

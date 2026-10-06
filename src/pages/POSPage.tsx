@@ -112,7 +112,7 @@ const POSPage = ({ onProceedToPayment }: POSPageProps) => {
             ))}
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar bg-gradient-to-br from-slate-50 to-orange-50/20">
+        <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar bg-gradient-to-br from-slate-50 to-slate-50/20">
           {products.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <p className="text-lg font-bold text-slate-800">Aucun produit</p>
@@ -158,7 +158,7 @@ const POSPage = ({ onProceedToPayment }: POSPageProps) => {
       <>
         {showCart && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setShowCart(false)} />}
         <div className={`fixed right-0 top-0 bottom-0 w-80 sm:w-96 z-50 lg:static lg:w-[420px] flex flex-col bg-white transition-transform duration-300 lg:translate-x-0 shadow-2xl ${showCart ? 'translate-x-0' : 'translate-x-full'}`}>
-          <div className="p-5 lg:p-6 border-b border-slate-200 bg-gradient-to-r from-orange-50 to-red-50">
+          <div className="p-5 lg:p-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-red-50">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold text-slate-800">Commande</h2>
@@ -179,7 +179,7 @@ const POSPage = ({ onProceedToPayment }: POSPageProps) => {
               </div>
             ) : (
               cart.map((item) => (
-                <div key={item.id} className="flex gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200 hover:border-orange-300 transition-colors">
+                <div key={item.id} className="flex gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200 hover:border-slate-300 transition-colors">
                   <img src={item.image} alt={item.name} className="w-16 h-16 rounded-xl object-cover flex-shrink-0 shadow-md" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2 mb-1">
@@ -191,11 +191,11 @@ const POSPage = ({ onProceedToPayment }: POSPageProps) => {
                     <p className="text-xs text-slate-500 mb-2">{formatCurrency(item.price)} / unité</p>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => updateQuantity(item.id, -1)} className="w-8 h-8 rounded-lg bg-white border-2 border-slate-200 flex items-center justify-center text-slate-700 hover:border-orange-400 hover:text-orange-600 transition-colors">
+                        <button onClick={() => updateQuantity(item.id, -1)} className="w-8 h-8 rounded-lg bg-white border-2 border-slate-200 flex items-center justify-center text-slate-700 hover:border-slate-400 hover:text-slate-600 transition-colors">
                           <Minus className="w-4 h-4" />
                         </button>
                         <span className="text-sm font-bold text-slate-800 w-8 text-center">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.id, 1)} className="w-8 h-8 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 text-white flex items-center justify-center hover:shadow-lg hover:shadow-orange-500/30 transition-all">
+                        <button onClick={() => updateQuantity(item.id, 1)} className="w-8 h-8 rounded-lg bg-gradient-to-r from-slate-500 to-red-600 text-white flex items-center justify-center hover:shadow-lg hover:shadow-slate-500/30 transition-all">
                           <Plus className="w-4 h-4" />
                         </button>
                       </div>
@@ -208,14 +208,14 @@ const POSPage = ({ onProceedToPayment }: POSPageProps) => {
           </div>
 
           {cart.length > 0 && (
-            <div className="p-5 lg:p-6 border-t border-slate-200 space-y-4 bg-gradient-to-r from-orange-50 to-red-50">
+            <div className="p-5 lg:p-6 border-t border-slate-200 space-y-4 bg-gradient-to-r from-slate-50 to-red-50">
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between text-slate-600">
                   <span>Sous-total</span><span className="font-semibold">{formatCurrency(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-xl font-bold text-slate-800 pt-3 border-t-2 border-slate-200">
                   <span>Total</span>
-                  <span className="bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">{formatCurrency(total)}</span>
+                  <span className="bg-gradient-to-r from-slate-600 to-red-600 bg-clip-text text-transparent">{formatCurrency(total)}</span>
                 </div>
               </div>
               <div className="flex gap-3">
@@ -224,7 +224,7 @@ const POSPage = ({ onProceedToPayment }: POSPageProps) => {
                 </button>
                 <button
                   onClick={() => { onProceedToPayment(cart); setShowCart(false); }}
-                  className="flex-[2] py-3.5 rounded-xl bg-gradient-to-r from-orange-500 to-red-600 text-white font-semibold text-sm hover:shadow-xl hover:shadow-orange-500/50 transition-all flex items-center justify-center gap-2"
+                  className="flex-[2] py-3.5 rounded-xl bg-gradient-to-r from-slate-500 to-red-600 text-white font-semibold text-sm hover:shadow-xl hover:shadow-slate-500/50 transition-all flex items-center justify-center gap-2"
                 >
                   <CreditCard className="w-5 h-5" />
                   Payer
@@ -239,7 +239,7 @@ const POSPage = ({ onProceedToPayment }: POSPageProps) => {
       {cart.length > 0 && !showCart && (
         <button
           onClick={() => setShowCart(true)}
-          className="lg:hidden fixed bottom-6 right-6 z-30 bg-gradient-to-r from-orange-500 to-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl shadow-orange-500/50 flex items-center gap-3 font-bold text-sm hover:scale-105 transition-transform"
+          className="lg:hidden fixed bottom-6 right-6 z-30 bg-gradient-to-r from-slate-500 to-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl shadow-slate-500/50 flex items-center gap-3 font-bold text-sm hover:scale-105 transition-transform"
         >
           <ShoppingCart className="w-5 h-5" />
           <span>{cartCount} · {formatCurrency(total)}</span>

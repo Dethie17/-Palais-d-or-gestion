@@ -168,7 +168,7 @@ const MenuManagement = () => {
           <p className="text-sm text-slate-600 mt-1">{products.length} produits · {products.filter(p => p.available).length} disponibles</p>
         </div>
         {!isDG ? (
-          <button onClick={openAdd} className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-red-600 text-white px-6 py-3 rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-orange-500/50 transition-all hover:scale-105">
+          <button onClick={openAdd} className="flex items-center gap-2 bg-gradient-to-r from-slate-500 to-red-600 text-white px-6 py-3 rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-slate-500/50 transition-all hover:scale-105">
             <Plus className="w-5 h-5" />
             Ajouter un produit
           </button>
@@ -182,7 +182,7 @@ const MenuManagement = () => {
       {/* Menus du jour : composition Personnel, chaque menu avec son prix + cumul */}
       <div className="bg-white rounded-2xl border p-5">
         <p className="font-bold text-slate-800 flex items-center gap-2">
-          <CalendarDays className="w-5 h-5 text-orange-500" /> Menus du jour — composition
+          <CalendarDays className="w-5 h-5 text-slate-500" /> Menus du jour — composition
         </p>
         <p className="text-xs text-slate-500 mt-1">Composez chaque menu : plats (noms uniquement) + un prix unique par jour. La semaine s’affiche aux parents une fois les 5 jours composés, tarifiés et publiés.</p>
         {(() => {
@@ -191,7 +191,7 @@ const MenuManagement = () => {
           const done = dayTotals.filter((t) => t > 0).length;
           return (
             <div className="mt-3 grid grid-cols-3 gap-2">
-              <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 p-3 text-white">
+              <div className="rounded-2xl bg-gradient-to-br from-slate-500 to-red-600 p-3 text-white">
                 <p className="text-lg font-black leading-none">{formatCurrency(weekTotal)}</p>
                 <p className="text-[11px] font-bold opacity-90 mt-1">cumul semaine</p>
               </div>
@@ -221,27 +221,27 @@ const MenuManagement = () => {
             const picked = pickProduct[d] ?? '';
             const custom = customDish[d] ?? '';
             return (
-              <div key={d} className="rounded-2xl border-2 border-slate-100 p-4 hover:border-orange-200 transition-colors">
+              <div key={d} className="rounded-2xl border-2 border-slate-100 p-4 hover:border-slate-200 transition-colors">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-black px-2.5 py-1.5 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 text-white whitespace-nowrap flex-shrink-0">{d}</span>
+                  <span className="text-[11px] font-black px-2.5 py-1.5 rounded-xl bg-gradient-to-br from-slate-500 to-red-600 text-white whitespace-nowrap flex-shrink-0">{d}</span>
                   <input
                     value={row.name}
                     onChange={(e) => setDay(d, { name: e.target.value })}
                     placeholder="Nom du menu"
                     maxLength={60}
-                    className="flex-1 min-w-[140px] px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500"
+                    className="flex-1 min-w-[140px] px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500"
                   />
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 whitespace-nowrap flex-shrink-0">{row.items.length} plat(s)</span>
                 </div>
-                <div className="mt-2 flex items-center gap-2 rounded-xl bg-orange-50 border border-orange-100 px-3 py-2">
-                  <label htmlFor={`prix-${d}`} className="text-[11px] font-black uppercase tracking-widest text-orange-700 whitespace-nowrap">Prix du ticket (FCFA)</label>
+                <div className="mt-2 flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-100 px-3 py-2">
+                  <label htmlFor={`prix-${d}`} className="text-[11px] font-black uppercase tracking-widest text-slate-700 whitespace-nowrap">Prix du ticket (FCFA)</label>
                   <input
                     id={`prix-${d}`}
                     type="number" min={0} max={100000} step={100}
                     value={row.price}
                     onChange={(e) => setDay(d, { price: e.target.value.replace(/\D/g, '').slice(0, 6) })}
                     placeholder="ex : 900"
-                    className="ml-auto w-32 px-3 py-1.5 rounded-xl border-2 border-orange-200 text-sm font-black text-right tabular-nums outline-none focus:border-orange-500 bg-white"
+                    className="ml-auto w-32 px-3 py-1.5 rounded-xl border-2 border-slate-200 text-sm font-black text-right tabular-nums outline-none focus:border-slate-500 bg-white"
                   />
                 </div>
                 <input
@@ -249,13 +249,13 @@ const MenuManagement = () => {
                   onChange={(e) => setDay(d, { description: e.target.value })}
                   placeholder="Accroche (ex : Tacos + Jus Naturel)"
                   maxLength={140}
-                  className="mt-2 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500"
+                  className="mt-2 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500"
                 />
                 {row.items.length > 0 && (
                   <ul className="mt-2 divide-y divide-slate-100 border rounded-xl overflow-hidden">
                     {row.items.map((it, i) => (
                       <li key={`${it.name}-${i}`} className="px-3 py-1.5 flex items-center gap-2 text-sm">
-                        <span className="w-5 h-5 rounded-lg bg-orange-100 text-orange-700 text-[11px] font-black flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                        <span className="w-5 h-5 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-black flex items-center justify-center flex-shrink-0">{i + 1}</span>
                         <span className="font-semibold flex-1 truncate">{it.name}</span>
                         <button
                           type="button"
@@ -273,7 +273,7 @@ const MenuManagement = () => {
                   <select
                     value={picked}
                     onChange={(e) => setPickProduct((p) => ({ ...p, [d]: e.target.value }))}
-                    className="flex-1 min-w-0 px-3 py-2 rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-orange-500"
+                    className="flex-1 min-w-0 px-3 py-2 rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-slate-500"
                   >
                     <option value="">+ Plat du catalogue…</option>
                     {products.filter((p) => p.available).map((p) => (
@@ -300,7 +300,7 @@ const MenuManagement = () => {
                     onChange={(e) => setCustomDish((p) => ({ ...p, [d]: e.target.value }))}
                     placeholder="Plat libre (ex : Thiéboudienne)"
                     maxLength={60}
-                    className="flex-1 min-w-0 px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500"
+                    className="flex-1 min-w-0 px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500"
                   />
                   <button
                     type="button"
@@ -311,7 +311,7 @@ const MenuManagement = () => {
                         setCustomDish((p) => ({ ...p, [d]: '' }));
                       }
                     }}
-                    className="px-3 py-2 rounded-xl bg-orange-100 text-orange-700 text-sm font-bold hover:bg-orange-200"
+                    className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200"
                   >
                     +
                   </button>
@@ -340,7 +340,7 @@ const MenuManagement = () => {
       {/* Tickets repas — créés ici par DG + personnel, vendus au comptoir */}
       <div className="bg-white rounded-2xl border p-5">
         <p className="font-bold text-slate-800 flex items-center gap-2">
-          <Ticket className="w-5 h-5 text-orange-500" /> Tickets repas
+          <Ticket className="w-5 h-5 text-slate-500" /> Tickets repas
         </p>
         <p className="text-xs text-slate-500 mt-1">Dépannage au comptoir : tous les champs + prix. Vendus sur la page Tickets et à la caisse.</p>
         {isDG && (
@@ -358,33 +358,33 @@ const MenuManagement = () => {
           </p>
           <label className="block">
             <span className="block text-xs font-bold text-slate-600 mb-1">Nom du ticket *</span>
-            <input value={ticketForm.name} onChange={(e) => setTicketForm({ ...ticketForm, name: e.target.value })} placeholder="ex : Ticket — 1 repas" maxLength={80} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" required />
+            <input value={ticketForm.name} onChange={(e) => setTicketForm({ ...ticketForm, name: e.target.value })} placeholder="ex : Ticket — 1 repas" maxLength={80} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" required />
           </label>
           <label className="block">
             <span className="block text-xs font-bold text-slate-600 mb-1">Description</span>
-            <input value={ticketForm.description} onChange={(e) => setTicketForm({ ...ticketForm, description: e.target.value })} placeholder="ex : 1 repas à consommer librement" maxLength={140} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" />
+            <input value={ticketForm.description} onChange={(e) => setTicketForm({ ...ticketForm, description: e.target.value })} placeholder="ex : 1 repas à consommer librement" maxLength={140} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" />
           </label>
           <label className="block">
             <span className="block text-xs font-bold text-slate-600 mb-1">Prix (FCFA) *</span>
-            <input type="number" min={100} step={100} value={ticketForm.price} onChange={(e) => setTicketForm({ ...ticketForm, price: e.target.value })} placeholder="ex : 1900" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" required />
+            <input type="number" min={100} step={100} value={ticketForm.price} onChange={(e) => setTicketForm({ ...ticketForm, price: e.target.value })} placeholder="ex : 1900" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" required />
           </label>
           <label className="block">
             <span className="block text-xs font-bold text-slate-600 mb-1">Prix barré (optionnel)</span>
-            <input type="number" min={0} step={100} value={ticketForm.oldPrice} onChange={(e) => setTicketForm({ ...ticketForm, oldPrice: e.target.value })} placeholder="vide = pas d’offre" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" />
+            <input type="number" min={0} step={100} value={ticketForm.oldPrice} onChange={(e) => setTicketForm({ ...ticketForm, oldPrice: e.target.value })} placeholder="vide = pas d’offre" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" />
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="block text-xs font-bold text-slate-600 mb-1">Validité (jours) *</span>
-              <input type="number" min={1} max={365} value={ticketForm.durationDays} onChange={(e) => setTicketForm({ ...ticketForm, durationDays: e.target.value })} placeholder="ex : 7" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" required />
+              <input type="number" min={1} max={365} value={ticketForm.durationDays} onChange={(e) => setTicketForm({ ...ticketForm, durationDays: e.target.value })} placeholder="ex : 7" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" required />
             </label>
             <label className="block">
               <span className="block text-xs font-bold text-slate-600 mb-1">Repas inclus *</span>
-              <input type="number" min={1} max={365} value={ticketForm.mealsIncluded} onChange={(e) => setTicketForm({ ...ticketForm, mealsIncluded: e.target.value })} placeholder="ex : 1" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" required />
+              <input type="number" min={1} max={365} value={ticketForm.mealsIncluded} onChange={(e) => setTicketForm({ ...ticketForm, mealsIncluded: e.target.value })} placeholder="ex : 1" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" required />
             </label>
           </div>
           <label className="block">
             <span className="block text-xs font-bold text-slate-600 mb-1">Règles</span>
-            <input value={ticketForm.rules} onChange={(e) => setTicketForm({ ...ticketForm, rules: e.target.value })} placeholder="ex : valable 7 jours, 1 repas" maxLength={140} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" />
+            <input value={ticketForm.rules} onChange={(e) => setTicketForm({ ...ticketForm, rules: e.target.value })} placeholder="ex : valable 7 jours, 1 repas" maxLength={140} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" />
           </label>
           <div className="md:col-span-3 flex flex-wrap items-center gap-3">
             <div className="flex gap-2 flex-1 min-w-[200px]">
@@ -459,7 +459,7 @@ const MenuManagement = () => {
             onClick={() => setActiveCategory(cat)}
             className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
               activeCategory === cat
-                ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-lg shadow-orange-500/30'
+                ? 'bg-gradient-to-r from-slate-500 to-red-600 text-white shadow-lg shadow-slate-500/30'
                 : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
             }`}
           >
@@ -491,7 +491,7 @@ const MenuManagement = () => {
               <div>
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <h3 className="font-bold text-slate-800 text-lg">{product.name}</h3>
-                  <span className="text-lg font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent whitespace-nowrap">
+                  <span className="text-lg font-bold bg-gradient-to-r from-slate-600 to-red-600 bg-clip-text text-transparent whitespace-nowrap">
                     {formatCurrency(product.price)}
                   </span>
                 </div>
@@ -594,7 +594,7 @@ const ProductModal = ({ product, onClose, onSave }: ModalProps) => {
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-2xl animate-scale-in" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 p-6 border-b border-slate-200 bg-gradient-to-r from-orange-50 to-red-50 flex items-center justify-between">
+        <div className="sticky top-0 p-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-red-50 flex items-center justify-between">
           <h2 className="text-2xl font-bold text-slate-800">
             {product ? 'Modifier le produit' : 'Nouveau produit'}
           </h2>
@@ -608,7 +608,7 @@ const ProductModal = ({ product, onClose, onSave }: ModalProps) => {
             <input
               value={form.name || ''}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 text-sm focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 outline-none transition-all"
+              className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 text-sm focus:ring-2 focus:ring-slate-500/30 focus:border-slate-500 outline-none transition-all"
               placeholder="Ex: Classic Burger"
               required
             />
@@ -619,7 +619,7 @@ const ProductModal = ({ product, onClose, onSave }: ModalProps) => {
               <select
                 value={form.category || 'Burgers'}
                 onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 text-sm focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 outline-none bg-white"
+                className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 text-sm focus:ring-2 focus:ring-slate-500/30 focus:border-slate-500 outline-none bg-white"
               >
                 {categories.filter((c) => c !== 'Tous').map((c) => <option key={c}>{c}</option>)}
               </select>
@@ -631,7 +631,7 @@ const ProductModal = ({ product, onClose, onSave }: ModalProps) => {
                 step="1"
                 value={form.price || ''}
                 onChange={(e) => setForm((f) => ({ ...f, price: parseFloat(e.target.value) || 0 }))}
-                className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 text-sm focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 outline-none"
+                className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 text-sm focus:ring-2 focus:ring-slate-500/30 focus:border-slate-500 outline-none"
                 placeholder="5000"
                 required
               />
@@ -642,7 +642,7 @@ const ProductModal = ({ product, onClose, onSave }: ModalProps) => {
             <textarea
               value={form.description || ''}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 text-sm focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 outline-none resize-none"
+              className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 text-sm focus:ring-2 focus:ring-slate-500/30 focus:border-slate-500 outline-none resize-none"
               rows={3}
               placeholder="Décrivez le produit..."
             />
@@ -652,7 +652,7 @@ const ProductModal = ({ product, onClose, onSave }: ModalProps) => {
             <input
               value={form.image || ''}
               onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
-              className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 text-sm focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 outline-none"
+              className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 text-sm focus:ring-2 focus:ring-slate-500/30 focus:border-slate-500 outline-none"
               placeholder="https://..."
             />
           </div>
@@ -664,7 +664,7 @@ const ProductModal = ({ product, onClose, onSave }: ModalProps) => {
                 {(form.extras || []).map((extra) => (
                   <div key={extra.id} className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
                     <span className="flex-1 text-sm font-medium text-slate-800">{extra.name}</span>
-                    <span className="text-sm font-bold text-orange-600">+{formatCurrency(extra.price)}</span>
+                    <span className="text-sm font-bold text-slate-600">+{formatCurrency(extra.price)}</span>
                     <button type="button" onClick={() => removeExtra(extra.id)} className="p-1.5 hover:bg-red-100 rounded-lg text-slate-400 hover:text-red-600 transition-colors">
                       <X className="w-4 h-4" />
                     </button>
@@ -677,7 +677,7 @@ const ProductModal = ({ product, onClose, onSave }: ModalProps) => {
                 placeholder="Nom de l'extra" 
                 value={newExtra.name} 
                 onChange={(e) => setNewExtra((n) => ({ ...n, name: e.target.value }))} 
-                className="flex-1 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-800 text-sm outline-none focus:border-orange-500" 
+                className="flex-1 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-800 text-sm outline-none focus:border-slate-500" 
               />
               <input 
                 type="number" 
@@ -685,9 +685,9 @@ const ProductModal = ({ product, onClose, onSave }: ModalProps) => {
                 placeholder="Prix" 
                 value={newExtra.price || ''} 
                 onChange={(e) => setNewExtra((n) => ({ ...n, price: parseFloat(e.target.value) || 0 }))} 
-                className="w-28 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-800 text-sm outline-none focus:border-orange-500" 
+                className="w-28 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-800 text-sm outline-none focus:border-slate-500" 
               />
-              <button type="button" onClick={addExtra} className="p-2.5 rounded-xl bg-orange-100 text-orange-600 hover:bg-orange-200 transition-colors">
+              <button type="button" onClick={addExtra} className="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
                 <Plus className="w-5 h-5" />
               </button>
             </div>
@@ -696,7 +696,7 @@ const ProductModal = ({ product, onClose, onSave }: ModalProps) => {
             <button type="button" onClick={onClose} className="flex-1 py-3.5 rounded-xl border-2 border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-colors">
               Annuler
             </button>
-            <button type="submit" className="flex-[2] py-3.5 rounded-xl bg-gradient-to-r from-orange-500 to-red-600 text-white font-semibold text-sm hover:shadow-lg hover:shadow-orange-500/50 transition-all flex items-center justify-center gap-2">
+            <button type="submit" className="flex-[2] py-3.5 rounded-xl bg-gradient-to-r from-slate-500 to-red-600 text-white font-semibold text-sm hover:shadow-lg hover:shadow-slate-500/50 transition-all flex items-center justify-center gap-2">
               <Check className="w-5 h-5" />
               {product ? 'Enregistrer' : 'Ajouter le produit'}
             </button>

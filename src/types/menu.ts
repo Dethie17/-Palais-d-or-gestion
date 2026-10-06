@@ -61,6 +61,7 @@ export type PageName =
   | 'dashboard'
   | 'validation'
   | 'menu'
+  | 'menus'
   | 'pos'
   | 'payment'
   | 'receipt'

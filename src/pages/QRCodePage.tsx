@@ -75,7 +75,7 @@ const QRCodePage = () => {
 
       {/* Carte badge pro */}
       <div className="bg-slate-900 rounded-3xl shadow-2xl overflow-hidden">
-        <div className="bg-gradient-to-r from-green-700 to-orange-600 px-6 py-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-green-700 to-slate-600 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-white rounded-xl p-1 overflow-hidden">
               <OrestoLogo variant="mark" imgClassName="w-full h-full object-contain" />

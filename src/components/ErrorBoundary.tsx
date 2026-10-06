@@ -33,9 +33,9 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (!this.state.hasError) return this.props.children;
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-orange-50/30 flex items-center justify-center p-6">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-50/30 flex items-center justify-center p-6">
         <div className="bg-white rounded-3xl shadow-xl border p-8 max-w-md w-full text-center">
-          <AlertTriangle className="w-12 h-12 text-orange-500 mx-auto mb-4" />
+          <AlertTriangle className="w-12 h-12 text-slate-500 mx-auto mb-4" />
           <h1 className="text-xl font-black text-slate-800">Oups, un problème est survenu</h1>
           <p className="text-sm text-slate-500 mt-2">
             L&apos;application a rencontré une erreur inattendue. Vos données locales sont conservées.

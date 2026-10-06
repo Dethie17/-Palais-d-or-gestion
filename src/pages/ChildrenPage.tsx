@@ -93,7 +93,7 @@ const ChildrenPage = () => {
       }
       flash(true, method === 'cash'
         ? `Carte rechargée : +${formatCurrency(amount)}.`
-        : `Recharge ${tx.reference} enregistrée : le gérant la confirmera après votre envoi ${method === 'wave' ? 'Wave' : method === 'mobile_money' ? 'Orange Money' : 'par carte'}.`);
+        : `Recharge ${tx.reference} enregistrée : le caissier la confirmera après votre envoi ${method === 'wave' ? 'Wave' : method === 'mobile_money' ? 'Orange Money' : 'par carte'}.`);
     } catch (err) {
       flash(false, err instanceof Error ? err.message : 'Recharge impossible.');
     }
@@ -147,8 +147,8 @@ const ChildrenPage = () => {
         return;
       }
       flash(true, method === 'cash'
-        ? `Abonnement réservé (${payment.reference}) : payez au comptoir, le gérant activera la carte.`
-        : `Abonnement réservé (${payment.reference}) : en attente de confirmation du gérant.`);
+        ? `Abonnement réservé (${payment.reference}) : payez au comptoir, le caissier activera la carte.`
+        : `Abonnement réservé (${payment.reference}) : en attente de confirmation du caissier.`);
     } catch (err) {
       flash(false, err instanceof Error ? err.message : 'Souscription impossible.');
     }
@@ -377,7 +377,7 @@ const ChildrenPage = () => {
                       </select>
                       <button onClick={() => handleTopUp(k.id)} className="px-4 py-2 rounded-xl bg-green-700 text-white text-sm font-bold hover:bg-green-800">Recharger</button>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">Wave = code à confirmer · Espèces / OM / Carte = confirmation du gérant.</p>
+                    <p className="text-[11px] text-slate-400 mt-1">Wave = code à confirmer · Espèces / OM / Carte = confirmation du caissier.</p>
                   </div>
 
                   {/* Étape 2 — Abonnement du cycle de l'enfant (repas crédités sur la carte) */}
@@ -629,7 +629,7 @@ function FamilyHistory({ kids, filter, setFilter, subscriptions, formulas, child
                           <span>Consommé du crédit</span><span>{ratio}%</span>
                         </div>
                         <div className="h-2 rounded-full bg-slate-100 overflow-hidden" role="progressbar" aria-valuenow={ratio} aria-valuemin={0} aria-valuemax={100} aria-label={`Part du crédit consommée par ${kid.firstName}`}>
-                          <div className={`h-full rounded-full transition-all ${ratio >= 90 ? 'bg-gradient-to-r from-red-400 to-orange-400' : 'bg-gradient-to-r from-green-600 to-green-400'}`} style={{ width: `${ratio}%` }} />
+                          <div className={`h-full rounded-full transition-all ${ratio >= 90 ? 'bg-gradient-to-r from-red-400 to-slate-400' : 'bg-gradient-to-r from-green-600 to-green-400'}`} style={{ width: `${ratio}%` }} />
                         </div>
                       </div>
                       <ul className="mx-3.5 mb-3 pt-2.5 space-y-1.5 border-t-2 border-dashed border-slate-200">

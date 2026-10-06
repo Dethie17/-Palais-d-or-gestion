@@ -28,7 +28,7 @@ const paymentMethods = [
   { id: 'wave', label: 'Wave', icon: Smartphone, gradient: 'from-blue-500 to-cyan-600', available: true },
   { id: 'cash', label: 'Espèces (comptant)', icon: Banknote, gradient: 'from-green-500 to-emerald-600', available: true },
   { id: 'intouch', label: 'InTouch', icon: Smartphone, gradient: 'from-purple-500 to-indigo-600', available: true },
-  { id: 'mobile_money', label: 'Mobile Money', icon: CreditCard, gradient: 'from-amber-500 to-orange-600', available: true },
+  { id: 'mobile_money', label: 'Mobile Money', icon: CreditCard, gradient: 'from-amber-500 to-slate-600', available: true },
 ];
 
 const availableExtras: ProductExtra[] = [
@@ -159,7 +159,7 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
   }
 
   return (
-    <div className="p-4 lg:p-8 animate-fade-in min-h-screen bg-gradient-to-br from-slate-50 to-orange-50/20">
+    <div className="p-4 lg:p-8 animate-fade-in min-h-screen bg-gradient-to-br from-slate-50 to-slate-50/20">
       <button onClick={onBack} className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 mb-6 transition-colors group">
         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
         Retour au panier
@@ -188,12 +188,12 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
           {/* Suppléments */}
           <div className="border-t-2 border-slate-200 pt-4">
             <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <Plus className="w-5 h-5 text-orange-600" />
+              <Plus className="w-5 h-5 text-slate-600" />
               Ajouter des suppléments
             </h3>
             <div className="space-y-3">
               {availableExtras.map((extra) => (
-                <div key={extra.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-orange-300 transition-colors">
+                <div key={extra.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-slate-300 transition-colors">
                   <img 
                     src={extraImages[extra.id]} 
                     alt={extra.name}
@@ -207,14 +207,14 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
                     <button
                       onClick={() => handleDecreaseExtra(extra.id)}
                       disabled={!selectedExtras[extra.id]}
-                      className="w-8 h-8 rounded-lg bg-white border-2 border-slate-200 flex items-center justify-center hover:border-orange-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
+                      className="w-8 h-8 rounded-lg bg-white border-2 border-slate-200 flex items-center justify-center hover:border-slate-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
                     >
                       <Minus className="w-4 h-4 text-slate-700" />
                     </button>
                     <span className="w-8 text-center font-bold text-slate-800">{selectedExtras[extra.id] || 0}</span>
                     <button
                       onClick={() => handleIncreaseExtra(extra.id)}
-                      className="w-8 h-8 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 text-white flex items-center justify-center hover:shadow-lg hover:shadow-orange-500/50 transition-all active:scale-95"
+                      className="w-8 h-8 rounded-lg bg-gradient-to-r from-slate-500 to-red-600 text-white flex items-center justify-center hover:shadow-lg hover:shadow-slate-500/50 transition-all active:scale-95"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
@@ -231,7 +231,7 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
               <span className="font-semibold">{formatCurrency(subtotal)}</span>
             </div>
             {extrasTotal > 0 && (
-              <div className="flex justify-between text-sm text-orange-600">
+              <div className="flex justify-between text-sm text-slate-600">
                 <span>Suppléments</span>
                 <span className="font-semibold">{formatCurrency(extrasTotal)}</span>
               </div>
@@ -274,8 +274,8 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
                       !isAvailable
                         ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
                         : isSelected
-                        ? 'border-orange-500 bg-orange-50 shadow-lg shadow-orange-500/20 scale-105'
-                        : 'border-slate-200 bg-white hover:border-orange-300 hover:shadow-md'
+                        ? 'border-slate-500 bg-slate-50 shadow-lg shadow-slate-500/20 scale-105'
+                        : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-md'
                     }`}
                   >
                     {!isAvailable && (
@@ -411,7 +411,7 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
                   <button
                     key={val}
                     onClick={() => handleNumpad(val)}
-                    className="py-4 lg:py-5 rounded-xl bg-white border-2 border-slate-200 text-lg lg:text-xl font-bold text-slate-800 hover:bg-slate-50 hover:border-orange-400 active:scale-95 transition-all shadow-sm"
+                    className="py-4 lg:py-5 rounded-xl bg-white border-2 border-slate-200 text-lg lg:text-xl font-bold text-slate-800 hover:bg-slate-50 hover:border-slate-400 active:scale-95 transition-all shadow-sm"
                   >
                     {val === '←' ? <Delete className="w-5 h-5 mx-auto" /> : val}
                   </button>

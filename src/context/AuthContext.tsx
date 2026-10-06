@@ -135,7 +135,7 @@ export interface LocalAccount {
   createdAt: string;
 }
 
-const LOCAL_USERS_KEY = 'o-resto-local-users';
+export const LOCAL_USERS_KEY = 'o-resto-local-users';
 const ATTEMPTS_KEY = 'o-resto-login-attempts';
 
 function getAttempts(): Record<string, AttemptRec> {
@@ -290,9 +290,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         // Supabase : on récupère par username puis vérification hash (compatible legacy en clair).
         // Timeout 7 s : si la base ne répond pas, repli immédiat démo/local (jamais de login figé).
-        const { data, error } = await withAuthTimeout(
-          supabase.from('users').select('*').eq('username', name).single(),
+        const supabaseResult = await withAuthTimeout(
+          supabase.from('users').select('*').eq('username', name).single() as unknown as Promise<{ data: any; error: any }>,
         );
+        const { data, error } = supabaseResult;
 
         if (!error && data && isValidRole(data.role)) {
           const ok = await verifyPassword(password, data.password as string);
@@ -359,7 +360,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const changePassword = async (currentPassword: string, newPassword: string): Promise<boolean> => {
     if (!user) return false;
-    // Personnel / gérant : mot de passe géré UNIQUEMENT par le DG
+    // Personnel / caissier : mot de passe géré UNIQUEMENT par le DG
     // (Paramètres → Comptes → réinitialiser). Eux ne peuvent pas le changer seuls.
     if (user.role === 'personnel' || user.role === 'caissier' || user.role === 'gestionnaire') {
       return false;

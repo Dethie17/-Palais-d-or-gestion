@@ -28,7 +28,7 @@ export interface RoleDefinition {
 
 /**
  * Référentiel unique des profils O RESTO.
- * - La caisse comptant (POS) est tenue par le Gérant de cantine (sans accueil :
+ * - La caisse comptant (POS) est tenue par le Caissier (sans accueil :
  *   tableau de bord, vente POS, menus récréation en lecture, historique).
  * - Les menus du jour sont composés et publiés par le Personnel de service,
  *   qui gère aussi la validation repas, les utilisateurs et l'établissement.
@@ -53,7 +53,7 @@ const DIRECTION_TASKS: RoleTask[] = [
   { label: 'Suivi des encaissements (lecture)', page: 'subscriptions', detail: 'Paiements Wave, espèces — sans tenir la caisse' },
   { label: 'Abonnés, formules, paiements', page: 'subscriptions', detail: 'CRUD offres, remboursements, annulations' },
   { label: 'Utilisateurs & accès', page: 'users', detail: 'Voir abonnés, comptes et périmètres' },
-  { label: 'Paramètres : gérer les gérants', page: 'settings', detail: 'Ajouter/supprimer, réinitialiser mots de passe' },
+  { label: 'Paramètres : gérer les caissiers', page: 'settings', detail: 'Ajouter/supprimer, réinitialiser mots de passe' },
 ];
 
 export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
@@ -90,7 +90,7 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
   },
   gestionnaire: {
     role: 'gestionnaire',
-    title: 'Gérant de cantine',
+    title: 'Caissier',
     icon: Store,
     mission: 'Vente au comptoir et pilotage du jour : caisse POS, tableau de bord, menus récréation, historique. Sans accueil.',
     color: 'from-slate-800 to-slate-900',
@@ -108,7 +108,7 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     title: 'Directeur Général',
     icon: Crown,
     mission: 'Pilotage et suivi : tableau de bord, finance, abonnés, utilisateurs, paramètres.',
-    color: 'from-orange-600 to-orange-500',
+    color: 'from-slate-600 to-slate-500',
     tasks: DIRECTION_TASKS,
     forbidden: [],
     kpis: ['CA tickets & abos', 'Clients actifs', 'Repas du jour'],
@@ -133,7 +133,7 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     title: 'Directeur Général',
     icon: Crown,
     mission: 'Pilotage et suivi : tableau de bord, finance, abonnés, utilisateurs, paramètres.',
-    color: 'from-orange-600 to-orange-500',
+    color: 'from-slate-600 to-slate-500',
     tasks: DIRECTION_TASKS,
     forbidden: [],
     kpis: ['CA tickets & abos', 'Clients actifs', 'Repas du jour'],

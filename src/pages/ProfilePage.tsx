@@ -52,7 +52,7 @@ const ProfilePage = () => {
 
   const RoleIcon = roleDef.icon;
   // Seuls parents et DG changent leur mot de passe seuls ;
-  // personnel / gérant : réinitialisé uniquement par le DG (Paramètres → Comptes).
+  // personnel / caissier : réinitialisé uniquement par le DG (Paramètres → Comptes).
   const canChangeOwnPassword = user.role === 'client' || user.role === 'admin' || user.role === 'manager';
 
   return (
@@ -72,7 +72,7 @@ const ProfilePage = () => {
 
       <div className="mt-6 overflow-hidden rounded-3xl bg-slate-950 text-white shadow-xl relative">
         <div className="absolute -top-24 -right-24 w-72 h-72 bg-emerald-500/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-28 -left-20 w-72 h-72 bg-orange-500/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-28 -left-20 w-72 h-72 bg-slate-500/10 rounded-full blur-3xl" />
 
         <div className="relative px-8 pt-8 pb-6 text-center">
           <span className={`w-20 h-20 rounded-3xl bg-gradient-to-br ${roleDef.color} inline-flex items-center justify-center shadow-lg ring-4 ring-white/10`}>

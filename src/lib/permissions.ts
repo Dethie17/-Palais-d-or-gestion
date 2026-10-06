@@ -8,9 +8,9 @@ import { UserRole } from '@/context/AuthContext';
 // Personnel de service : terrain cantine — accueil, gestion menu (composition
 // + publication semaine), validation repas, abonnés & encaissements,
 // QR élèves, utilisateurs, établissement (paramètres), historique.
-// Gérant de cantine : PAS d'accueil — tableau de bord, caisse POS (+ paiement,
+// Caissier : PAS d'accueil — tableau de bord, caisse POS (+ paiement,
 // reçu, commandes), menus récréation (lecture), historique.
-// Règle de caisse : SEUL le Gérant de cantine tient la Caisse (POS) au quotidien.
+// Règle de caisse : SEUL le Caissier tient la Caisse (POS) au quotidien.
 const DG_PAGES: PageName[] = [
   'dashboard', 'finance', 'subscriptions',
   'users', 'settings', 'establishments', 'history', 'profile',
@@ -20,13 +20,13 @@ export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // Anciennes pages conservées en redirect invisible vers 'home'.
   client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'history', 'profile', 'paymentsuccess', 'paymentfailure'],
   // Personnel : cantine terrain — menus, validation, abonnés, QR, utilisateurs, établissements, paramètres, historique, menu récréation
-  personnel: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'menurecreation', 'dashboard', 'pos', 'payment', 'receipt', 'orders', 'finance', 'paymentsuccess', 'paymentfailure'],
-  // Gérant : SANS accueil — tableau de bord, caisse POS, menu récréation, historique
+  personnel: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'menurecreation', 'dashboard', 'pos', 'payment', 'receipt', 'orders', 'paymentsuccess', 'paymentfailure'],
+  // Caissier : SANS accueil — tableau de bord, caisse POS, menu récréation, historique
   gestionnaire: ['dashboard', 'pos', 'payment', 'receipt', 'orders', 'menurecreation', 'history', 'profile', 'paymentsuccess', 'paymentfailure'],
   // DG : pilotage + suivi uniquement
   admin: [...DG_PAGES, 'paymentsuccess', 'paymentfailure'],
   // Compatibilité anciens comptes : caissier → superviseur, manager → DG
-  caissier: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'dashboard', 'pos', 'payment', 'receipt', 'orders', 'finance', 'paymentsuccess', 'paymentfailure'],
+  caissier: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'dashboard', 'pos', 'payment', 'receipt', 'orders', 'paymentsuccess', 'paymentfailure'],
   manager: [...DG_PAGES, 'paymentsuccess', 'paymentfailure'],
 };
 
@@ -38,7 +38,7 @@ export function canAccess(role: UserRole | undefined, page: PageName): boolean {
 export const ROLE_LABEL: Record<UserRole, string> = {
   client: 'Parent',
   personnel: 'Superviseur',
-  gestionnaire: 'Gérant de cantine',
+  gestionnaire: 'Caissier',
   admin: 'Directeur Général',
   caissier: 'Superviseur',
   manager: 'Directeur Général',
@@ -58,6 +58,7 @@ export const PAGE_LABEL: Record<PageName, string> = {
   history: 'Historique',
   dashboard: 'Tableau de bord',
   menu: 'Gestion Menu',
+  menus: 'Menus',
   pos: 'Caisse (POS)',
   payment: 'Encaissement',
   receipt: 'Reçu',

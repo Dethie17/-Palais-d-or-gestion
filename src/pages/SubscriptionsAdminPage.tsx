@@ -142,9 +142,9 @@ const SubscriptionsAdminPage = () => {
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
       <div className="rounded-3xl bg-slate-950 text-white p-6 md:p-8 relative overflow-hidden shadow-xl">
         <div className="absolute -top-20 -right-20 w-64 h-64 bg-emerald-500/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-24 -left-16 w-64 h-64 bg-orange-500/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-24 -left-16 w-64 h-64 bg-slate-500/10 rounded-full blur-3xl" />
         <div className="relative flex flex-wrap items-center gap-3">
-          <span className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg">
+          <span className="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center shadow-lg">
             <Users className="w-6 h-6 text-white" />
           </span>
           <div className="min-w-0">
@@ -292,33 +292,33 @@ const SubscriptionsAdminPage = () => {
             </div>
             <label className="block">
               <span className="block text-xs font-bold text-slate-600 mb-1">Nom de la formule *</span>
-              <input id="formule-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="ex : Abonnement Mensuel — Lycée" maxLength={80} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" required />
+              <input id="formule-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="ex : Abonnement Mensuel — Lycée" maxLength={80} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" required />
             </label>
             <label className="block">
               <span className="block text-xs font-bold text-slate-600 mb-1">Description (vue parent)</span>
-              <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="ex : 1 repas le midi, jours d’école, 30 jours" maxLength={140} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" />
+              <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="ex : 1 repas le midi, jours d’école, 30 jours" maxLength={140} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" />
             </label>
             <label className="block">
               <span className="block text-xs font-bold text-slate-600 mb-1">Prix (FCFA) *</span>
-              <input type="number" min={100} step={100} value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="ex : 27000" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" required />
+              <input type="number" min={100} step={100} value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="ex : 27000" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" required />
             </label>
             <label className="block">
               <span className="block text-xs font-bold text-slate-600 mb-1">Prix barré (offre rentrée)</span>
-              <input type="number" min={0} step={100} value={form.oldPrice} onChange={(e) => setForm({ ...form, oldPrice: e.target.value })} placeholder="vide = pas d’offre" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" />
+              <input type="number" min={0} step={100} value={form.oldPrice} onChange={(e) => setForm({ ...form, oldPrice: e.target.value })} placeholder="vide = pas d’offre" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="block text-xs font-bold text-slate-600 mb-1">Durée (jours) *</span>
-                <input type="number" min={1} max={365} value={form.durationDays} onChange={(e) => setForm({ ...form, durationDays: e.target.value })} placeholder="ex : 30" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" required />
+                <input type="number" min={1} max={365} value={form.durationDays} onChange={(e) => setForm({ ...form, durationDays: e.target.value })} placeholder="ex : 30" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" required />
               </label>
               <label className="block">
                 <span className="block text-xs font-bold text-slate-600 mb-1">Repas inclus *</span>
-                <input type="number" min={1} max={365} value={form.mealsIncluded} onChange={(e) => setForm({ ...form, mealsIncluded: e.target.value })} placeholder="ex : 20" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" required />
+                <input type="number" min={1} max={365} value={form.mealsIncluded} onChange={(e) => setForm({ ...form, mealsIncluded: e.target.value })} placeholder="ex : 20" className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" required />
               </label>
             </div>
             <label className="block md:col-span-2">
               <span className="block text-xs font-bold text-slate-600 mb-1">Règles cantine</span>
-              <input value={form.rules} onChange={(e) => setForm({ ...form, rules: e.target.value })} placeholder="ex : 1 repas/jour le midi, jours d’école" maxLength={140} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-orange-500" />
+              <input value={form.rules} onChange={(e) => setForm({ ...form, rules: e.target.value })} placeholder="ex : 1 repas/jour le midi, jours d’école" maxLength={140} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500" />
             </label>
             {previewPrice > 0 && previewMeals > 0 && (
               <p className="md:col-span-3 rounded-xl bg-slate-50 border border-slate-200 px-4 py-2.5 text-xs font-extrabold text-slate-800">

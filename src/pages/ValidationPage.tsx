@@ -219,27 +219,32 @@ const ValidationPage = () => {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><ScanLine className="w-6 h-6 text-orange-500" /> Service du midi — validation des repas</h1>
-          <p className="text-slate-500 text-sm">Servez depuis la liste des élèves, scannez le badge ou saisissez le code. Contrôle automatique.</p>
-        </div>
-        <div className="flex gap-2">
-          <div className="bg-green-100 text-green-800 rounded-2xl px-4 py-2 text-center">
-            <p className="text-2xl font-black leading-none">{servedToday}</p>
-            <p className="text-[11px] font-bold">repas servis</p>
+      <div className="bg-slate-900 rounded-2xl p-5 md:p-6 text-white">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Contrôle des repas · Point de service</p>
+            <h1 className="text-xl md:text-2xl font-black flex items-center gap-2 mt-1">
+              <ScanLine className="w-6 h-6 text-emerald-400" /> Validation des repas
+            </h1>
+            <p className="text-slate-400 text-sm mt-1">Contrôle automatique : abonnement actif, date valide, anti-double 1/jour/QR.</p>
           </div>
-          <div className="bg-green-100 text-green-800 rounded-2xl px-4 py-2 text-center">
-            <p className="text-2xl font-black leading-none">{activeSubs.length}</p>
-            <p className="text-[11px] font-bold">abonnés actifs</p>
+          <div className="flex gap-2">
+            <div className="bg-white/10 rounded-xl border border-white/10 px-4 py-2 text-center">
+              <p className="text-2xl font-black leading-none text-emerald-300">{servedToday}</p>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">repas servis</p>
+            </div>
+            <div className="bg-white/10 rounded-xl border border-white/10 px-4 py-2 text-center">
+              <p className="text-2xl font-black leading-none text-emerald-300">{activeSubs.length}</p>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">abonnés actifs</p>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Plat du jour servi : publié par le Personnel */}
       {todayDish ? (
-        <div className="rounded-2xl border-2 border-orange-200 bg-orange-50 p-4">
-          <p className="text-[11px] font-black uppercase tracking-widest text-orange-600 flex items-center gap-1.5">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
             <UtensilsCrossed className="w-4 h-4" /> Plat du jour servi
           </p>
           <p className="mt-1 font-black text-slate-900">{todayDish}</p>
@@ -255,7 +260,7 @@ const ValidationPage = () => {
 
       <div>
         <label className="text-sm font-semibold text-slate-700">Cantine (lieu du service)</label>
-        <select value={establishmentId} onChange={(e) => setEstablishmentId(e.target.value)} className="mt-1 w-full md:max-w-md px-4 py-3 rounded-xl border-2 border-slate-200 bg-white outline-none focus:border-orange-500">
+        <select value={establishmentId} onChange={(e) => setEstablishmentId(e.target.value)} className="mt-1 w-full md:max-w-md px-4 py-3 rounded-xl border-2 border-slate-200 bg-white outline-none focus:border-emerald-500">
           {establishments.map((e) => (
             <option key={e.id} value={e.id}>{e.name}</option>
           ))}
@@ -335,7 +340,7 @@ const ValidationPage = () => {
             <button
               type="button"
               onClick={startScan}
-              className="flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm bg-orange-500 text-white hover:bg-orange-600"
+              className="flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm bg-slate-800 text-white hover:bg-slate-700"
             >
               <Camera className="w-4 h-4" /> Scanner caméra
             </button>
@@ -371,12 +376,12 @@ const ValidationPage = () => {
 
         {scanning && (
           <div>
-            <div id={READER_ID} className="rounded-2xl overflow-hidden border-2 border-orange-400 bg-black" />
+            <div id={READER_ID} className="rounded-2xl overflow-hidden border-2 border-slate-700 bg-black" />
             <p className="text-center text-xs text-slate-500 py-2">Présentez le badge de l’élève devant la caméra…</p>
           </div>
         )}
         {scanError && (
-          <div className="rounded-xl p-4 flex gap-2 text-sm font-medium bg-amber-50 text-amber-800 border border-amber-200">
+          <div className="rounded-xl p-4 flex gap-2 text-sm font-medium bg-slate-100 text-slate-700 border border-slate-200">
             <XCircle className="w-5 h-5 flex-shrink-0" /> {scanError}
           </div>
         )}
@@ -385,8 +390,8 @@ const ValidationPage = () => {
 
         <p className="text-xs font-bold text-slate-500">Saisie manuelle du code</p>
         <form onSubmit={handleValidate} className="flex gap-2">
-          <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Code élève (ex : ORESTO-XXXXXX)" className="flex-1 px-4 py-3 rounded-xl border-2 border-slate-200 font-mono uppercase outline-none focus:border-orange-500" />
-          <button type="submit" className="px-5 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold rounded-xl">
+          <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Code élève (ex : ORESTO-XXXXXX)" className="flex-1 px-4 py-3 rounded-xl border-2 border-slate-200 font-mono uppercase outline-none focus:border-emerald-500" />
+          <button type="submit" className="px-5 py-3 bg-gradient-to-r from-slate-800 to-slate-900 text-white font-bold rounded-xl">
             Valider
           </button>
         </form>

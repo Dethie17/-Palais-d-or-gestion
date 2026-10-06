@@ -18,7 +18,7 @@ const MenusPage = ({ onNavigate }: MenusPageProps) => {
   const todayName = DAY_INDEX[new Date().getDay()];
 
   // Rôles : seul le client achète en ligne (Wave / espèces au comptoir).
-  // Personnel / gérant / DG = lecture seule (la vente comptant se fait à la Caisse POS du Gérant).
+  // Personnel / caissier / DG = lecture seule (la vente comptant se fait à la Caisse POS du Caissier).
   const canBuy = user?.role === 'client';
   const isStaffReadOnly = user?.role !== 'client';
 
@@ -45,8 +45,8 @@ const MenusPage = ({ onNavigate }: MenusPageProps) => {
       {/* Semaine publiée par le DG — vide pro tant que rien n'est composé */}
       {published.length === 0 ? (
         <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 md:p-14 text-center shadow-sm">
-          <span className="w-16 h-16 rounded-3xl bg-orange-100 inline-flex items-center justify-center">
-            <CalendarDays className="w-8 h-8 text-orange-500" />
+          <span className="w-16 h-16 rounded-3xl bg-slate-100 inline-flex items-center justify-center">
+            <CalendarDays className="w-8 h-8 text-slate-500" />
           </span>
           <p className="mt-4 text-xl font-black text-slate-800">Menus en préparation</p>
           <p className="mt-2 text-sm text-slate-500 max-w-md mx-auto">

@@ -114,7 +114,7 @@ const EstablishmentsPage = () => {
             <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="ex : Thiès, Sénégal" maxLength={120} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-green-600" />
           </label>
           <label className="block">
-            <span className="block text-xs font-bold text-slate-600 mb-1">Gérant</span>
+            <span className="block text-xs font-bold text-slate-600 mb-1">Caissier</span>
             <input value={manager} onChange={(e) => setManager(e.target.value)} placeholder="ex : Awa Diallo" maxLength={80} className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-green-600" />
           </label>
           <label className="block">

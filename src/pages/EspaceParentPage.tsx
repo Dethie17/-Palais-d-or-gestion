@@ -80,7 +80,7 @@ function SectionTitle({ step, title, sub }: { step: string; title: string; sub?:
 }
 
 /**
- * Kiosque POS pour l'Espace Parent - version adaptée du POS gérant
+ * Kiosque POS pour l'Espace Parent - version adaptée du POS caissier
  * Affiche les produits récréation/pause avec panier par enfant, paiement par carte prépayée
  */
 function KioskPOS({ 
@@ -91,11 +91,13 @@ function KioskPOS({
   kioskCart, 
   setKioskCart, 
   flash, 
-  formatCurrency 
+  formatCurrency,
+  username,
 }: {
   kids: Child[];
   kioskProducts: Product[];
   walletOf: (id: string) => number;
+  username: string;
   buyKiosk: (username: string, childId: string, items: { productId: string; productName: string; price: number; qty: number }[]) => { order: any; balance: number };
   kioskCart: Record<string, { productId: string; productName: string; price: number; qty: number }[]>;
   setKioskCart: React.Dispatch<React.SetStateAction<Record<string, { productId: string; productName: string; price: number; qty: number }[]>>>;
@@ -265,7 +267,7 @@ function KioskPOS({
             ))}
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar bg-gradient-to-br from-slate-50 to-orange-50/20">
+        <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar bg-gradient-to-br from-slate-50 to-slate-50/20">
           {filteredProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <p className="text-lg font-bold text-slate-800">Aucun article dans cette catégorie</p>
@@ -1159,14 +1161,14 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
           ) : (
             <>
               {ticketAlt && (
-                <div id="ticket-choix-carte" className="mt-3 rounded-xl border-2 border-orange-300 bg-orange-50 p-4 scroll-mt-24">
-                  <p className="text-sm font-bold text-orange-900">« {ticketAlt.name} » — quelle carte ?</p>
+                <div id="ticket-choix-carte" className="mt-3 rounded-xl border-2 border-slate-300 bg-slate-50 p-4 scroll-mt-24">
+                  <p className="text-sm font-bold text-slate-900">« {ticketAlt.name} » — quelle carte ?</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {kids.map((k) => (
                       <button
                         key={k.id}
                         onClick={() => handleBuyTicketBalance(ticketAlt.formulaId, k.id)}
-                        className="px-4 py-2.5 min-h-[44px] rounded-xl bg-orange-500 text-white text-sm font-bold hover:bg-orange-600"
+                        className="px-4 py-2.5 min-h-[44px] rounded-xl bg-slate-500 text-white text-sm font-bold hover:bg-slate-600"
                       >
                         {k.firstName} {k.lastName} · {formatCurrency(walletOf(k.id))}
                       </button>
@@ -1854,7 +1856,6 @@ function KidCard({ k, sub, pending, balance, walletOf, formulaName, formulaRules
   totalMeals: number;
   days: number;
   onRenew?: () => void;
-  onGotoQR: () => void;
   onRecharged: (childId: string, amount: number) => void;
   onError: (text: string) => void;
   updateChild: (id: string, updates: Partial<Pick<Child, 'firstName' | 'lastName' | 'className' | 'cycle'>>) => void;

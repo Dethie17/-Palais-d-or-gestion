@@ -35,7 +35,8 @@ const FinancePage = () => {
     financeExpenses, addExpense, subscriptions, formulas,
   } = useResto();
   const { user } = useAuth();
-  const canEdit = user?.role === 'admin' || user?.role === 'manager';
+  // Espace admin = supervision uniquement : pas d'édition des taux ni des dépenses.
+  const canEdit = false;
   const [period, setPeriod] = useState<Period>('month');
   const [saved, setSaved] = useState(false);
   const [rates, setRates] = useState({
@@ -193,8 +194,8 @@ const FinancePage = () => {
         {[
           { label: 'Ventes caisse', value: salesGross, icon: <ShoppingCart className="w-5 h-5" />, chip: 'from-green-600 to-emerald-600' },
           { label: 'Abonnements', value: aboGross, icon: <Wallet className="w-5 h-5" />, chip: 'from-emerald-500 to-teal-600' },
-          { label: 'Recharges cartes', value: rechargeGross, icon: <Banknote className="w-5 h-5" />, chip: 'from-orange-500 to-amber-500' },
-          { label: 'Net (après parts)', value: net, icon: <CheckCircle className="w-5 h-5" />, chip: 'from-amber-500 to-orange-600' },
+          { label: 'Recharges cartes', value: rechargeGross, icon: <Banknote className="w-5 h-5" />, chip: 'from-slate-500 to-amber-500' },
+          { label: 'Net (après parts)', value: net, icon: <CheckCircle className="w-5 h-5" />, chip: 'from-amber-500 to-slate-600' },
         ].map((c) => (
           <div key={c.label} className="bg-white rounded-3xl border p-5 shadow-sm hover:shadow-md transition-shadow">
             <span className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${c.chip} flex items-center justify-center text-white shadow`}>
@@ -210,7 +211,7 @@ const FinancePage = () => {
       <FinSection kicker="Reversements" title="Solde et parts à verser">
       <div className="rounded-3xl overflow-hidden border border-amber-300/50 shadow-lg">
         <div className="bg-gradient-to-r from-slate-900 via-amber-950 to-slate-900 text-white p-5 md:p-6 flex flex-wrap items-center gap-4">
-          <span className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center shadow-lg flex-shrink-0">
+          <span className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-slate-600 flex items-center justify-center shadow-lg flex-shrink-0">
             <Percent className="w-7 h-7 text-white" />
           </span>
           <div className="min-w-0">
@@ -224,12 +225,12 @@ const FinancePage = () => {
         </div>
         <div className="bg-white p-4 md:p-5">
         <div className="grid sm:grid-cols-3 lg:grid-cols-5 gap-3 text-sm">
-          <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-50 to-orange-50 border border-amber-200 shadow-sm">
+          <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-50 to-slate-50 border border-amber-200 shadow-sm">
             <p className="text-[11px] font-bold uppercase tracking-widest text-amber-700">ISM · abonnements</p>
             <p className="text-xl font-black mt-0.5">{formatCurrency(ismAbo)}</p>
             <p className="text-[11px] text-slate-500 mt-0.5">{financeSettings.ismPerSubscription} × {ism.aboCount} abo(s)</p>
           </div>
-          <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-50 to-orange-50 border border-amber-200 shadow-sm">
+          <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-50 to-slate-50 border border-amber-200 shadow-sm">
             <p className="text-[11px] font-bold uppercase tracking-widest text-amber-700">ISM · ventes</p>
             <p className="text-xl font-black mt-0.5">{formatCurrency(ismSalesDue)}</p>
             <p className="text-[11px] text-slate-500 mt-0.5">{financeSettings.ismSalesPct}% de la caisse</p>

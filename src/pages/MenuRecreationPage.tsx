@@ -66,7 +66,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
       return;
     }
 
-    // Paiement Wave : le gérant confirme que le client a payé
+    // Paiement Wave : le caissier confirme que le client a payé
     const { token, reference } = createWalkInTicket(selectedMenu, 'wave');
     setTicketToken(token);
     setTicketReference(reference);
@@ -210,7 +210,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
       {step === 'select' && (
         <div className="space-y-4">
           {todayMenu && (
-            <div className="bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl p-6 text-white shadow-lg">
+            <div className="bg-gradient-to-r from-slate-500 to-red-600 rounded-2xl p-6 text-white shadow-lg">
               <div className="flex items-center gap-3 mb-2">
                 <CalendarDays className="w-6 h-6" />
                 <span className="text-lg font-bold">Aujourd'hui — {todayMenu.day}</span>
@@ -223,7 +223,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
               </div>
               <button
                 onClick={() => handleSelectMenu(todayMenu)}
-                className="mt-4 w-full py-3 bg-white text-orange-600 font-bold rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2"
+                className="mt-4 w-full py-3 bg-white text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2"
               >
                 <CreditCard className="w-5 h-5" /> Choisir ce menu
               </button>
@@ -238,17 +238,17 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
                   <button
                     key={menu.day}
                     onClick={() => handleSelectMenu(menu)}
-                    className="bg-white rounded-2xl border-2 border-slate-200 p-5 hover:border-orange-500 hover:shadow-xl transition-all text-left"
+                    className="bg-white rounded-2xl border-2 border-slate-200 p-5 hover:border-slate-500 hover:shadow-xl transition-all text-left"
                   >
                     <div className="flex items-center gap-2 mb-2">
-                      <CalendarDays className="w-5 h-5 text-orange-500" />
+                      <CalendarDays className="w-5 h-5 text-slate-500" />
                       <span className="font-bold text-slate-800">{menu.day}</span>
                     </div>
                     <p className="font-semibold text-slate-800">{menu.name || `Menu du ${menu.day}`}</p>
                     <p className="text-sm text-slate-500 mt-1 line-clamp-2">{menu.description}</p>
                     <div className="mt-3 flex items-center justify-between">
                       <span className="text-xs text-slate-500">{formatMenuItems(menu.items ?? [])}</span>
-                      <span className="text-xl font-bold text-orange-600">{formatCurrency(menu.price ?? 0)}</span>
+                      <span className="text-xl font-bold text-slate-600">{formatCurrency(menu.price ?? 0)}</span>
                     </div>
                   </button>
                 ))}
@@ -269,7 +269,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
                 <p className="text-sm text-slate-500 mt-1">{formatMenuItems(selectedMenu.items ?? [])}</p>
               </div>
               <div className="text-right">
-                <p className="text-3xl font-bold text-orange-600">{formatCurrency(selectedMenu.price ?? 0)}</p>
+                <p className="text-3xl font-bold text-slate-600">{formatCurrency(selectedMenu.price ?? 0)}</p>
                 <p className="text-xs text-slate-400">Total à payer</p>
               </div>
             </div>
@@ -278,8 +278,8 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
               <button
                 onClick={() => handlePaymentMethodChange('cash')}
                 className={`py-4 rounded-xl font-bold text-lg transition-all ${paymentMethod === 'cash'
-                  ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-lg shadow-orange-500/30'
-                  : 'bg-white border-2 border-slate-200 text-slate-700 hover:border-orange-300'
+                  ? 'bg-gradient-to-r from-slate-500 to-red-600 text-white shadow-lg shadow-slate-500/30'
+                  : 'bg-white border-2 border-slate-200 text-slate-700 hover:border-slate-300'
                 }`}
               >
                 <Banknote className="w-6 h-6 mx-auto mb-1" /> Espèces
@@ -338,7 +338,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
                 </div>
 
                 <button
-                  onClick={handleConfirmWave}
+                  onClick={handleConfirmPayment}
                   className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <CheckCircle className="w-5 h-5" /> Client a payé — Générer le ticket
@@ -408,7 +408,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
               onClick={paymentMethod === 'cash' ? handleConfirmPayment : () => {}}
               disabled={paymentMethod === 'wave'}
               className={`w-full py-4 rounded-xl font-bold text-lg transition-all ${paymentMethod === 'cash'
-                ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-lg shadow-orange-500/30 hover:shadow-xl'
+                ? 'bg-gradient-to-r from-slate-500 to-red-600 text-white shadow-lg shadow-slate-500/30 hover:shadow-xl'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
               }`}
             >
@@ -455,7 +455,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
             <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
               <p className="font-semibold text-slate-800">{selectedMenu?.name || `Menu du ${selectedMenu?.day}`}</p>
               <p className="text-slate-600">{formatMenuItems(selectedMenu?.items ?? [])}</p>
-              <p className="font-bold text-orange-600">{formatCurrency(selectedMenu?.price ?? 0)}</p>
+              <p className="font-bold text-slate-600">{formatCurrency(selectedMenu?.price ?? 0)}</p>
               <p className="text-xs text-slate-500">Réf: {ticketReference}</p>
             </div>
 
@@ -466,7 +466,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
           </div>
 
           <div className="flex gap-3">
-            <button onClick={handleNewSale} className="flex-1 py-3.5 bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-orange-500/50 transition-all">
+            <button onClick={handleNewSale} className="flex-1 py-3.5 bg-gradient-to-r from-slate-500 to-red-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-slate-500/50 transition-all">
               Nouvelle vente
             </button>
             <button onClick={handleBack} className="px-6 py-3.5 border-2 border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-100 transition-colors">

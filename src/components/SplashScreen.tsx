@@ -57,7 +57,7 @@ const SplashScreen = ({ onDone }: SplashScreenProps) => {
     >
       {/* Halos décoratifs */}
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-green-700/30 rounded-full blur-3xl" />
-      <div className="absolute -bottom-40 -right-24 w-[28rem] h-[28rem] bg-orange-600/20 rounded-full blur-3xl" />
+      <div className="absolute -bottom-40 -right-24 w-[28rem] h-[28rem] bg-slate-600/20 rounded-full blur-3xl" />
 
       <div className="relative text-center px-6 splash-rise">
         <div className="inline-block bg-white rounded-3xl p-5 shadow-2xl splash-pop">
@@ -68,7 +68,7 @@ const SplashScreen = ({ onDone }: SplashScreenProps) => {
         </p>
         <div className="mt-4 w-56 md:w-72 mx-auto">
           <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-            <div className="h-full rounded-full bg-gradient-to-r from-green-500 to-orange-500 splash-bar" />
+            <div className="h-full rounded-full bg-gradient-to-r from-green-500 to-slate-500 splash-bar" />
           </div>
         </div>
         <div className="mt-4 flex items-center justify-center gap-4 text-xs text-slate-400">

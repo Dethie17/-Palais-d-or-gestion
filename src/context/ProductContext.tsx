@@ -215,7 +215,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       }
       const newItem: KioskOrderItem = {
         productId: product.id,
-        productName: product.name,
+        name: product.name,
         price: product.price,
         qty,
       };
@@ -306,7 +306,6 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     <ProductContext.Provider
       value={{
         products,
-        setProducts,
         addProduct,
         updateProduct,
         deleteProduct,

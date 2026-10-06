@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, act } from '@testing-library/react';
-import { AuthProvider, addLocalUserHashed, isDemoAccount, DEMO_LOGIN_ENABLED, getLocalUsers, LOCAL_USERS_KEY } from '@/context/AuthContext';
+import { AuthProvider, addLocalUserHashed, isDemoAccount, DEMO_LOGIN_ENABLED, getLocalUsers, LOCAL_USERS_KEY, UserRole } from '@/context/AuthContext';
 import { RestoProvider, useResto } from '@/context/RestoContext';
 
 function renderWithProviders(children: any) {
@@ -23,7 +23,7 @@ describe('Creation de comptes utilisateurs', () => {
 
   it('devrait ajouter des comptes utilisateurs locaux avec hash', async () => {
     // Creation de comptes locaux pour chaque role
-    const roles: Array<{ role: string; username: string; password: string }> = [
+    const roles: Array<{ role: UserRole; username: string; password: string }> = [
       { role: 'client', username: 'parent1', password: 'parent123' },
       { role: 'personnel', username: 'staff1', password: 'staff123' },
       { role: 'gestionnaire', username: 'manager1', password: 'manager123' },

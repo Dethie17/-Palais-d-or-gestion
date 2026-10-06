@@ -35,7 +35,7 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
   const { user } = useAuth();
   const { subscriptions, validations, payments } = useResto();
   const isStaff = user?.role === 'personnel' || user?.role === 'caissier';
-  // Le personnel ne crée jamais de comptes Direction / Gérant.
+  // Le personnel ne crée jamais de comptes Direction / Caissier.
   const allowedRoles: UserRole[] = isStaff ? ['client', 'personnel'] : CREATABLE_ROLES;
 
   const [dbUsers, setDbUsers] = useState<DbUser[]>([]);
@@ -235,7 +235,7 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
         <>
           {/* Ajouter un compte */}
           <form onSubmit={handleAdd} className="bg-white rounded-2xl border p-5">
-            <p className="font-bold text-slate-800 flex items-center gap-2"><Plus className="w-5 h-5 text-green-700" /> Ajouter un compte{isStaff ? ' (client, personnel)' : ' (gérant, personnel, client…)'}</p>
+            <p className="font-bold text-slate-800 flex items-center gap-2"><Plus className="w-5 h-5 text-green-700" /> Ajouter un compte{isStaff ? ' (client, personnel)' : ' (caissier, personnel, client…)'}</p>
             <div className="mt-3 grid sm:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">Nom d’utilisateur</label>
@@ -319,7 +319,7 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
 
       {/* Raccourcis */}
       <div className="grid sm:grid-cols-3 gap-3">
-        <button onClick={() => onNavigate('dashboard')} className="flex items-center gap-2 bg-white border rounded-2xl p-4 text-sm font-bold text-slate-700 hover:shadow-md"><LayoutDashboard className="w-5 h-5 text-orange-500" /> Tableau de bord</button>
+        <button onClick={() => onNavigate('dashboard')} className="flex items-center gap-2 bg-white border rounded-2xl p-4 text-sm font-bold text-slate-700 hover:shadow-md"><LayoutDashboard className="w-5 h-5 text-slate-500" /> Tableau de bord</button>
         <button onClick={() => onNavigate('history')} className="flex items-center gap-2 bg-white border rounded-2xl p-4 text-sm font-bold text-slate-700 hover:shadow-md"><Receipt className="w-5 h-5 text-blue-500" /> Historiques</button>
         <button onClick={() => onNavigate('menu')} className="flex items-center gap-2 bg-white border rounded-2xl p-4 text-sm font-bold text-slate-700 hover:shadow-md"><UtensilsCrossed className="w-5 h-5 text-green-700" /> Menus</button>
       </div>

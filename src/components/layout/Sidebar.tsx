@@ -34,9 +34,9 @@ const allNavItems: { page: PageName; label: string; icon: React.ReactNode; roles
   { page: 'validation', label: 'Validation repas', icon: <ScanLine aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier'] },
   { page: 'qrgallery', label: 'QR Élèves', icon: <ClipboardList aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier'] },
   { page: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard aria-hidden className="w-5 h-5" />, roles: ['admin', 'gestionnaire', 'manager', 'personnel', 'caissier'] },
-  { page: 'finance', label: 'Finance', icon: <Banknote aria-hidden className="w-5 h-5" />, roles: ['admin', 'manager', 'personnel', 'caissier'] },
+  { page: 'finance', label: 'Finance (lecture)', icon: <Banknote aria-hidden className="w-5 h-5" />, roles: ['admin', 'manager'] },
   { page: 'menu', label: 'Gestion Menu', icon: <ClipboardList aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier'] },
-  // Caisse tenue par le Gérant de cantine et le Superviseur
+  // Caisse tenue par le Caissier et le Superviseur
   { page: 'pos', label: 'Vente (POS)', icon: <ShoppingCart aria-hidden className="w-5 h-5" />, roles: ['gestionnaire', 'personnel', 'caissier'] },
   { page: 'menurecreation', label: 'Menu Récréation', icon: <UtensilsCrossed aria-hidden className="w-5 h-5" />, roles: ['gestionnaire', 'personnel'] },
   { page: 'users', label: 'Utilisateurs', icon: <Users aria-hidden className="w-5 h-5" />, roles: ['personnel', 'caissier', 'admin', 'manager'] },

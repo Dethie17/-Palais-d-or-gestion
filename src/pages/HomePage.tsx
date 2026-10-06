@@ -44,7 +44,7 @@ const FAMILY_STYLE: Record<RoleFamily, { gradient: string; badge: string; title:
     subtitle: 'Repas servis, abonnements, caisse et menus de votre cantine.',
   },
   admin: {
-    gradient: 'from-orange-500 to-red-600',
+    gradient: 'from-slate-500 to-red-600',
     badge: 'Pilotage O RESTO',
     title: 'Toute la plateforme',
     subtitle: 'Clients, repas, paiements : tout en un coup d’œil.',
@@ -82,52 +82,51 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
-      {/* Bannière d'accueil premium par profil */}
-      <div className={`bg-gradient-to-br ${style.gradient} rounded-3xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden`}>
-        <div className="absolute -right-12 -top-12 w-56 h-56 bg-white/10 rounded-full blur-2xl" />
-        <div className="absolute -left-8 -bottom-16 w-56 h-56 bg-black/20 rounded-full blur-3xl" />
-        <div className="absolute right-6 top-1/2 -translate-y-1/2 hidden md:block opacity-20">
-          <UtensilsCrossed className="w-32 h-32 text-white" />
+      {/* En-tête de supervision — sobre, pro, orienté contrôle */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 md:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+              {style.badge} · <span className="capitalize">{todayLabel}</span>
+            </p>
+            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-900 mt-1 capitalize">
+              {greeting}, {user?.username}
+            </h1>
+            {style.subtitle && <p className="text-sm text-slate-500 mt-1 max-w-xl">{style.subtitle}</p>}
+          </div>
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Supervision active
+          </div>
         </div>
-        <div className="relative">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.16em] bg-white/20 border border-white/20 px-3 py-1.5 rounded-full backdrop-blur">
-            {style.badge} · <span className="capitalize">{todayLabel}</span>
-          </span>
-          <p className="mt-3 text-sm font-semibold text-white/80">{greeting} — bienvenue sur O RESTO</p>
-          <h1 className="text-3xl md:text-4xl font-black tracking-tight mt-1 capitalize">
-            {style.title}, <span className="text-white/90">{user?.username}</span>
-          </h1>
-          {style.subtitle && <p className="text-sm text-white/85 mt-1 max-w-lg">{style.subtitle}</p>}
-          {family === 'client' && user && (
-            <>
-              <ClientHeroStats
-                kidsCount={myChildren(user.username).length}
-                mealsLeft={subscriptions
-                  .filter((s) => s.status === 'active' && new Date(s.endDate).getTime() >= Date.now() &&
-                    (s.clientUsername === user.username || (s.childId && myChildren(user.username).some((k) => k.id === s.childId))))
-                  .reduce((s, x) => s + x.mealsRemaining, 0)}
-                onChildren={() => onNavigate('children')}
-                onSub={() => onNavigate('subscription')}
-              />
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-lg">
-                {[
-                  { label: 'Enfants', icon: Baby, go: () => onNavigate('children') },
-                  { label: 'Abonnement', icon: Wallet, go: () => onNavigate('subscription') },
-                  { label: 'QR Code', icon: QrCode, go: () => onNavigate('qrcode') },
-                  { label: 'Menus', icon: CalendarDays, go: () => onNavigate('menus') },
-                ].map((a) => (
-                  <button
-                    key={a.label}
-                    onClick={a.go}
-                    className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl bg-white/10 border border-white/15 backdrop-blur text-white font-bold text-xs hover:bg-white/20 active:scale-95 transition-all min-w-0"
-                  >
-                    <a.icon aria-hidden className="w-5 h-5 flex-shrink-0" /> <span className="truncate w-full text-center">{a.label}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        {family === 'client' && user && (
+          <>
+            <ClientHeroStats
+              kidsCount={myChildren(user.username).length}
+              mealsLeft={subscriptions
+                .filter((s) => s.status === 'active' && new Date(s.endDate).getTime() >= Date.now() &&
+                  (s.clientUsername === user.username || (s.childId && myChildren(user.username).some((k) => k.id === s.childId))))
+                .reduce((s, x) => s + x.mealsRemaining, 0)}
+              onChildren={() => onNavigate('children')}
+              onSub={() => onNavigate('subscription')}
+            />
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-lg">
+              {[
+                { label: 'Enfants', icon: Baby, go: () => onNavigate('children') },
+                { label: 'Abonnement', icon: Wallet, go: () => onNavigate('subscription') },
+                { label: 'QR Code', icon: QrCode, go: () => onNavigate('qrcode') },
+                { label: 'Menus', icon: CalendarDays, go: () => onNavigate('menus') },
+              ].map((a) => (
+                <button
+                  key={a.label}
+                  onClick={a.go}
+                  className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 active:scale-95 transition-all min-w-0"
+                >
+                  <a.icon aria-hidden className="w-5 h-5 flex-shrink-0" /> <span className="truncate w-full text-center">{a.label}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {family === 'client' && (
@@ -181,12 +180,12 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
-            <div className="bg-white rounded-3xl p-5 shadow-sm border border-orange-100 hover:shadow-md transition-shadow">
+            <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
               <div className="flex items-center gap-2 text-sm font-black text-slate-800">
-                <span className="w-8 h-8 rounded-xl bg-orange-100 flex items-center justify-center"><CalendarDays className="w-4 h-4 text-orange-600" /></span>
+                <span className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center"><CalendarDays className="w-4 h-4 text-slate-600" /></span>
                 Menu de la semaine
                 {weeklyMenus.some((m) => (m.items ?? []).length > 0) && (
-                  <span className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full bg-orange-100 text-orange-700">
+                  <span className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
                     {weeklyMenus.filter((m) => (m.items ?? []).length > 0).length}/5 jours publiés
                   </span>
                 )}
@@ -207,28 +206,28 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
                 return (
                   <ul className="mt-3 space-y-2">
                     {published.map((m) => (
-                      <li key={m.day} className="flex items-center gap-2.5 p-2.5 rounded-2xl bg-orange-50/70 border border-orange-100">
-                        <span className="text-[11px] font-black px-2 py-1 rounded-lg bg-orange-500 text-white whitespace-nowrap flex-shrink-0">
+                      <li key={m.day} className="flex items-center gap-2.5 p-2.5 rounded-2xl bg-slate-50 border border-slate-200">
+                        <span className="text-[11px] font-black px-2 py-1 rounded-lg bg-slate-800 text-white whitespace-nowrap flex-shrink-0">
                           {m.day.slice(0, 3).toUpperCase()}
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block font-bold text-sm text-slate-800 truncate">{m.name || `Menu du ${m.day}`}</span>
                           <span className="block text-xs text-slate-500 truncate">{m.items.map((it) => it.name).join(' • ')}</span>
                         </span>
-                        <span className="font-black text-sm text-orange-700 whitespace-nowrap flex-shrink-0">{formatCurrency(menuTicketTotal(m))}</span>
+                        <span className="font-black text-sm text-slate-700 whitespace-nowrap flex-shrink-0">{formatCurrency(menuTicketTotal(m))}</span>
                       </li>
                     ))}
                   </ul>
                 );
               })()}
-              <button onClick={() => onNavigate('menus')} className="mt-3 w-full py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold text-sm hover:brightness-110 shadow-sm">
+              <button onClick={() => onNavigate('menus')} className="mt-3 w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-700 shadow-sm">
                 Voir les menus
               </button>
             </div>
 
-            <div className="bg-white rounded-3xl p-5 shadow-sm border border-green-100 hover:shadow-md transition-shadow">
+            <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
               <div className="flex items-center gap-2 text-sm font-black text-slate-800">
-                <span className="w-8 h-8 rounded-xl bg-green-100 flex items-center justify-center"><History className="w-4 h-4 text-green-700" /></span>
+                <span className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center"><History className="w-4 h-4 text-emerald-700" /></span>
                 Ma consommation
               </div>
               <p className="text-4xl font-black mt-2 tracking-tight">{myMeals} <span className="text-base font-bold text-slate-400">repas savourés</span></p>
@@ -260,13 +259,13 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
               <p className="text-[11px] text-slate-400 font-medium">aujourd’hui</p>
             </div>
             <div className="bg-white rounded-2xl p-4 md:p-5 shadow border">
-              <div className="flex items-center gap-2 text-xs md:text-sm font-semibold text-slate-500"><Clock className="w-4 h-4 text-amber-500" /> En attente</div>
-              <p className="text-3xl md:text-4xl font-extrabold text-amber-600 mt-1">{subscriptions.filter((s) => s.status === 'pending').length + payments.filter((p) => p.status === 'pending').length}</p>
+              <div className="flex items-center gap-2 text-xs md:text-sm font-semibold text-slate-500"><Clock className="w-4 h-4 text-slate-400" /> En attente</div>
+              <p className="text-3xl md:text-4xl font-extrabold text-slate-700 mt-1">{subscriptions.filter((s) => s.status === 'pending').length + payments.filter((p) => p.status === 'pending').length}</p>
               <p className="text-[11px] text-slate-400 font-medium">à encaisser</p>
             </div>
             <div className="bg-white rounded-2xl p-4 md:p-5 shadow border">
-              <div className="flex items-center gap-2 text-xs md:text-sm font-semibold text-slate-500"><CalendarDays className="w-4 h-4 text-orange-500" /> Menus</div>
-              <p className="text-3xl md:text-4xl font-extrabold text-orange-600 mt-1">{published.length}<span className="text-lg text-slate-400">/5</span></p>
+              <div className="flex items-center gap-2 text-xs md:text-sm font-semibold text-slate-500"><CalendarDays className="w-4 h-4 text-slate-400" /> Menus</div>
+              <p className="text-3xl md:text-4xl font-extrabold text-slate-700 mt-1">{published.length}<span className="text-lg text-slate-400">/5</span></p>
               <p className="text-[11px] text-slate-400 font-medium">jours publiés</p>
             </div>
           </div>
@@ -275,7 +274,7 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
           <div className="grid md:grid-cols-2 gap-3 md:gap-4">
             <div className="bg-white rounded-2xl p-5 shadow-sm border">
               <div className="flex items-center gap-2 text-sm font-black text-slate-800">
-                <span className="w-8 h-8 rounded-xl bg-orange-100 flex items-center justify-center"><CalendarDays className="w-4 h-4 text-orange-600" /></span>
+                <span className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center"><CalendarDays className="w-4 h-4 text-slate-600" /></span>
                 Semaine · {published.length}/5 publiée
               </div>
               <ul className="mt-3 space-y-2">
@@ -328,8 +327,8 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
 
           <div className="grid md:grid-cols-2 gap-4">
             <QuickLink title="Caisse (POS)" desc="Vente directe au comptant" icon={<Banknote className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('pos')} />
-            <QuickLink title="Tableau de bord" desc="Stats, graphiques et alertes" icon={<LayoutDashboard className="w-6 h-6 text-white" />} gradient="from-orange-500 to-red-600" onClick={() => onNavigate('dashboard')} />
-            <QuickLink title="Historique" desc="Commandes et passages" icon={<History className="w-6 h-6 text-white" />} gradient="from-teal-500 to-emerald-600" onClick={() => onNavigate('history')} />
+            <QuickLink title="Tableau de bord" desc="Stats, graphiques et alertes" icon={<LayoutDashboard className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('dashboard')} />
+            <QuickLink title="Historique" desc="Commandes et passages" icon={<History className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('history')} />
           </div>
 
           <MenuDuJourCard menu={menuDuJour} />
@@ -346,10 +345,10 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
-            <QuickLink title="Tableau de bord" desc="Graphiques, top produits, export PDF" icon={<LayoutDashboard className="w-6 h-6 text-white" />} gradient="from-orange-500 to-red-600" onClick={() => onNavigate('dashboard')} />
-            <QuickLink title="Finance" desc="Ventes, abonnements, solde ISM" icon={<Banknote className="w-6 h-6 text-white" />} gradient="from-green-600 to-emerald-700" onClick={() => onNavigate('finance')} />
-            <QuickLink title="Utilisateurs & accès" desc="Comptes, rôles et périmètres" icon={<Users className="w-6 h-6 text-white" />} gradient="from-slate-700 to-slate-900" onClick={() => onNavigate('users')} />
-            <QuickLink title="Abonnés & paiements" desc="Encaissements Wave, espèces" icon={<Users className="w-6 h-6 text-white" />} gradient="from-emerald-600 to-teal-600" onClick={() => onNavigate('subscriptions')} />
+            <QuickLink title="Tableau de bord" desc="Graphiques, top produits, export PDF" icon={<LayoutDashboard className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('dashboard')} />
+            <QuickLink title="Finance" desc="Ventes, abonnements, solde ISM" icon={<Banknote className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('finance')} />
+            <QuickLink title="Utilisateurs & accès" desc="Comptes, rôles et périmètres" icon={<Users className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('users')} />
+            <QuickLink title="Abonnés & paiements" desc="Encaissements Wave, espèces" icon={<Users className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('subscriptions')} />
           </div>
         </>
       )}
@@ -372,13 +371,13 @@ function ClientHeroStats({ kidsCount, mealsLeft, onChildren, onSub }: {
           <span className="block text-[11px] font-bold text-slate-500 mt-0.5">enfant(s) inscrit(s)</span>
         </span>
       </button>
-      <button onClick={onSub} className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/15 border border-white/25 text-white backdrop-blur hover:bg-white/25 active:scale-[0.98] transition-all text-left">
-        <span className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
-          <Wallet className="w-5 h-5 text-white" />
+      <button onClick={onSub} className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 hover:bg-slate-100 active:scale-[0.98] transition-all text-left">
+        <span className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center flex-shrink-0">
+          <Wallet className="w-5 h-5 text-slate-600" />
         </span>
         <span>
           <span className="block text-xl font-black leading-none">{mealsLeft}</span>
-          <span className="block text-[11px] font-bold text-white/70 mt-0.5">repas restants</span>
+          <span className="block text-[11px] font-bold text-slate-500 mt-0.5">repas restants</span>
         </span>
       </button>
     </div>
@@ -396,10 +395,10 @@ function MenuDuJourCard({ menu, actionLabel, onAction }: { menu: { day: string; 
   }
   const total = menuTicketTotal(menu);
   return (
-    <div className="bg-white rounded-2xl shadow border border-orange-100 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow border border-slate-200 overflow-hidden">
       <div className="p-5">
       <div className="flex items-center gap-2 font-bold text-slate-800">
-        <CalendarDays className="w-5 h-5 text-orange-500" /> Menu — {menu.day} : {menu.name || `Menu du ${menu.day}`}
+        <CalendarDays className="w-5 h-5 text-slate-400" /> Menu — {menu.day} : {menu.name || `Menu du ${menu.day}`}
       </div>
       <ul className="mt-2 space-y-1 text-sm">
         {menu.items.map((it) => (
@@ -409,7 +408,7 @@ function MenuDuJourCard({ menu, actionLabel, onAction }: { menu: { day: string; 
       <div className="mt-3 flex items-center justify-between">
         <p className="font-extrabold text-lg">{formatCurrency(total)}</p>
         {actionLabel && onAction && (
-          <button onClick={onAction} className="px-4 py-2 rounded-xl bg-orange-500 text-white text-sm font-bold hover:bg-orange-600">
+          <button onClick={onAction} className="px-4 py-2 rounded-xl bg-slate-800 text-white text-sm font-bold hover:bg-slate-700">
             {actionLabel}
           </button>
         )}

@@ -41,7 +41,7 @@ const PaymentFailurePage = ({ onNavigate }: PaymentFailurePageProps) => {
         <h1 className="text-2xl font-bold text-slate-800 mb-2">Paiement échoué</h1>
         
         <p className="text-slate-600 mb-4">
-          Le paiement n'a pas pu être finalisé. Veuillez réessayer ou contacter le gérant.
+          Le paiement n'a pas pu être finalisé. Veuillez réessayer ou contacter le caissier.
         </p>
         
         {reference && (
@@ -70,7 +70,7 @@ const PaymentFailurePage = ({ onNavigate }: PaymentFailurePageProps) => {
         </div>
         
         <p className="mt-4 text-xs text-slate-500">
-          Besoin d'aide ? Contactez le gérant de la cantine.
+          Besoin d'aide ? Contactez le caissier de la cantine.
         </p>
       </div>
     </div>

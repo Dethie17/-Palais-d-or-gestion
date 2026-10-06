@@ -84,7 +84,7 @@ function AppContent() {
     }
   }, [isAuthenticated, intendedPath]);
 
-  // Sans accueil : Gérant et DG atterrissent direct sur le tableau de bord.
+  // Sans accueil : Caissier et DG atterrissent direct sur le tableau de bord.
   useEffect(() => {
     if ((user?.role === 'gestionnaire' || user?.role === 'admin' || user?.role === 'manager') && currentPage === 'home') {
       setCurrentPage('dashboard');
@@ -94,9 +94,9 @@ function AppContent() {
   // Afficher un loader pendant le chargement initial
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-orange-50/20 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-50/20 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-16 h-16 border-4 border-slate-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-slate-600 font-medium">Chargement...</p>
         </div>
       </div>
@@ -244,7 +244,7 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/30 to-slate-100">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-50/30 to-slate-100">
       <Sidebar currentPage={currentPage} onNavigate={navigateTo} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Mobile header */}

@@ -51,7 +51,7 @@ const getStatCards = (orders: Order[], period: PeriodFilter, activeProductCount:
       change: stats.revenueChange,
       positive: stats.revenueChange.startsWith('+'),
       icon: TrendingUp,
-      chip: 'bg-orange-500/15 text-orange-400',
+      chip: 'bg-slate-500/15 text-slate-400',
     },
     {
       label: `Commandes ${periodLabel}`,
@@ -67,7 +67,7 @@ const getStatCards = (orders: Order[], period: PeriodFilter, activeProductCount:
       change: stats.customersChange,
       positive: stats.customersChange.startsWith('+'),
       icon: Users,
-      chip: 'bg-orange-500/15 text-orange-300',
+      chip: 'bg-slate-500/15 text-slate-300',
     },
     {
       label: 'Produits actifs',
@@ -381,7 +381,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
         {isAdmin && (
           <section className="rounded-2xl overflow-hidden border border-amber-500/30 bg-gradient-to-br from-[#1a1408] via-[#151b2b] to-[#151b2b]">
             <div className="px-4 sm:px-6 pt-4 sm:pt-5 flex flex-wrap items-center gap-2">
-              <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center">
+              <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-slate-600 flex items-center justify-center">
                 <Landmark className="w-5 h-5 text-white" />
               </span>
               <div>
@@ -435,28 +435,12 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
         {/* Alertes */}
         {(pendingCash.length > 0 || expiringSoon.length > 0 || lowMeals.length > 0) && (
           <div className="grid md:grid-cols-3 gap-3">
-            {pendingCash.length > 0 && canAccess(user?.role, 'subscriptions') && (
-              <button onClick={() => onNavigate('subscriptions')} className="text-left bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 hover:bg-amber-500/15">
-                <p className="font-bold text-amber-300 flex items-center gap-1.5"><Clock className="w-4 h-4" /> {pendingCash.length} paiement(s) espèces en attente</p>
-                <p className="text-xs text-amber-200/70 mt-1">À encaisser au comptoir sur la page Abonnés → Paiements.</p>
-              </button>
-            )}
-            {pendingCash.length > 0 && !canAccess(user?.role, 'subscriptions') && (
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4">
-                <p className="font-bold text-amber-300 flex items-center gap-1.5"><Clock className="w-4 h-4" /> {pendingCash.length} paiement(s) espèces en attente</p>
-                <p className="text-xs text-amber-200/70 mt-1">Encaissement par la Direction (Abonnés → Paiements).</p>
-              </div>
-            )}
             {expiringSoon.length > 0 && (
               <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4">
                 <p className="font-bold text-red-300 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {expiringSoon.length} abonnement(s) expirent ≤ 2 jours</p>
                 <p className="text-xs text-red-200/70 mt-1">{expiringSoon.slice(0, 3).map((s) => s.clientUsername).join(', ')}{expiringSoon.length > 3 ? '…' : ''}</p>
               </div>
             )}
-            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4">
-              <p className="font-bold text-emerald-300 flex items-center gap-1.5"><UtensilsCrossed className="w-4 h-4" /> {todayAccepted.length} repas validés aujourd’hui • {restoStats.activeClients} abonnés actifs</p>
-              <p className="text-xs text-emerald-200/70 mt-1">CA abos/tickets : {formatCurrency(restoStats.revenue)}{lowMeals.length > 0 ? ` • ${lowMeals.length} carte(s) ≤ 2 repas` : ''}</p>
-            </div>
           </div>
         )}
 
@@ -506,16 +490,16 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
           <div className={`${DARK_CARD} p-4 sm:p-6`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base sm:text-lg font-bold text-white">Top produits</h2>
-              <span className="px-3 py-1 rounded-full bg-orange-500/15 text-orange-400 text-xs font-bold">Plus vendus</span>
+              <span className="px-3 py-1 rounded-full bg-slate-500/15 text-slate-400 text-xs font-bold">Plus vendus</span>
             </div>
             {topProducts.length > 0 ? (
               <div className="space-y-3">
                 {topProducts.map((p, i) => (
                   <div key={p.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 border border-transparent hover:border-white/10">
                     <div className={`flex items-center justify-center w-8 h-8 rounded-lg font-bold text-sm flex-shrink-0 ${
-                      i === 0 ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white' :
+                      i === 0 ? 'bg-gradient-to-br from-yellow-400 to-slate-500 text-white' :
                       i === 1 ? 'bg-white/15 text-slate-200' :
-                      i === 2 ? 'bg-orange-500/20 text-orange-300' :
+                      i === 2 ? 'bg-slate-500/20 text-slate-300' :
                       'bg-white/5 text-slate-400'
                     }`}>
                       {i + 1}
@@ -523,9 +507,9 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                     <img src={p.image} alt={p.name} className="w-11 h-11 rounded-xl object-cover flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-slate-100 truncate">{p.name}</p>
-                      <p className="text-xs text-slate-400"><span className="font-bold text-orange-400">{p.sold}</span> vendus</p>
+                      <p className="text-xs text-slate-400"><span className="font-bold text-slate-400">{p.sold}</span> vendus</p>
                     </div>
-                    <span className="text-sm font-bold text-orange-400 whitespace-nowrap">{formatCurrency(p.revenue)}</span>
+                    <span className="text-sm font-bold text-slate-400 whitespace-nowrap">{formatCurrency(p.revenue)}</span>
                   </div>
                 ))}
               </div>
@@ -542,7 +526,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
               <h2 className="text-base sm:text-lg font-bold text-white">Commandes récentes</h2>
               <p className="text-xs text-slate-400 mt-0.5">Dernières activités</p>
             </div>
-            <button onClick={() => onNavigate('history')} className="text-sm font-semibold text-orange-400 hover:text-orange-300 flex items-center gap-1">
+            <button onClick={() => onNavigate('history')} className="text-sm font-semibold text-slate-400 hover:text-slate-300 flex items-center gap-1">
               Voir tout <ArrowRight className="w-4 h-4" />
             </button>
           </div>

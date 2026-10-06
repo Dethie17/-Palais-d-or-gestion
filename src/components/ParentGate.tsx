@@ -39,7 +39,7 @@ const ParentGate = ({ username }: { username: string }) => {
   return (
     <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden flex items-center justify-center p-4">
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-green-700/30 rounded-full blur-3xl" />
-      <div className="absolute -bottom-40 -right-24 w-[28rem] h-[28rem] bg-orange-600/20 rounded-full blur-3xl" />
+      <div className="absolute -bottom-40 -right-24 w-[28rem] h-[28rem] bg-slate-600/20 rounded-full blur-3xl" />
       <div className="relative w-full max-w-md">
         <div className="text-center mb-6">
           <div className="inline-flex items-center gap-3 bg-white rounded-3xl px-5 py-3 shadow-2xl">

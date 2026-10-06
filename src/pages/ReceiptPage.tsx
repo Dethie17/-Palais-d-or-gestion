@@ -25,7 +25,7 @@ const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
   
   if (!order) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh] bg-gradient-to-br from-slate-50 to-orange-50/20 p-6">
+      <div className="flex items-center justify-center min-h-[60vh] bg-gradient-to-br from-slate-50 to-slate-50/20 p-6">
         <div className="text-center">
           <Receipt aria-hidden className="w-20 h-20 text-slate-300 mx-auto mb-4" />
           <p className="text-slate-600 mb-4">Aucune commande à afficher</p>
@@ -38,7 +38,7 @@ const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
   }
 
   return (
-    <div className="p-6 flex justify-center animate-fade-in min-h-screen bg-gradient-to-br from-slate-50 to-orange-50/20">
+    <div className="p-6 flex justify-center animate-fade-in min-h-screen bg-gradient-to-br from-slate-50 to-slate-50/20">
       <div className="w-full max-w-md">
         {/* Success Badge */}
         <div className="mb-6 text-center">
@@ -90,11 +90,11 @@ const ReceiptPage = ({ order, onNewOrder }: ReceiptPageProps) => {
             {order.extras && order.extras.length > 0 && (
               <>
                 <div className="border-t border-dashed border-slate-300 pt-3 mt-3">
-                  <p className="text-xs font-semibold text-orange-600 mb-3 uppercase">Suppléments</p>
+                  <p className="text-xs font-semibold text-slate-600 mb-3 uppercase">Suppléments</p>
                   {order.extras.map((orderExtra, index) => (
                     <div key={index} className="flex justify-between text-sm pb-2 border-b border-slate-100 last:border-0">
                       <div className="flex gap-3 flex-1">
-                        <span className="text-orange-500 font-bold w-6">{orderExtra.quantity}×</span>
+                        <span className="text-slate-500 font-bold w-6">{orderExtra.quantity}×</span>
                         <span className="text-slate-800 font-medium">{orderExtra.extra.name}</span>
                       </div>
                       <span className="font-bold text-slate-800">{formatCurrency(orderExtra.extra.price * orderExtra.quantity)}</span>
