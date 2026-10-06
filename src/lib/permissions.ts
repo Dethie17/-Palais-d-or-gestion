@@ -19,16 +19,15 @@ export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // Parent : UN seul parcours continu (Espace Parent) + profil.
   // Anciennes pages conservées en redirect invisible vers 'home'.
   client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'history', 'profile', 'paymentsuccess', 'paymentfailure'],
-  // Superviseur : gestion complète — menus, validation, abonnés, paiements,
-  // POS, tableau de bord, utilisateurs, établissements, paramètres, historique, menu récréation
-  personnel: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'menurecreation', 'dashboard', 'pos', 'payment', 'receipt', 'orders', 'finance'],
+  // Personnel : cantine terrain — menus, validation, abonnés, QR, utilisateurs, établissements, paramètres, historique, menu récréation
+  personnel: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'menurecreation', 'dashboard', 'pos', 'payment', 'receipt', 'orders', 'finance', 'paymentsuccess', 'paymentfailure'],
   // Gérant : SANS accueil — tableau de bord, caisse POS, menu récréation, historique
-  gestionnaire: ['dashboard', 'pos', 'payment', 'receipt', 'orders', 'menurecreation', 'history', 'profile'],
+  gestionnaire: ['dashboard', 'pos', 'payment', 'receipt', 'orders', 'menurecreation', 'history', 'profile', 'paymentsuccess', 'paymentfailure'],
   // DG : pilotage + suivi uniquement
-  admin: DG_PAGES,
+  admin: [...DG_PAGES, 'paymentsuccess', 'paymentfailure'],
   // Compatibilité anciens comptes : caissier → superviseur, manager → DG
-  caissier: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'dashboard', 'pos', 'payment', 'receipt', 'orders', 'finance'],
-  manager: DG_PAGES,
+  caissier: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'dashboard', 'pos', 'payment', 'receipt', 'orders', 'finance', 'paymentsuccess', 'paymentfailure'],
+  manager: [...DG_PAGES, 'paymentsuccess', 'paymentfailure'],
 };
 
 export function canAccess(role: UserRole | undefined, page: PageName): boolean {
