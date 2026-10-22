@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import {
@@ -18,10 +18,15 @@ import {
   type RowIssue,
 } from '@/lib/excelImport';
 import { postAdminJson } from '@/lib/adminApi';
+import { recordImportBatch, fetchImportBatches, type ImportBatchRow } from '@/lib/importBatches';
+import { toSheetData } from '@/lib/excelImport';
+import { CYCLES, cycleOfClass, CYCLE_LABEL } from '@/lib/schoolCycles';
+import writeXlsxFile from 'write-excel-file';
+import type { SchoolCycle } from '@/types/menu';
 import {
   Upload, FileSpreadsheet, Download, CheckCircle,
   XCircle, Loader2, ShieldCheck, Users, UserPlus, SkipForward,
-  UserRound, Phone, Plus, KeyRound,
+  UserRound, Phone, Plus, KeyRound, History,
 } from 'lucide-react';
 
 /**
@@ -68,6 +73,36 @@ interface ParentReportEntry {
 
 const PARENT_BATCH = 100;
 
+const STATUT_RAPPORT: Record<string, string> = {
+  created: 'Créé',
+  activated: 'Activé',
+  duplicate: 'Doublon ignoré',
+  error: 'Erreur',
+};
+
+/** Rapport d'import en Excel (une ligne du rapport = une ligne du fichier). */
+const downloadReportXlsx = async (
+  fileName: string,
+  rows: { line: number; label: string; status: string; detail: string }[],
+) => {
+  const sheet = toSheetData([
+    ['Rapport d’import — O RESTO', new Date().toISOString().slice(0, 10)],
+    [],
+    ['Ligne', 'Parent / élève', 'Statut', 'Détail'],
+    ...rows.map((r) => [r.line, r.label || '—', STATUT_RAPPORT[r.status] ?? r.status, r.detail]),
+  ]);
+  const blob = await writeXlsxFile(sheet, {
+    sheet: 'Rapport',
+    columns: [10, 32, 18, 56].map((w) => ({ width: w })),
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+};
+
 /** 771234567 → « 77 123 45 67 » (affichage seulement). */
 function formatPhone(value: string): string {
   const d = normalizePhoneDigits(value);
@@ -80,6 +115,9 @@ const ImportElevesPage = () => {
     parentProfiles, children: allChildren, importStudentRow, refreshRemote,
   } = useResto();
   const [tab, setTab] = useState<Tab>('students');
+  /** Recharge l'historique après chaque import fini. */
+  const [historyKey, setHistoryKey] = useState(0);
+  const bumpHistory = () => setHistoryKey((k) => k + 1);
 
   if (user?.role !== 'admin') {
     return (
@@ -142,12 +180,98 @@ const ImportElevesPage = () => {
             )}
             existingParents={new Set(parentProfiles.map((p) => p.parentUsername))}
             importStudentRow={importStudentRow}
+            importedBy={user?.username ?? null}
+            onFinished={bumpHistory}
           />
         )
-        : <ParentsImport parentProfiles={parentProfiles} children={allChildren} refreshRemote={refreshRemote} />}
+        : (
+          <ParentsImport
+            parentProfiles={parentProfiles}
+            children={allChildren}
+            refreshRemote={refreshRemote}
+            importedBy={user?.username ?? null}
+            onFinished={bumpHistory}
+            importStudentRow={importStudentRow}
+          />
+        )}
+
+      <ImportHistory refreshKey={historyKey} />
     </div>
   );
 };
+
+/* ------------------------------------------------------------------ */
+/* Historique des imports (table import_batches)                       */
+/* ------------------------------------------------------------------ */
+
+const KIND_LABEL: Record<string, string> = {
+  students: 'Élèves',
+  parents: 'Parents',
+};
+
+/**
+ * Journal des derniers imports : date, type, effectifs, opérateur.
+ * Table absente (migration pas encore exécutée) → section silencieusement
+ * masquée : l'historique ne doit jamais gêner le travail.
+ */
+function ImportHistory({ refreshKey }: { refreshKey: number }) {
+  const [rows, setRows] = useState<ImportBatchRow[]>([]);
+  const [visible, setVisible] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    fetchImportBatches(10).then((res) => {
+      if (!alive) return;
+      setRows(res.rows);
+      setVisible(!res.missing && res.rows.length > 0);
+      setLoading(false);
+    });
+    return () => { alive = false; };
+  }, [refreshKey]);
+
+  if (!visible) return loading ? null : null;
+
+  return (
+    <section className="mt-10" data-testid="import-history">
+      <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+        <History className="w-5 h-5 text-emerald-700" /> Historique des imports
+      </h2>
+      <p className="text-sm text-slate-500 mt-1">Derniers imports enregistrés, avec effectifs par statut.</p>
+      <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-100">
+              <th className="px-4 py-3">Date</th>
+              <th className="px-4 py-3">Type</th>
+              <th className="px-4 py-3 text-right">Lignes</th>
+              <th className="px-4 py-3 text-right">Créés</th>
+              <th className="px-4 py-3 text-right">Doublons</th>
+              <th className="px-4 py-3 text-right">Erreurs</th>
+              <th className="px-4 py-3">Par</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                <td className="px-4 py-3 text-slate-600">
+                  {new Date(r.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+                </td>
+                <td className="px-4 py-3 font-semibold text-slate-700">{KIND_LABEL[r.kind] ?? r.kind}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{r.total_rows}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-emerald-700 font-bold">{r.created_count}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-amber-700">{r.duplicate_count}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-red-600">{r.error_count}</td>
+                <td className="px-4 py-3 text-slate-500">{r.created_by ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* Onglet élèves                                                       */
@@ -157,6 +281,8 @@ function StudentsImport({
   existingKeys,
   existingParents,
   importStudentRow,
+  importedBy,
+  onFinished,
 }: {
   existingKeys: Set<string>;
   existingParents: Set<string>;
@@ -170,6 +296,9 @@ function StudentsImport({
     classe: string;
     cycle: ImportRow['cycle'];
   }) => Promise<{ childId: string; parentCreated: boolean; duplicate: boolean }>;
+  /** Compte qui fait l'import (traçabilité du journal). */
+  importedBy: string | null;
+  onFinished: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -265,24 +394,21 @@ function StudentsImport({
     entries.sort((a, b) => a.line - b.line);
     setReport(entries);
     setImporting(false);
+    // Journal : l'import restera auditable même après fermeture du rapport.
+    void recordImportBatch({
+      kind: 'students',
+      totalRows: analysis.duplicates.length + list.length,
+      createdCount: entries.filter((e) => e.status === 'created').length,
+      duplicateCount: entries.filter((e) => e.status === 'duplicate').length,
+      errorCount: entries.filter((e) => e.status === 'error').length,
+      createdBy: importedBy,
+    });
+    onFinished();
   };
 
-  /** Exporte le rapport en CSV (cellules neutralisées contre l'injection). */
-  const downloadReport = () => {
-    if (!report) return;
-    const safe = (v: string | number) => {
-      const s = String(v);
-      return /^[=+\-@]/.test(s) ? `'${s}` : s;
-    };
-    const lines = ['ligne;eleve;statut;detail', ...report.map((r) => [r.line, safe(r.label), r.status, safe(r.detail)].join(';'))];
-    const blob = new Blob([`\uFEFF${lines.join('\n')}`], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'rapport-import-eleves.csv';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  };
+  /** Rapport final en Excel : élève, statut, motif — prêt à renvoyer à la DAF. */
+  const downloadReport = () =>
+    downloadReportXlsx('rapport-import-eleves.xlsx', report ?? []);
 
   const created = report?.filter((r) => r.status === 'created') ?? [];
   const createdParents = new Set(
@@ -468,7 +594,7 @@ function StudentsImport({
           )}
           <div className="mt-3 flex gap-2">
             <button onClick={downloadReport} className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 flex items-center justify-center gap-2">
-              <Download className="w-4 h-4" /> Télécharger le rapport (CSV)
+              <Download className="w-4 h-4" /> Télécharger le rapport (Excel)
             </button>
             <button
               onClick={() => { setReport(null); setRows([]); setFileName(null); }}
@@ -491,10 +617,26 @@ function ParentsImport({
   parentProfiles,
   children,
   refreshRemote,
+  importedBy,
+  onFinished,
+  importStudentRow,
 }: {
   parentProfiles: { parentUsername: string; firstName: string; lastName: string; phone: string }[];
   children: { parentUsername: string; firstName: string; lastName: string }[];
   refreshRemote: () => Promise<void>;
+  /** Compte qui fait l'import (traçabilité du journal). */
+  importedBy: string | null;
+  onFinished: () => void;
+  importStudentRow: (row: {
+    parentUsername: string;
+    parentNom: string;
+    parentPrenom: string;
+    parentTel: string;
+    prenom: string;
+    nom: string;
+    classe: string;
+    cycle: SchoolCycle;
+  }) => Promise<{ childId: string; parentCreated: boolean; duplicate: boolean }>;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -504,6 +646,14 @@ function ParentsImport({
   const [phone, setPhone] = useState('');
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+
+  // « Créer mon enfant » sur une fiche parent (saisie manuelle).
+  const [childOf, setChildOf] = useState<string | null>(null);
+  const [childFirst, setChildFirst] = useState('');
+  const [childLast, setChildLast] = useState('');
+  const [childClass, setChildClass] = useState('');
+  const [childSaving, setChildSaving] = useState(false);
+  const [childNote, setChildNote] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   // Fichier Excel
   const [fileName, setFileName] = useState<string | null>(null);
@@ -578,6 +728,16 @@ function ParentsImport({
         return;
       }
       const created = res.data.created?.[0] ?? res.data.activated?.[0];
+      if (created || res.data.duplicates?.[0] || res.data.errors?.[0]) {
+        void recordImportBatch({
+          kind: 'parents',
+          totalRows: 1,
+          createdCount: created ? 1 : 0,
+          duplicateCount: created ? 0 : res.data.duplicates?.length ?? 0,
+          errorCount: created ? 0 : res.data.errors?.length ?? 0,
+          createdBy: importedBy,
+        });
+      }
       if (created) {
         setMessage({
           kind: 'ok',
@@ -673,10 +833,77 @@ function ParentsImport({
     entries.sort((a, b) => a.line - b.line);
     setReport(entries);
     setImporting(false);
+    // Journal : créés = accès créés ou activés (l'effet métier est le même).
+    void recordImportBatch({
+      kind: 'parents',
+      totalRows: analysis.duplicates.length + list.length,
+      createdCount: entries.filter((e) => e.status === 'created' || e.status === 'activated').length,
+      duplicateCount: entries.filter((e) => e.status === 'duplicate').length,
+      errorCount: entries.filter((e) => e.status === 'error').length,
+      createdBy: importedBy,
+    });
+    onFinished();
     if (entries.some((e) => e.status === 'created' || e.status === 'activated')) void refreshRemote();
   };
 
   const countOf = (status: ParentReportEntry['status']) => report?.filter((r) => r.status === status).length ?? 0;
+
+  const downloadParentReport = () => downloadReportXlsx('rapport-import-parents.xlsx', report ?? []);
+
+  /**
+   * « Créer mon enfant » depuis la fiche d'un parent existant : la
+   * fonction d'import élèves fait tout (parent déjà présent ici, donc
+   * simple enregistrement de l'enfant + génération de sa carte QR).
+   */
+  const handleAddChild = async (username: string) => {
+    setMessage(null);
+    if (!childFirst.trim() || !childLast.trim()) {
+      setChildNote({ kind: 'error', text: 'Prénom et nom de l’enfant requis.' });
+      return;
+    }
+    if (!childClass) {
+      setChildNote({ kind: 'error', text: 'Choisissez la classe de l’enfant.' });
+      return;
+    }
+    setChildSaving(true);
+    setChildNote(null);
+    try {
+      const profile = parentProfiles.find((p) => p.parentUsername === username);
+      const res = await importStudentRow({
+        parentUsername: username,
+        parentNom: profile?.lastName ?? '',
+        parentPrenom: profile?.firstName ?? '',
+        parentTel: profile?.phone && /^\d{9}$/.test(profile.phone) ? profile.phone : username,
+        prenom: childFirst.trim(),
+        nom: childLast.trim(),
+        classe: childClass,
+        cycle: cycleOfClass(childClass),
+      });
+      if (res.duplicate) {
+        setChildNote({ kind: 'ok', text: 'Cet enfant est déjà inscrit — aucune fiche ajoutée.' });
+      } else {
+        setChildNote({ kind: 'ok', text: 'Enfant inscrit : sa carte QR est prête (voir l’onglet Élèves ou la fiche du prochain scan).' });
+        void recordImportBatch({
+          kind: 'students',
+          totalRows: 1,
+          createdCount: 1,
+          duplicateCount: 0,
+          errorCount: 0,
+          createdBy: importedBy,
+        });
+        onFinished();
+        void refreshRemote();
+        setChildFirst('');
+        setChildLast('');
+        setChildClass('');
+        setChildOf(null);
+      }
+    } catch (err) {
+      setChildNote({ kind: 'error', text: err instanceof Error ? err.message : 'Création impossible.' });
+    } finally {
+      setChildSaving(false);
+    }
+  };
 
   /**
    * Parents à qui il manque l'ACCÈS par numéro.
@@ -970,12 +1197,17 @@ function ParentsImport({
             <Phone className="w-4 h-4 flex-shrink-0" />
             Les parents se connectent avec leur numéro seul — aucun mot de passe à communiquer.
           </p>
-          <button
-            onClick={() => { setReport(null); setParentRows([]); setFileName(null); }}
-            className="mt-3 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50"
-          >
-            Nouvel import
-          </button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button onClick={downloadParentReport} className="px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 flex items-center justify-center gap-2">
+              <Download className="w-4 h-4" /> Télécharger le rapport (Excel)
+            </button>
+            <button
+              onClick={() => { setReport(null); setParentRows([]); setFileName(null); }}
+              className="px-4 py-2.5 rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50"
+            >
+              Nouvel import
+            </button>
+          </div>
         </div>
       )}
 
@@ -995,6 +1227,7 @@ function ParentsImport({
                   <th className="px-4 py-2 text-left">Parent</th>
                   <th className="px-4 py-2 text-left">Identifiant (téléphone)</th>
                   <th className="px-4 py-2 text-left">Enfants</th>
+                  <th className="px-4 py-2 text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -1026,6 +1259,22 @@ function ParentsImport({
                           </>
                         )}
                       </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setChildOf(childOf === p.parentUsername ? null : p.parentUsername);
+                            setChildFirst('');
+                            setChildLast('');
+                            setChildClass('');
+                            setChildNote(null);
+                          }}
+                          data-testid={`parent-add-child-${p.parentUsername}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Créer mon enfant
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -1034,6 +1283,72 @@ function ParentsImport({
           </div>
         )}
       </div>
+
+      {/* ---------- Créer mon enfant (fiche parent sélectionnée) ---------- */}
+      {childOf && (
+        <div className="mt-4 rounded-3xl bg-white border border-emerald-200 p-5" data-testid="child-create-panel">
+          <h3 className="font-extrabold text-slate-800 flex items-center gap-2">
+            <UserPlus className="w-4 h-4 text-emerald-600" /> Créer mon enfant
+            <span className="text-xs font-bold text-slate-400">
+              — {(() => {
+                const selections = parentProfiles.filter((p) => p.parentUsername === childOf);
+                const name = selections[0] ? `${selections[0].lastName} ${selections[0].firstName}`.trim() : childOf;
+                return name || '—';
+              })()}
+            </span>
+          </h3>
+          <form
+            className="mt-3 grid gap-2 sm:grid-cols-3"
+            onSubmit={(e) => { e.preventDefault(); void handleAddChild(childOf); }}
+          >
+            <input
+              value={childFirst}
+              onChange={(e) => setChildFirst(e.target.value)}
+              placeholder="Prénom de l’enfant"
+              data-testid="child-create-firstname"
+              className="px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm focus:border-emerald-500 outline-none"
+            />
+            <input
+              value={childLast}
+              onChange={(e) => setChildLast(e.target.value)}
+              placeholder="Nom de l’enfant"
+              data-testid="child-create-lastname"
+              className="px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm focus:border-emerald-500 outline-none"
+            />
+            <select
+              value={childClass}
+              onChange={(e) => setChildClass(e.target.value)}
+              data-testid="child-create-classe"
+              className="px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm bg-white focus:border-emerald-500 outline-none"
+            >
+              <option value="">Classe…</option>
+              {CYCLES.map((c) => (
+                <optgroup key={c.id} label={CYCLE_LABEL[c.id]}>
+                  {c.classes.map((cls) => <option key={cls} value={cls}>{cls}</option>)}
+                </optgroup>
+              ))}
+            </select>
+            <button
+              type="submit"
+              disabled={childSaving || !childFirst.trim() || !childLast.trim() || !childClass}
+              data-testid="child-create-save"
+              className="sm:col-span-3 mt-1 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-2"
+            >
+              {childSaving
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Enregistrement…</>
+                : <><UserPlus className="w-4 h-4" /> Inscrire cet enfant (carte QR automatique)</>}
+            </button>
+          </form>
+          {childNote && (
+            <p className={`mt-3 text-xs font-semibold px-3 py-2 rounded-xl border ${childNote.kind === 'ok' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
+              {childNote.text}
+            </p>
+          )}
+          <p className="mt-2 text-[11px] text-slate-400">
+            L’enfant hérite du compte du parent : son identifiant reste le numéro du parent, sa carte QR est générée automatiquement.
+          </p>
+        </div>
+      )}
     </>
   );
 }

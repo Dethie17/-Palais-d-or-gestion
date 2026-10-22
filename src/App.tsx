@@ -42,6 +42,7 @@ const PaymentSuccessPage = lazy(() => import('./pages/PaymentSuccessPage'));
 const PaymentFailurePage = lazy(() => import('./pages/PaymentFailurePage'));
 const SycaPayReturnPage = lazy(() => import('./pages/SycaPayReturnPage'));
 const ImportElevesPage = lazy(() => import('./pages/ImportElevesPage'));
+const HistoriquePaiementsPage = lazy(() => import('./pages/HistoriquePaiementsPage'));
 
 function PageLoader() {
   return (
@@ -238,6 +239,8 @@ function AppContent() {
       case 'import-eleves':
         if (user?.role !== 'admin') return <HomePage onNavigate={navigateTo} />;
         return <ImportElevesPage />;
+      case 'paiements':
+        return <HistoriquePaiementsPage />;
       case 'establishments':
         return <EstablishmentsPage />;
       case 'settings':

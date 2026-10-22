@@ -1,10 +1,75 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { AuthProvider } from '@/context/AuthContext';
 import { RestoProvider, useResto } from '@/context/RestoContext';
 import UsersPage from '@/pages/UsersPage';
 
 type Api = ReturnType<typeof useResto>;
+
+/**
+ * Session de test ADMIN : la page Utilisateurs porte des rappels visibles
+ * uniquement de la Direction (porte de création des accès parent). Le mock
+ * global (src/test/setup.ts) renvoie un profil « client » : ici, la chaîne
+ * PostgREST simulée redonne le même comportement, avec un rôle admin.
+ */
+vi.mock('@/lib/supabase', async (importOriginal) => {
+  const base = await importOriginal<typeof import('@/lib/supabase')>();
+  const TEST_AUTH_UID = '00000000-0000-4000-8000-000000000001';
+  const TEST_PROFILE = {
+    username: 'admin',
+    role: 'admin',
+    establishment_id: null,
+    auth_id: TEST_AUTH_UID,
+  };
+  const terminal = { data: null, error: null };
+  const makeChain = (table?: string, state: { columns?: string } = {}): Record<string, unknown> => {
+    const resolve = (cb?: (v: unknown) => unknown) => {
+      const isProfileRead =
+        table === 'users' && typeof state.columns === 'string' && state.columns.includes('username');
+      return Promise.resolve(isProfileRead ? { data: TEST_PROFILE, error: null } : terminal).then(
+        cb as never,
+      );
+    };
+    return new Proxy(
+      {},
+      {
+        get(_t, prop) {
+          if (prop === 'then') return resolve;
+          if (prop === 'data' || prop === 'error') return null;
+          if (prop === 'select') return (cols?: string) => ((state.columns = cols), makeChain(table, state));
+          if (typeof prop === 'string' && prop !== 'then') return () => makeChain(table, state);
+          return undefined;
+        },
+      },
+    );
+  };
+  return {
+    isSupabaseConfigured: true,
+    supabase: {
+      from: (table: string) => makeChain(table),
+      rpc: () => makeChain(),
+      auth: {
+        getSession: () =>
+          Promise.resolve({
+            data: {
+              session: {
+                access_token: 'test-access-token',
+                refresh_token: 'test-refresh-token',
+                expires_in: 3600,
+                token_type: 'bearer',
+                user: { id: TEST_AUTH_UID, aud: 'authenticated', email: 'admin@oresto-sn.com' },
+              },
+            },
+            error: null,
+          }),
+        signInWithPassword: () => Promise.resolve({ data: null, error: null }),
+        signOut: () => Promise.resolve({ error: null }),
+        updateUser: () => Promise.resolve({ data: { user: null }, error: null }),
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      },
+    },
+  };
+});
 
 function Harness({ onReady }: { onReady: (api: Api) => void }) {
   const api = useResto();

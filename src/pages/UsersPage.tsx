@@ -29,6 +29,7 @@ const UsersPage = () => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'none' | 'low'>('all');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const clientsSeen = Array.from(new Set(subscriptions.map((s) => s.clientUsername)));
   const parentsSeen = Array.from(new Set([
@@ -78,6 +79,13 @@ const UsersPage = () => {
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
+      {deleteError && (
+        <div className="flex items-start gap-2 rounded-2xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <p className="flex-1">{deleteError}</p>
+          <button onClick={() => setDeleteError(null)} className="font-bold underline-offset-2 hover:underline">Fermer</button>
+        </div>
+      )}
       <div>
         <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">
           Comptes · {parentsSeen.length} parent{parentsSeen.length > 1 ? 's' : ''}
@@ -86,7 +94,7 @@ const UsersPage = () => {
           <ShieldCheck className="w-7 h-7 text-green-700" /> Utilisateurs
         </h1>
         <p className="text-slate-500 text-sm mt-1">
-          Connecté en <strong>{me.title}</strong> — suivi des parents, enfants et formules. Création des accès : Import → Import Parent.
+          Connecté en <strong>{me.title}</strong> — suivi des parents, enfants et formules. La suppression d&apos;un parent est définitive et tient compte de la comptabilité.
         </p>
       </div>
 
@@ -226,7 +234,7 @@ const UsersPage = () => {
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => setParentActive(c, !isInactive)}
-                          className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${isInactive ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}"
+                          className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${isInactive ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
                         >
                           {isInactive ? 'Activer' : 'Inactiver'}
                         </button>
@@ -257,15 +265,20 @@ const UsersPage = () => {
               <ShieldAlert className="w-5 h-5" />
               <p className="font-black">Supprimer ce parent ?</p>
             </div>
-            <p className="mt-2 text-sm text-slate-600">
-              Le compte <strong>{confirmDelete}</strong> et ses données locales seront retirés. Action définitive.
+             <p className="mt-2 text-sm text-slate-600">
+              Le compte <strong>{formatPhone(confirmDelete)}</strong>, ses enfants, ses réclamations et ses cartes seront retirés définitivement. Les règlements réglés restent dans la comptabilité.
             </p>
             <div className="mt-4 flex gap-2">
               <button
-                onClick={() => { deleteParent(confirmDelete); setConfirmDelete(null); }}
+                onClick={async () => {
+                  const target = confirmDelete;
+                  setConfirmDelete(null);
+                  const result = await deleteParent(target);
+                  if (!result.ok) setDeleteError(result.error ?? 'Suppression impossible.');
+                }}
                 className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700"
               >
-                Supprimer
+                Supprimer définitivement
               </button>
               <button
                 onClick={() => setConfirmDelete(null)}

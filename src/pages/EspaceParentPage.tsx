@@ -12,6 +12,8 @@ import { mockProducts } from '@/data/mockData';
 import WavePaymentModal from '@/components/WavePaymentModal';
 import PaymentReceiptModal from '@/components/PaymentReceiptModal';
 import TicketCard from '@/components/TicketCard';
+import QrCartesEnfants from '@/components/QrCartesEnfants';
+import PayerAbonnementSection from '@/components/PayerAbonnementSection';
 import { dayPhoto } from '@/data/cantineWeek';
 import { menuTicketTotal } from '@/lib/menus';
 import { categories } from '@/data/mockData';
@@ -19,7 +21,8 @@ import {
   CheckCircle, AlertCircle, Smartphone, Timer, Ticket,
   Pencil, Trash2, X, Check, LogOut, Layers, CalendarClock,
   ShoppingCart, Plus, Minus, CreditCard, Utensils,
-  Pizza, Coffee, IceCream, Salad, Sandwich, Cookie, ChefHat, Croissant
+  Pizza, Coffee, IceCream, Salad, Sandwich, Cookie, ChefHat, Croissant,
+  Megaphone, MessageSquareWarning,
 } from 'lucide-react';
 
 const METHOD_LABEL: Record<string, string> = {
@@ -27,6 +30,9 @@ const METHOD_LABEL: Record<string, string> = {
   mobile_money: 'Orange Money', card: 'Carte bancaire',
   balance: 'Solde carte',
 };
+
+/** Marqueur local « annonces déjà consultées », hors ligne et par parent. */
+const ANNOUNCE_READ_KEY = 'o-resto-annonces-lues-v1';
 
 const STATUS_STYLE: Record<ORestoPaymentStatus, string> = {
   pending: 'bg-amber-100 text-amber-800 border border-amber-200',
@@ -745,6 +751,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     updateChild, deleteChild, weeklyMenus, confirmWalletTopUpMobile,
     confirmWalletTopUpGroup, topUpMulti,
     parentProfileOf, walletOf, childTxs,
+    complaints, messagesOf,
   } = useResto();
 
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -761,6 +768,17 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
   const [multiOpen, setMultiOpen] = useState(false);
   const [multiAmounts, setMultiAmounts] = useState<Record<string, string>>({});
   const [loggingOut, setLoggingOut] = useState(false);
+
+  /** Annonces déjà lues par ce parent (clé par parent) : badge « nouveautés ». */
+  const [readAnnouncements, setReadAnnouncements] = useState<Record<string, string[]>>(() => {
+    try {
+      const raw = localStorage.getItem(ANNOUNCE_READ_KEY) ?? '';
+      return raw ? JSON.parse(raw) as Record<string, string[]> : {};
+    } catch { return {}; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(ANNOUNCE_READ_KEY, JSON.stringify(readAnnouncements)); } catch { /* stockage indisponible */ }
+  }, [readAnnouncements]);
 
   const username = user?.username ?? '';
   const allMine = mySubscriptions(username);
@@ -786,6 +804,24 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     .sort((a, b) => a.price - b.price);
 
   const nowTs = Date.now();
+
+  // ===== Annonces de la cantine (publiées par le Superviseur) =====
+  const announcements = useMemo(
+    () => complaints
+      .filter((c) => c.isAnnouncement)
+      .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt)),
+    [complaints],
+  );
+  const readIds = readAnnouncements[username] ?? [];
+  const unreadAnnouncements = announcements.filter((a) => !readIds.includes(a.id)).length;
+  /** Ouvre la section et marque TOUTES les annonces actuelles comme lues. */
+  const openAnnouncements = () => {
+    setReadAnnouncements((prev) => ({
+      ...prev,
+      [username]: Array.from(new Set([...(prev[username] ?? []), ...announcements.map((a) => a.id)])),
+    }));
+    document.getElementById('annonces')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   // Un abonnement n'est « actif » que DANS sa période : un réabonnement déjà
   // payé pour le mois suivant ne doit pas masquer la carte en cours.
   const isLiveNow = (s: Subscription) => {
@@ -1150,16 +1186,106 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
               {profile?.phone ? `Téléphone : ${profile.phone}` : "Identifiant : " + (username || '—')}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={loggingOut}
-            data-testid="parent-logout"
-            className="inline-flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
-          >
-            <LogOut className="w-4 h-4" /> {loggingOut ? 'Déconnexion…' : 'Déconnexion'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openAnnouncements}
+              data-testid="parent-annonces"
+              className="relative inline-flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-900 text-white text-sm font-bold hover:bg-emerald-800"
+              title="Annonces publiées par la cantine"
+            >
+              <Megaphone className="w-4 h-4" /> Annonces
+              {unreadAnnouncements > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-amber-400 text-[11px] font-black text-slate-900 tabular-nums" data-testid="annonces-badge">
+                  {unreadAnnouncements}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              data-testid="parent-logout"
+              className="inline-flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+            >
+              <LogOut className="w-4 h-4" /> {loggingOut ? 'Déconnexion…' : 'Déconnexion'}
+            </button>
+          </div>
         </header>
+
+        {/* ===== QR DES ENFANTS + PAIEMENT D'ABONNEMENT (en haut de page) ===== */}
+        <QrCartesEnfants kids={kids} />
+
+        <section id="payer-abonnement" className="scroll-mt-24" data-testid="section-payer-abonnement">
+          <div className="flex items-start gap-3">
+            <span className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow">
+              <CreditCard className="w-5 h-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Abonnement</p>
+              <h2 className="text-lg font-black tracking-tight text-slate-900">Payer l’abonnement</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                L’enfant, les mois à régler, le total — un mois déjà payé ne se paie pas deux fois.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <PayerAbonnementSection
+              kids={kids}
+              onPaid={handlePaidFormula}
+              onError={(t) => flash(false, t)}
+            />
+          </div>
+        </section>
+
+        {/* ===== 0. ANNONCES DE LA CANTINE ===== */}
+        <section id="annonces" className="scroll-mt-24">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-lg md:text-xl font-black tracking-tight text-slate-900 flex items-center gap-2">
+              <Megaphone className="w-5 h-5 text-emerald-700" /> Annonces de la cantine
+            </h2>
+            {announcements.length > 0 && (
+              <span className="text-xs font-bold text-slate-500">{announcements.length} publication{announcements.length > 1 ? 's' : ''}</span>
+            )}
+          </div>
+          {announcements.length === 0 ? (
+            <p className="mt-3 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-4">
+              Aucune annonce pour le moment — la cantine publiera ici les informations importantes (menus spéciaux, fermetures, échéances).
+            </p>
+          ) : (
+            <div className="grid md:grid-cols-2 gap-3 mt-3">
+              {announcements.map((a) => {
+                const thread = messagesOf(a.id);
+                const latest = [...thread].reverse().find((m) => m.authorRole === 'staff') ?? thread[thread.length - 1];
+                const isNew = !readIds.includes(a.id);
+                return (
+                  <article
+                    key={a.id}
+                    data-testid="annonce-card"
+                    className={`rounded-2xl bg-white border p-4 shadow-sm ${isNew ? 'border-amber-300 ring-1 ring-amber-200' : 'border-slate-200'}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                        {isNew ? 'Nouveau · ' : ''}Annonce officielle
+                      </p>
+                      <time className="text-[11px] text-slate-400">{shortDate(a.createdAt)}</time>
+                    </div>
+                    <p className="mt-1 font-extrabold text-slate-900">{a.subject}</p>
+                    {latest && <p className="mt-1 text-sm text-slate-600 whitespace-pre-wrap">{latest.body}</p>}
+                  </article>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => onNavigate?.('reclamations')}
+                data-testid="parent-accueil-reclamations"
+                className="md:col-span-2 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-emerald-700 px-4 py-2.5 min-h-[44px] text-sm font-bold text-emerald-800 hover:bg-emerald-50"
+              >
+                <MessageSquareWarning className="w-4 h-4" /> Une remarque ? Écrire au Superviseur (Réclamations)
+              </button>
+            </div>
+          )}
+        </section>
 
         {/* Rappel de fin de mois : les repas non consommés expirent. */}
         {renewDue.length > 0 && (

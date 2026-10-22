@@ -125,7 +125,9 @@ describe('Espace Abonné — inscription des enfants', () => {
     expect(screen.getAllByText(/Aïcha Diallo/).length).toBeGreaterThanOrEqual(1);
 
     // Deux QR Carte distincts, un par enfant.
-    const tokens = screen.getAllByText(/^ORESTO-[A-Z0-9]{6}$/).map((el) => el.textContent);
+    // Format actuel : jeton sécurisé de 22 caractères base64url
+    // (l'ancien ORESTO-XXXXXX dérivé du nom est invalidé).
+    const tokens = screen.getAllByText(/^[A-Za-z0-9_-]{22}$/).map((el) => el.textContent);
     const unique = new Set(tokens);
     expect(unique.size).toBe(2);
   });
@@ -145,7 +147,7 @@ describe('Espace Abonné — inscription des enfants', () => {
       expect(screen.getByText(/est déjà inscrit/i)).toBeTruthy(),
     );
     // Toujours un seul QR pour cet enfant.
-    const tokens = new Set(screen.getAllByText(/^ORESTO-[A-Z0-9]{6}$/).map((el) => el.textContent));
+    const tokens = new Set(screen.getAllByText(/^[A-Za-z0-9_-]{22}$/).map((el) => el.textContent));
     expect(tokens.size).toBe(1);
   });
 
@@ -157,7 +159,10 @@ describe('Espace Abonné — inscription des enfants', () => {
     renderPage(<EspaceParentPage />);
     await waitForProfile();
 
-    const tokens = screen.getAllByText(/^ORESTO-[A-Z0-9]{6}$/).map((el) => el.textContent);
+    // Le QR de chaque enfant est affiché avec sa carte (le même jeton
+    // apparaît dans la gallerie du haut et dans « Mes cartes » —
+    // l'unicité de l'enfant est ce qui compte).
+    const tokens = screen.getAllByText(/^[A-Za-z0-9_-]{22}$/).map((el) => el.textContent);
     expect(new Set(tokens).size).toBe(2);
     // La classe de chaque enfant est affichée.
     expect(screen.getAllByText(/CIA/).length).toBeGreaterThanOrEqual(1);

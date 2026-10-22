@@ -116,6 +116,8 @@ describe('EspaceParentPage render (repro crash childId)', () => {
     // Le paiement pré-existant doit survivre au seed (addChild ne touche pas aux paiements)
     renderPage();
     await screen.findByText(/Historique des dépenses/);
-    expect(screen.getByText('Abonnement')).toBeTruthy();
+    // Le pavé « Abonnement » (et son titre) coexiste désormais avec la
+    // section de paiement en haut de page : une occurrence suffit.
+    expect(screen.getAllByText(/^Abonnement$/).length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -16,6 +16,8 @@ const ISM_PAGES: PageName[] = [
   'dashboard', 'finance', 'subscriptions',
   'users', 'history', 'profile',
   'import-eleves',
+  // Historique des paiements (parents ↔ école), paginé depuis la base.
+  'paiements',
   // L'Espace ISM supervise l'ensemble des sites : il doit pouvoir
   // consulter et imprimer les QR Cartes, comme le Superviseur.
   'qrgallery', 'qrcode',
@@ -73,4 +75,5 @@ export const PAGE_LABEL: Record<PageName, string> = {
   paymentfailure: 'Paiement échoué',
   reclamations: 'Réclamations',
   'import-eleves': 'Import',
+  paiements: 'Historique des paiements',
 };

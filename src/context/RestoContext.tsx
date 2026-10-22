@@ -44,6 +44,8 @@ import {
 import { recallPayerPhone, rememberPayerPhone } from '@/lib/payments/payerPhone';
 import type { PaymentStatus, ProviderMethod, StartPaymentInput, StartPaymentResult } from '@/lib/payments/types';
 import { getClientQrToken, isPersonalQrToken, getChildQrToken } from '@/lib/clientQr';
+import { generateSecureQrToken } from '@/lib/secureQr';
+import { postAdminJson } from '@/lib/adminApi';
 import { settlePaymentOnServer } from '@/lib/financeApi';
 import { normalizeParentPhone, isValidParentPhone, formatParentPhone } from '@/lib/parentIdentity';
 import { dedupeChildren, childNaturalKey } from '@/lib/childIdentity';
@@ -339,6 +341,15 @@ function uid(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 }
 
+/**
+ * Jeton QR d'une carte/abonnement : 128 bits aléatoires (base64url), uniques,
+ * indévinaables. Repli : l'ancien jeton faible si l'environnement n'a aucun
+ * aléa cryptographique (jamais le cas d'un navigateur de la dernière décennie).
+ */
+function newQrToken(): string {
+  return generateSecureQrToken() ?? getClientQrToken(uid('QR'));
+}
+
 function sameDay(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
@@ -361,14 +372,26 @@ interface RestoContextType {
   myValidations: (username: string) => MealValidation[];
   // Réserve une formule : crée un abonnement "en attente de paiement" (sans paiement)
   subscribe: (clientUsername: string, formulaId: string, childId?: string) => Subscription;
+  // Réserve PLUSIEURS MOIS consécutifs d'une même formule pour un enfant :
+  // un seul abonnement (start = 1er du premier mois, end = 1er du mois
+  // suivant le dernier mois), quota multiplié par le nombre de mois.
+  subscribeBundle: (
+    clientUsername: string,
+    formulaId: string,
+    childId: string | undefined,
+    monthsCount: number,
+    firstMonthISO: string,
+  ) => Subscription;
   // Paie un abonnement en attente.
   // - Espèces : reste en attente jusqu'à encaissement au comptoir (Caissier).
   // - Wave : crée une demande de paiement mobile (pending) ;
   //   l'abonnement s'active à la confirmation du code à 6 chiffres.
+  // - amountOverride : montant d'un abonnement multi-mois (prix formule × n).
   paySubscription: (
     subscriptionId: string,
     method: ORestoPaymentMethod,
     subOverride?: Subscription,
+    amountOverride?: number,
   ) => { payment: ORestoPayment; activated: boolean; wave?: WavePaymentRequest };
   // Client : confirme son paiement mobile avec le code à 6 chiffres →
   // paiement soldé + abonnement activé (ou repas ticket crédités).
@@ -451,7 +474,7 @@ interface RestoContextType {
   }) => Promise<{ childId: string; parentCreated: boolean; duplicate: boolean }>;
   updateChild: (id: string, updates: Partial<Pick<Child, 'firstName' | 'lastName' | 'className' | 'cycle'>>) => void;
   deleteChild: (id: string) => void;
-  deleteParent: (username: string) => void;
+  deleteParent: (username: string) => Promise<{ ok: boolean; error?: string }>;
   buyKiosk: (clientUsername: string, childId: string, items: { productId: string; productName: string; price: number; qty: number }[]) => { order: KioskOrder; balance: number };
   // Recharge QR Carte : espèces = crédit immédiat, externe = pending à confirmer
   topUpChild: (childId: string, amount: number, method: ORestoPaymentMethod) => { tx: WalletTx; wave?: WavePaymentRequest };
@@ -1089,7 +1112,50 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         endDate: endOfMonthIso(now),
         status: 'pending',
         mealsRemaining: formula.mealsIncluded,
-        qrToken: child ? child.qrToken : getClientQrToken(clientUsername),
+        qrToken: child ? child.qrToken : newQrToken(),
+        childId: child?.id,
+      };
+      setSubscriptions((prev) => [...prev, subscription]);
+      const written = persist('subscriptions', supabase.from('subscriptions').insert({
+        id: subscription.id,
+        client_username: subscription.clientUsername,
+        formula_id: subscription.formulaId,
+        start_date: subscription.startDate,
+        end_date: subscription.endDate,
+        status: subscription.status,
+        meals_remaining: subscription.mealsRemaining,
+        qr_token: subscription.qrToken,
+        child_id: subscription.childId ?? null,
+      }));
+      parentWrites.set(subscription.id, written);
+      void written.finally(() => {
+        parentWrites.delete(subscription.id);
+      });
+      return subscription;
+    },
+    [formulas, childrenList],
+  );
+
+  /** Réserve N MOIS consécutifs d'une formule pour un enfant (abonnement étendu). */
+  const subscribeBundle = useCallback(
+    (clientUsername: string, formulaId: string, childId: string | undefined, monthsCount: number, firstMonthISO: string) => {
+      const formula = formulas.find((f) => f.id === formulaId);
+      if (!formula) throw new Error('Formule inconnue');
+      if (!Number.isInteger(monthsCount) || monthsCount < 1) throw new Error('Aucun mois sélectionné');
+      const start = new Date(firstMonthISO);
+      if (!Number.isFinite(start.getTime())) throw new Error('Mois de départ invalide');
+      const end = new Date(start.getTime());
+      end.setUTCMonth(end.getUTCMonth() + monthsCount);
+      const child = childId ? childrenList.find((c) => c.id === childId) : undefined;
+      const subscription: Subscription = {
+        id: uid('S'),
+        clientUsername,
+        formulaId,
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        status: 'pending',
+        mealsRemaining: formula.mealsIncluded * monthsCount,
+        qrToken: child ? child.qrToken : newQrToken(),
         childId: child?.id,
       };
       setSubscriptions((prev) => [...prev, subscription]);
@@ -1357,7 +1423,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   // 'balance' REFUSÉ : un abonnement ne se paie jamais avec la carte
   // (la carte sert aux tickets repas). Wave / espèces uniquement.
   const paySubscription = useCallback(
-    (subscriptionId: string, method: ORestoPaymentMethod, subOverride?: Subscription) => {
+    (subscriptionId: string, method: ORestoPaymentMethod, subOverride?: Subscription, amountOverride?: number) => {
       if (method === 'balance') {
         throw new Error('Abonnement : paiement par carte impossible — payez via Wave ou en espèces. La carte sert aux tickets repas.');
       }
@@ -1368,7 +1434,12 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       if (sub.status === 'cancelled') throw new Error('Abonnement annulé');
       const formula = formulas.find((f) => f.id === sub.formulaId);
       if (!formula && sub.formulaId !== 'TICKET-JOUR') throw new Error('Formule inconnue');
-      const price = sub.formulaId === 'TICKET-JOUR' ? (dayTicket?.price ?? 0) : (formula?.price ?? 0);
+      const priceNorm = sub.formulaId === 'TICKET-JOUR' ? (dayTicket?.price ?? 0) : (formula?.price ?? 0);
+      // Abonnement multi-mois : le montant est recalculé ici comme prix de
+      // la formule × nombre de mois couverts (amountOverride = price × n),
+      // jamais à partir d'une entrée libre du parent ; le débit réel est
+      // validé au retour par le pont SycaPay.
+      const price = amountOverride && Number.isFinite(amountOverride) && amountOverride > 0 ? amountOverride : priceNorm;
       // Déduplication : réutiliser le pending existant même méthode
       const existingPending = payments.find(
         (p) => p.subscriptionId === subscriptionId && p.status === 'pending' && p.method === method,
@@ -1445,7 +1516,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         endDate: endOfMonthIso(now),
         status: 'active',
         mealsRemaining: formula.mealsIncluded,
-        qrToken: getClientQrToken(clientUsername),
+        qrToken: newQrToken(),
       };
       setSubscriptions((prev) => [...prev, ticket]);
       const written = persist('subscriptions', supabase.from('subscriptions').insert({
@@ -1773,8 +1844,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         status: 'pending',
         mealsRemaining: formula.mealsIncluded,
         qrToken: sub.qrToken || (sub.childId
-          ? childrenList.find((c) => c.id === sub.childId)?.qrToken ?? getClientQrToken(sub.clientUsername)
-          : getClientQrToken(sub.clientUsername)),
+          ? childrenList.find((c) => c.id === sub.childId)?.qrToken ?? newQrToken()
+          : newQrToken()),
       };
       setSubscriptions((prev) => [...prev, renewal]);
       const written = persist('subscriptions', supabase.from('subscriptions').insert({
@@ -1913,8 +1984,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           // QR du bénéficiaire : sans lui, un ticket payé pour un enfant sans
           // abonnement actif créerait un mini-abonnement au QR du parent.
           qr_token: childId
-            ? childrenList.find((c) => c.id === childId)?.qrToken ?? getClientQrToken(clientUsername)
-            : getClientQrToken(clientUsername),
+            ? childrenList.find((c) => c.id === childId)?.qrToken ?? newQrToken()
+            : newQrToken(),
         }));
         const intents = load<Record<string, { username: string; formulaId: string }>>(LS_KEYS.ticketIntents, {});
         save(LS_KEYS.ticketIntents, { ...intents, [payment.id]: { username: clientUsername, formulaId } });
@@ -2236,7 +2307,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           endDate: new Date(now.getTime() + formula.durationDays * 86400000).toISOString(),
           status: 'pending' as const,
           mealsRemaining: formula.mealsIncluded,
-          qrToken: getClientQrToken(name),
+          qrToken: newQrToken(),
         };
         if (!pendingSub) {
           setSubscriptions((prev) => [...prev, sub]);
@@ -2692,12 +2763,12 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       );
     }
 
-    const id = uid('C');
-    const child: Child = {
-      id, parentUsername: parent, firstName: first, lastName: last,
-      className: cls, cycle: cycle ?? inferCycleFromClass(cls),
-      qrToken: getChildQrToken(id), createdAt: new Date().toISOString(),
-    };
+      const id = uid('C');
+      const child: Child = {
+        id, parentUsername: parent, firstName: first, lastName: last,
+        className: cls, cycle: cycle ?? inferCycleFromClass(cls),
+        qrToken: newQrToken(), createdAt: new Date().toISOString(),
+      };
     setChildrenList((prev) => [...prev, child]);
     setWallets((prev) => [...prev, { childId: id, balance: 0 }]);
     // La carte référence l'élève : on écrit l'élève d'abord (voir
@@ -2838,35 +2909,62 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     persist('children', supabase.from('children').delete().eq('id', id));
   }, []);
 
-  const deleteParent = useCallback((username: string) => {
-    // Supprimer les enfants du parent
-    const childrenToDelete = childrenList.filter((c) => c.parentUsername === username);
-    childrenToDelete.forEach((child) => {
-      setChildrenList((prev) => prev.filter((c) => c.id !== child.id));
-      setWallets((prev) => prev.filter((w) => w.childId !== child.id));
-      setWalletTxs((prev) => prev.filter((t) => t.childId !== child.id));
-    });
-    persist('children', supabase.from('children').delete().eq('parent_username', username));
+  /**
+   * Suppression DÉFINITIVE d'un compte parent, par le superviseur ou la DAF.
+   *
+   * Le travail lourd (compte d'authentification, réclamations, kiosque,
+   * portefeuilles, enfants, profil) est fait PAR LE SERVEUR : chaque étape y
+   * est faite dans l'ordre des clés étrangères, et seul lui peut supprimer
+   * une identité Auth — le navigateur n'en a ni la clé, ni le droit.
+   *
+   * Les règlements `oresto_payments` ne sont PAS retirés — ni côté serveur,
+   * ni ici : ils sont la comptabilité de la cantine, ils survivent au compte.
+   * (Le serveur a déjà purgé les données à distance : on ne nettoie que
+   * l'état local. Mode hors-ligne : tout se passe chez soi, en dev.)
+   */
+  const deleteParent = useCallback(async (username: string) => {
+    const key = username.trim().toLowerCase();
+    if (!key) return { ok: false, error: 'Compte inconnu.' };
 
-    // Supprimer les abonnements
-    setSubscriptions((prev) => prev.filter((s) => s.clientUsername !== username));
-    persist('subscriptions', supabase.from('subscriptions').delete().eq('client_username', username));
+    // Garde-fou simple — on ne se supprime pas soi-même. Les rôles autorisés
+    // et l'ordre des clés étrangères sont vérifiés au serveur, seule source
+    // de vérité.
+    const localOnlyCleanup = () => {
+      const childrenToDelete = childrenList.filter((c) => c.parentUsername === key);
+      childrenToDelete.forEach((child) => {
+        setChildrenList((prev) => prev.filter((c) => c.id !== child.id));
+        setWallets((prev) => prev.filter((w) => w.childId !== child.id));
+        setWalletTxs((prev) => prev.filter((t) => t.childId !== child.id));
+      });
 
-    // Supprimer les paiements
-    setPayments((prev) => prev.filter((p) => p.clientUsername !== username));
-    persist('oresto_payments', supabase.from('oresto_payments').delete().eq('client_username', username));
+      // Supprimer les abonnements ET les validations du parent.
+      setSubscriptions((prev) => prev.filter((s) => s.clientUsername !== key));
+      setValidations((prev) => prev.filter((v) => v.clientUsername !== key));
 
-    // Supprimer les validations
-    setValidations((prev) => prev.filter((v) => v.clientUsername !== username));
-    persist('validations', supabase.from('validations').delete().eq('client_username', username));
+      // Retirer ses réclamations de l'état local (le serveur a déjà purgé).
+      setComplaints((prev) => prev.filter((c) => c.clientUsername !== key));
 
-    // Supprimer le profil parent
-    setParentProfiles((prev) => prev.filter((p) => p.parentUsername !== username));
-    persist('parent_profiles', supabase.from('parent_profiles').delete().eq('parent_username', username));
+      // Supprimer le profil parent.
+      setParentProfiles((prev) => prev.filter((p) => p.parentUsername !== key));
 
-    // Supprimer le wallet (via enfants déjà supprimés)
-    // Les wallets sont déjà supprimés via les enfants
-  }, [childrenList, subscriptions, payments, validations, parentProfiles]);
+      // PAS de suppression des paiements : historique comptable.
+    };
+
+    if (!isSupabaseConfigured) {
+      localOnlyCleanup();
+      return { ok: true };
+    }
+
+    const server = await postAdminJson(
+      '/api/auth/delete-user',
+      { username: key },
+    );
+    if (!server.ok) {
+      return { ok: false, error: server.error ?? 'Suppression impossible.' };
+    }
+    localOnlyCleanup();
+    return { ok: true };
+  }, [childrenList]);
 
   // Recharge QR Carte : cash = crédit immédiat, externe = pending à confirmer
   const topUpChild = useCallback(
@@ -3578,6 +3676,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         myPayments,
         myValidations,
         subscribe,
+        subscribeBundle,
         paySubscription,
         confirmMobilePayment,
         resumeMobilePayment,

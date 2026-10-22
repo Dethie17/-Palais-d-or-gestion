@@ -237,12 +237,20 @@ function withAuthTimeout<T>(promise: Promise<T>, ms = 7000): Promise<T> {
 // ATTENTION : ils ne fonctionnent que si aucun compte Supabase n'est
 // configuré. Dès que la base est joignable, ces identifiants sont ignorés et
 // seule l'authentification serveur est acceptée.
-const DEMO_ACCOUNTS: Record<string, User> = {
-  client: { username: 'client', role: 'client', password: 'client123' },
-  personnel: { username: 'personnel', role: 'personnel', password: 'personnel123' },
-  gestionnaire: { username: 'gestionnaire', role: 'gestionnaire', password: 'gestionnaire123' },
-  admin: { username: 'admin', role: 'admin', password: 'admin123' },
-};
+/**
+ * Comptes de démonstration, HOLD dans le bundle SEULEMENT quand le login démo
+ * est actif (dev/hors-ligne). En production le drapeau vaut false : l'objet
+ * devient vide et les mots de passe (admin123…) sont éliminés du bundle par
+ * le compileur — ils ne doivent jamais voyager dans le navigateur.
+ */
+const DEMO_ACCOUNTS: Record<string, User> = DEMO_LOGIN_ENABLED
+  ? {
+      client: { username: 'client', role: 'client', password: 'client123' },
+      personnel: { username: 'personnel', role: 'personnel', password: 'personnel123' },
+      gestionnaire: { username: 'gestionnaire', role: 'gestionnaire', password: 'gestionnaire123' },
+      admin: { username: 'admin', role: 'admin', password: 'admin123' },
+    }
+  : {};
 
 function toSessionUser(base: Pick<User, 'username' | 'role'>, establishmentId?: string): User {
   return {

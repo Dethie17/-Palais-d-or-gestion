@@ -38,6 +38,7 @@ const NAV: { page: PageName; label: string; icon: React.ReactNode; roles: UserRo
   { page: 'establishments', label: 'Établissements', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
   { page: 'settings', label: 'Paramètres', icon: <Settings aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
   { page: 'finance', label: 'Finance', icon: <Banknote aria-hidden className="w-4 h-4" />, roles: ['admin'] },
+  { page: 'paiements', label: 'Historique paiements', icon: <Receipt aria-hidden className="w-4 h-4" />, roles: ['admin'] },
   { page: 'pos', label: 'Vente (POS)', icon: <ShoppingCart aria-hidden className="w-4 h-4" />, roles: ['gestionnaire'] },
   { page: 'menurecreation', label: 'Espace Repas', icon: <UtensilsCrossed aria-hidden className="w-4 h-4" />, roles: ['gestionnaire'] },
   { page: 'history', label: 'Historique des commandes', icon: <Receipt aria-hidden className="w-4 h-4" />, roles: ['personnel', 'gestionnaire', 'admin'] },
