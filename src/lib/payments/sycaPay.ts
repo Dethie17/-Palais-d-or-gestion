@@ -248,7 +248,7 @@ export function fetchHealth(force = false): Promise<HealthReport> {
 async function probeHealth(): Promise<HealthReport> {
   for (let tentative = 0; tentative < 2; tentative++) {
     try {
-      const res = await fetch('/api/sycapay/health', {
+      const res = await fetch('/api/sycapay/status', {
         headers: { Accept: 'application/json' },
         // Une sonde ne se sert jamais d'une réponse mémorisée.
         cache: 'no-store',

@@ -29,6 +29,7 @@ import {
 } from '../_lib/sycapay.js';
 import { settle, type SettleOutcome } from '../_lib/settle.js';
 import { requireRole, referenceBelongsTo } from '../_lib/session.js';
+import { adminClient, SupabaseAdminConfigError } from '../_lib/supabaseAdmin.js';
 import {
   handlePreflight,
   methodNotAllowed,
@@ -41,9 +42,56 @@ interface StatusBody {
   reference?: unknown;
 }
 
+/**
+ * Sonde de configuration (GET /api/sycapay/status).
+ *
+ * Elle vit ici plutôt que dans un fichier séparé : Vercel Hobby plafonne
+ * un déploiement à 12 fonctions, et une sonde publique n'a pas besoin
+ * d'une fonction à elle seule. Aucun secret n'est révélé — seulement ce
+ * qui est configuré ou non.
+ */
+async function handleHealth(res: ServerResponse) {
+  let sycapayOk = false;
+  let sycapayError: string | undefined;
+  try {
+    readConfig();
+    sycapayOk = true;
+  } catch (err) {
+    sycapayOk = false;
+    sycapayError = err instanceof SycaPayConfigError ? err.message : 'configuration illisible';
+  }
+
+  let dbOk = false;
+  let dbError: string | undefined;
+  try {
+    const { error } = await adminClient().rpc('oresto_settle_payment', {
+      p_reference: '__health__',
+      p_tag: 'PENDING',
+    });
+    dbOk = !error;
+    if (error) dbError = error.message;
+  } catch (err) {
+    dbOk = false;
+    dbError = err instanceof SupabaseAdminConfigError ? err.message : (err as Error).message;
+  }
+
+  return sendJson(res, 200, {
+    ok: sycapayOk && dbOk,
+    sycapay: sycapayOk,
+    sycapayError: sycapayError ?? null,
+    database: dbOk,
+    databaseError: dbError ?? null,
+    mode: sycapayOk && dbOk ? 'sycapay' : 'demo',
+    webhookSignatureRequired: (process.env.SYCAPAY_WEBHOOK_REQUIRE_SIGNATURE ?? 'true').toLowerCase() !== 'false',
+    configured: isSycaPayConfigured(),
+  });
+}
+
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   if (req.method === 'OPTIONS') return handlePreflight(req, res);
-  if (req.method !== 'POST') return methodNotAllowed(req, res, ['POST']);
+  // GET = sonde publique ; POST = rattrapage d'une transaction.
+  if (req.method === 'GET') return handleHealth(res);
+  if (req.method !== 'POST') return methodNotAllowed(req, res, ['GET', 'POST']);
 
   // statusV2 ne se contente pas de lire : il déclenche le même règlement que
   // le webhook. Un appel anonyme permettrait de solder n'importe quelle commande
