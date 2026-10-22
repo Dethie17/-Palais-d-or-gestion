@@ -74,7 +74,9 @@ export type PageName =
   | 'qrgallery'
   | 'menurecreation'
   | 'paymentsuccess'
-  | 'paymentfailure';
+  | 'paymentfailure'
+  | 'reclamations'
+  | 'import-eleves';
 
 // ---------- O RESTO — modèle issu du cahier des charges ----------
 
@@ -115,11 +117,11 @@ export interface Subscription {
 
 /**
  * Moyens de paiement :
- * - 'cash' | 'wave' | 'intouch' | 'mobile_money' | 'card' : payés en EXTERNE (comptoir / mobile / banque) ;
+ * - 'cash' | 'wave' | 'mobile_money' | 'card' : payés en EXTERNE (comptoir / mobile / banque) ;
  * - 'balance' : payé avec le SOLDE de la carte prépayée de l'enfant (débit interne,
  *   activation immédiate, refusé si solde insuffisant). Jamais de confirmation externe.
  */
-export type ORestoPaymentMethod = 'cash' | 'wave' | 'intouch' | 'mobile_money' | 'card' | 'balance';
+export type ORestoPaymentMethod = 'cash' | 'wave' | 'mobile_money' | 'card' | 'balance';
 export type ORestoPaymentStatus = 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded';
 
 export interface ORestoPayment {
@@ -134,6 +136,14 @@ export interface ORestoPayment {
   status: ORestoPaymentStatus;
   reference: string;
   createdAt: string;
+  /** Horodatage du règlement (serveur : webhook SycaPay / caisse). */
+  paidAt?: string;
+  /**
+   * Horodatage du règlement VALIDÉ : c'est lui qui fait foi en comptabilité.
+   * Un paiement marqué « payé » sans horodatage de règlement n'est pas
+   * comptabilisé (v_paiements_valides côté base, isValidatedPayment ici).
+   */
+  settledAt?: string;
 }
 
 export interface MealValidation {
@@ -147,20 +157,93 @@ export interface MealValidation {
   childId?: string;
 }
 
+// ---------- Réclamations : fil privé parent ↔ superviseur + annonces ----------
+
+export type ComplaintCategory =
+  | 'meal_quality'
+  | 'service'
+  | 'payment'
+  | 'hygiene'
+  | 'card'
+  | 'other';
+
+export type ComplaintStatus = 'open' | 'in_progress' | 'resolved' | 'rejected';
+
+/** Réclamation d'un parent, traitée dans le canal du superviseur. */
+export interface Complaint {
+  id: string;
+  /** Référence courte affichée aux parents (ex : REC-2607-A1B2). */
+  reference: string;
+  clientUsername: string;
+  childId?: string;
+  category: ComplaintCategory;
+  subject: string;
+  status: ComplaintStatus;
+  /** Annonce publiée par le superviseur, visible par tous les parents. */
+  isAnnouncement: boolean;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+}
+
+/** Message d'un fil de réclamation (parent, superviseur, ou annonce). */
+export interface ComplaintMessage {
+  id: string;
+  complaintId: string;
+  authorUsername: string;
+  authorRole: 'client' | 'staff';
+  body: string;
+  /** Chemin Supabase Storage de la pièce jointe (bucket privé). */
+  photoPath?: string;
+  createdAt: string;
+}
+
+export const COMPLAINT_CATEGORY_LABEL: Record<ComplaintCategory, string> = {
+  meal_quality: 'Qualité des repas',
+  service: 'Service',
+  payment: 'Paiement',
+  hygiene: 'Hygiène',
+  card: 'Carte / solde',
+  other: 'Autre',
+};
+
+export const COMPLAINT_STATUS_LABEL: Record<ComplaintStatus, string> = {
+  open: 'Nouvelle',
+  in_progress: 'En cours',
+  resolved: 'Résolue',
+  rejected: 'Rejetée',
+};
+
 // ---------- Espace parents : enfants + wallet QR (carte prépayée) ----------
 
-// Cycle scolaire : 2 catégories tarifaires (cantine 2026).
-// - 'primaire' : Préscolaire & Élémentaire → formule F2 (27 000 FCFA)
-// - 'lycee'    : Lycée (6ème → Terminale) → formule F3 (32 000 FCFA)
-export type SchoolCycle = 'primaire' | 'lycee';
+// Cycle scolaire : 4 cycles de l'enseignement fundamental et secondaire.
+// - 'maternelle' : Petite → Grande Section
+// - 'primaire'   : CIA/CIB/CIC/CID (Cours d'Initiation) → CM2
+// - 'college'    : 6ème → 3ème
+// - 'lycee'      : Seconde → Terminale
+// Les deux premiers cycles partagent la formule F2, le collège et le lycée
+// la formule F3 (voir FORMULA_CYCLE).
+export type SchoolCycle = 'maternelle' | 'primaire' | 'college' | 'lycee';
 
 /** Fiche parent : identité + contact (obligatoire avant d'inscrire un enfant). */
 export interface ParentProfile {
+  /**
+   * IDENTIFIANT CANONIQUE du parent : son numéro de téléphone (9 chiffres).
+   * C'est la clé de ses enfants, de ses abonnements et de son compte Auth.
+   */
   parentUsername: string;
+  /**
+   * Nom d'utilisateur du compte Auth associé, quand il diffère du numéro
+   * (comptes de démonstration, anciennes fiches). Permet de retrouver la
+   * fiche à partir de la session, sans jamais dupliquer l'identité.
+   */
+  authUsername?: string;
   firstName: string;
   lastName: string;
   /** Numéro mobile SN (ex : 77 123 45 67), stocké normalisé. */
   phone: string;
+  /** Fiche famille publiée par la DAF, remplie par le parent. Obligatoire avant d'inscrire des enfants. */
+  fichePubliee?: boolean;
   updatedAt?: string;
 }
 
@@ -204,6 +287,8 @@ export interface FinanceSettings {
   schoolPerSubscription: number;
   otherSalesPct: number;
   touchpointPct: number;
+  /** Part prise par SycaPay sur les operations encaissees par la passerelle. */
+  sycapayPct: number;
   paydounyaPct: number;
   /** Part ISM : montant fixe par abonnement payé (lycée comme préscolaire-élémentaire). */
   ismPerSubscription: number;

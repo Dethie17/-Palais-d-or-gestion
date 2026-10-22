@@ -17,17 +17,19 @@ interface HomePageProps {
 
 type RoleFamily = 'client' | 'personnel' | 'gestionnaire' | 'admin';
 
+// 4 espaces : le rôle reçu fait déjà foi (les anciens alias sont convertis
+// à la connexion par normalizeRole).
 function familyOf(role?: string): RoleFamily {
-  if (role === 'personnel' || role === 'caissier') return 'personnel';
+  if (role === 'personnel') return 'personnel';
   if (role === 'gestionnaire') return 'gestionnaire';
-  if (role === 'admin' || role === 'manager') return 'admin';
+  if (role === 'admin') return 'admin';
   return 'client';
 }
 
 const FAMILY_STYLE: Record<RoleFamily, { gradient: string; badge: string; title: string; subtitle: string }> = {
   client: {
     gradient: 'from-green-700 to-emerald-600',
-    badge: 'Espace parents',
+    badge: 'Accès Abonné',
     title: 'Bon appétit',
     subtitle: '',
   },
@@ -35,7 +37,7 @@ const FAMILY_STYLE: Record<RoleFamily, { gradient: string; badge: string; title:
     gradient: 'from-emerald-600 to-teal-700',
     badge: 'Supervision cantine',
     title: 'Tableau de bord',
-    subtitle: 'Menus, validation, caisse, paiements et utilisateurs en un coup d’œil.',
+    subtitle: 'Menus, validation, réclamations et utilisateurs en un coup d’œil.',
   },
   gestionnaire: {
     gradient: 'from-slate-800 to-slate-900',
@@ -326,7 +328,6 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
-            <QuickLink title="Caisse (POS)" desc="Vente directe au comptant" icon={<Banknote className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('pos')} />
             <QuickLink title="Tableau de bord" desc="Stats, graphiques et alertes" icon={<LayoutDashboard className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('dashboard')} />
             <QuickLink title="Historique" desc="Commandes et passages" icon={<History className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('history')} />
           </div>

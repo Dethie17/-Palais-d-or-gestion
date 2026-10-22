@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -62,11 +62,13 @@
     "react-hook-form": "^7.61.1",
     "react-resizable-panels": "^2.1.9",
     "react-router-dom": "^6.30.1",
+    "read-excel-file": "^5.8.7",
     "recharts": "^2.15.4",
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.9",
+    "write-excel-file": "^2.3.10",
     "zod": "^3.25.76"
   },
   "devDependencies": {

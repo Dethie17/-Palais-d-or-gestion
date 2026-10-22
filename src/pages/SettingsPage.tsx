@@ -4,9 +4,9 @@ import { useAuth, UserRole } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { getRoleDef } from '@/lib/roleTasks';
 import { getClientQrToken } from '@/lib/clientQr';
-import { addLocalUserHashed, getLocalUsers, isDemoAccount, removeLocalUser, setLocalPasswordHashed } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
-import { hashPassword } from '@/lib/password';
+import { addLocalUserHashed, getLocalUsers, isDemoAccount, removeLocalUser } from '@/context/AuthContext';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { postAdminAction } from '@/lib/adminApi';
 import { formatCurrency } from '@/lib/utils';
 import {
   Settings as SettingsIcon, Users, Plus, Trash2, KeyRound, Wallet,
@@ -34,7 +34,7 @@ const CREATABLE_ROLES: UserRole[] = ['client', 'personnel', 'gestionnaire', 'adm
 const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
   const { user } = useAuth();
   const { subscriptions, validations, payments } = useResto();
-  const isStaff = user?.role === 'personnel' || user?.role === 'caissier';
+  const isStaff = user?.role === 'personnel';
   // Le personnel ne crée jamais de comptes Direction / Caissier.
   const allowedRoles: UserRole[] = isStaff ? ['client', 'personnel'] : CREATABLE_ROLES;
 
@@ -100,33 +100,31 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
       flash('err', `« ${username} » est un compte de démonstration réservé.`);
       return;
     }
-    // 1) Registre local haché : le compte pourra se connecter même sans Supabase
-    const local = await addLocalUserHashed({ username, role: newRole, password: newPassword });
-    if (!local.ok) {
-      flash('err', local.message);
-      return;
-    }
-    // 2) Supabase si joignable (mot de passe haché, jamais en clair)
+    // Création d'un compte : c'est le serveur qui porte le rôle, parce que
+    // seul lui détient la clé permettant de créer le compte d'authentification.
     let remote = false;
-    try {
-      const hashed = await hashPassword(newPassword);
-      const { error } = await supabase.from('users').insert({
+    if (isSupabaseConfigured) {
+      const created = await postAdminAction('/api/auth/create-user', {
         username,
-        password: hashed,
+        password: newPassword,
         role: newRole,
-        qr_token: newRole === 'client' ? getClientQrToken(username) : null,
       });
-      if (!error) remote = true;
-      else {
-        // Compte déjà en base distante mais pas en local : on garde le local haché
-        remote = false;
+      if (!created.ok) {
+        flash('err', created.error ?? 'Création impossible.');
+        return;
       }
-    } catch {
-      /* hors-ligne : le compte local suffit */
+      remote = true;
+    } else {
+      // Hors-ligne : registre local, sans aucune garantie de sécurité.
+      const local = await addLocalUserHashed({ username, role: newRole, password: newPassword });
+      if (!local.ok) {
+        flash('err', local.message);
+        return;
+      }
     }
     setNewUsername('');
     setNewPassword('');
-    flash('ok', `Compte « ${username} » (${getRoleDef(newRole).title}) créé${remote ? ' et synchronisé.' : ' (mode local : synchronisé dès que la base répond).'}`);
+    flash('ok', `Compte « ${username} » (${getRoleDef(newRole).title}) créé${remote ? '.' : ' (mode local : à recréer côté serveur dès que la base répond).'}`);
     loadUsers();
   };
 
@@ -141,44 +139,42 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
       return;
     }
     setConfirmDelete(null);
-    let remote = true;
-    let remoteError = '';
-    try {
-      const { error } = await supabase.from('users').delete().eq('username', key);
-      if (error) throw error;
-    } catch (err: unknown) {
-      remote = false; // hors-ligne : suppression locale uniquement
-      remoteError = err instanceof Error ? err.message : '';
+
+    if (isSupabaseConfigured) {
+      // La suppression passe par le serveur : elle touche au compte
+      // d'authentification, ce que le navigateur n'a pas le droit de faire.
+      const done = await postAdminAction('/api/auth/delete-user', { username: key });
+      if (!done.ok) {
+        flash('err', done.error ?? 'Suppression impossible.');
+        return;
+      }
     }
+
     removeLocalUser(key);
-    if (remote) flash('ok', `Compte « ${key} » supprimé (local + distant).`);
-    else flash('ok', `Compte « ${key} » supprimé en local uniquement — distant inchangé${remoteError ? ` (${remoteError})` : ''}. Resynchronisez quand la base répond.`);
+    flash('ok', `Compte « ${key} » supprimé.`);
     loadUsers();
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     const key = resetUser.trim().toLowerCase();
-    if (!key || resetPassword.length < 6) {
-      flash('err', 'Choisissez un compte et un mot de passe de 6 caractères minimum.');
+    if (!key || resetPassword.length < 8) {
+      flash('err', 'Choisissez un compte et un mot de passe de 8 caractères minimum.');
       return;
     }
-    const hashed = await hashPassword(resetPassword);
-    const localUpdated = await setLocalPasswordHashed(key, resetPassword);
-    try {
-      const { error } = await supabase.from('users').update({ password: hashed }).eq('username', key);
-      if (error) throw error;
-      setResetPassword('');
-      flash('ok', `Mot de passe de « ${key} » mis à jour (local + distant).`);
-    } catch (err: unknown) {
-      if (localUpdated) {
-        setResetPassword('');
-        flash('ok', `Mot de passe de « ${key} » mis à jour (mode local).`);
+
+    if (isSupabaseConfigured) {
+      const done = await postAdminAction('/api/auth/set-password', {
+        username: key,
+        password: resetPassword,
+      });
+      if (!done.ok) {
+        flash('err', done.error ?? 'Mise à jour impossible.');
         return;
       }
-      const message = err instanceof Error ? err.message : 'Mise à jour impossible.';
-      flash('err', message);
     }
+    setResetPassword('');
+    flash('ok', `Mot de passe de « ${key} » mis à jour.`);
   };
 
   const activeSubs = subscriptions.filter((s) => s.status === 'active').length;

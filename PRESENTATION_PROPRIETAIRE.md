@@ -16,7 +16,7 @@
 | Inventaire manuel des stocks | Gestion menu temps réel avec dispo/inventaire |
 | Pas de visibilité sur les ventes | Dashboard temps réel + exports PDF |
 | Gestion clients manuelle | Espace Parent + fidélisation QR Code |
-| Pas de paiement mobile | Intégration Wave + InTouch + Espèces |
+| Pas de paiement mobile | Intégration SycaPay (Wave, Max / Orange Money) + Espèces |
 
 ---
 
@@ -74,7 +74,7 @@ Hosting:      Netlify (CDN global, SSL auto)
 | 2️⃣ **Abonnements** | 3 formules (Hebdo 9 500 / Mensuel Primaire 27 000 / Mensuel Lycée 32 000) |
 | 3️⃣ **Menu du jour** | Achat ticket jour + Ticket repas libre (carte prépayée) |
 | 4️⃣ **Kiosque Récréation** | Snacks/Boissons par catégorie (Récréation/Pause) - Paiement carte prépayée |
-| 5️⃣ **Cartes Enfants** | Solde carte + QR Code + Recharge InTouch/Wave + Renouvellement |
+| 5️⃣ **Cartes Enfants** | Solde carte + QR Code + Recharge SycaPay (Wave / Max) + Renouvellement |
 | 6️⃣ **Historique** | Filtre par enfant + Dépenses mensuelles + Reçus |
 
 ### 3. 🍽️ **Menu Récréation (Kiosque Client)**
@@ -95,7 +95,7 @@ Hosting:      Netlify (CDN global, SSL auto)
 | Catalogue | Grille produits par catégories (10 catégories) |
 | Panier latéral | Quantités, extras, sous-total temps réel |
 | Extras | Frites, boissons, fromage... par article |
-| Paiement | Espèces (calcul monnaie) / Wave / InTouch / Mobile Money |
+| Paiement | Espèces (calcul monnaie) / Wave / Max / Orange Money via SycaPay |
 | Ticket | QR Code commande + impression/téléchargement |
 
 ### 5. 💰 Paiements Multi-Méthodes
@@ -103,7 +103,7 @@ Hosting:      Netlify (CDN global, SSL auto)
 |---------|---------------|-------|
 | **Espèces** | Pavé numérique + calcul monnaie auto | Comptoir |
 | **Wave** | QR Code Wave Business + lien copiable | Mobile |
-| **InTouch** | Code USSD *144# + code 6 chiffres | Mobile (Sénégal) |
+| **SycaPay** | Redirection sécurisée vers Wave / Max (Orange Money) | Mobile (Sénégal) |
 | **Mobile Money** | Orange Money / Free Money / Wave | Mobile |
 | **Carte** | Terminal de paiement | Comptoir |
 
@@ -146,27 +146,20 @@ Hosting:      Netlify (CDN global, SSL auto)
 
 ## 💳 Intégration Paiements Mobiles (Afrique)
 
-### Wave Business
-- Lien de paiement configurable (`VITE_WAVE_BUSINESS_URL`)
-- QR Code généré côté client
-- Montant exact transmis
-- Confirmation manuelle gérant après notification Wave
+### SycaPay (Sénégal) — Wave, Max / Orange Money
+- Passerelle unique : redirection sécurisée vers l’opérateur choisi
+- Intention de paiement enregistrée avant redirection (`oresto_payments`)
+- Webhook `/api/sycapay/webhook` : signature vérifiée, règlement idempotent
+- Retour parent automatique vers `/paiement-succes` ou `/paiement-echec`
 
-### InTouch (Sénégal)
-- Code USSD `*144#` affiché
-- Montant + référence transmis
-- Code confirmation 6 chiffres (démo: localStorage)
-- Webhook Netlify Functions pour callbacks InTouch
-- Table `payment_callbacks` pour audit complet
-
-### InTouch - Configuration Requise
+### SycaPay — Configuration Requise
 ```
-Variables Netlify :
-- INTOUCH_CALLBACK_SECRET=xxx (fourni par InTouch)
+Variables Vercel :
+- SYCAPAY_API_KEY=xxx
+- SYCAPAY_MERCHANT_ID=xxx
+- SYCAPAY_WEBHOOK_SECRET=xxx
 - SUPABASE_SERVICE_ROLE_KEY=xxx
-- VITE_INTOUCH_MERCHANT_NUMBER=+221 77 000 00 00
-- VITE_INTOUCH_MERCHANT_NAME=O RESTO
-- VITE_INTOUCH_USSD_URL=https://intouch.sn/ussd
+- VITE_APP_URL=https://orestosn.com
 ```
 
 ---
@@ -186,7 +179,7 @@ Tables principales :
 ├── validations        # Scans QR cantine (anti-double, 1/jour/enfant)
 ├── wallets            # Cartes prépayées enfants (solde FCFA)
 ├── wallet_transactions # Historique recharges/débits
-├── payments_callbacks # Logs webhooks InTouch/Wave
+├── oresto_payments   # Intentions + règlements SycaPay (Wave / Max)
 └── finance_*          # Paramètres compta + dépenses
 ```
 
@@ -213,7 +206,7 @@ SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=xxx
 SUPABASE_URL_PUBLIC=xxx
 VITE_SUPABASE_PUBLISHABLE_KEY=xxx
-INTOUCH_CALLBACK_SECRET=xxx
+SYCAPAY_WEBHOOK_SECRET=xxx
 ```
 
 ### Variables d'Environnement Requises
@@ -221,20 +214,20 @@ INTOUCH_CALLBACK_SECRET=xxx
 # Frontend (Vite)
 VITE_SUPABASE_URL=https://xxx.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=xxx
-VITE_WAVE_BUSINESS_URL=https://pay.wave.com/...
-VITE_INTOUCH_USSD_URL=https://intouch.sn/ussd
-VITE_INTOUCH_MERCHANT_NUMBER=+221 77 000 00 00
-VITE_INTOUCH_MERCHANT_NAME=O RESTO
+VITE_APP_URL=https://orestosn.com
 
-# Backend (Netlify Functions)
+# Backend (Vercel Functions)
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=xxx
-INTOUCH_CALLBACK_SECRET=xxx
+SYCAPAY_API_KEY=xxx
+SYCAPAY_MERCHANT_ID=xxx
+SYCAPAY_WEBHOOK_SECRET=xxx
 ```
 
 ### Domaine Personnalisé
 ```
-orestosn.com → Netlify DNS (gratuit SSL Let's Encrypt)
+orestosn.com  → Vercel (SSL automatique)
+oresto-sn.com → alias (anciens liens + webhook)
 ```
 
 ---
@@ -322,7 +315,7 @@ Client test: client / client123
 - Dashboard: https://supabase.com/dashboard/project/rzdgpdskfhidbcczbvqe
 
 ### Netlify
-- Site: `orestosn.com` / `https://-Palais-d-or-gestion.netlify.app`
+- Site: `oresto-sn.com` / `www.oresto-sn.com`
 - Dashboard: https://app.netlify.com/sites/-Palais-d-or-gestion
 
 ---

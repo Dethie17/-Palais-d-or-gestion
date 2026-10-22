@@ -25,8 +25,26 @@ export default class ErrorBoundary extends Component<Props, State> {
     console.error('[O RESTO] Erreur capturée :', error, info.componentStack);
   }
 
-  private handleReload = () => {
-    window.location.href = '/';
+  private handleReload = async () => {
+    // Un rechargement ordinaire ne suffit pas : un téléphone qui garde
+    // l'ancienne page en cache recharge la MÊME page, donc la même erreur,
+    // et le bouton ne sert à rien. On nettoie d'abord ce qui peut servir
+    // une vieille version, puis on demande une adresse neuve.
+    try {
+      if ('caches' in window) {
+        const noms = await caches.keys();
+        await Promise.all(noms.map((nom) => caches.delete(nom)));
+      }
+      if ('serviceWorker' in navigator) {
+        const enregistrements = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(enregistrements.map((r) => r.unregister()));
+      }
+    } catch {
+      // Le rechargement reste la meilleure chose à faire.
+    }
+    // Une adresse différente force le navigateur à revalider le document,
+    // qui pointera alors vers les fichiers du dernier build.
+    window.location.replace(`/?reload=${Date.now()}`);
   };
 
   render() {

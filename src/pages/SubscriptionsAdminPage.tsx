@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { Formula, SubscriptionStatus } from '@/types/menu';
@@ -6,6 +6,7 @@ import { formatCurrency } from '@/lib/utils';
 import { methodLabel } from '@/lib/wave';
 import { CYCLE_LABEL } from '@/lib/schoolCycles';
 import { isOfficialFormula, cycleOfFormula, validateFormulaPayload, pricePerMeal } from '@/lib/formulas';
+import { fetchValidatedFinance, type ValidatedFinance } from '@/lib/financeApi';
 import {
   Users, CreditCard, Banknote, CheckCircle, XCircle, Plus, Trash2, Pencil, Receipt,
   GraduationCap, Baby, QrCode,
@@ -38,7 +39,7 @@ const SubscriptionsAdminPage = () => {
   // Direction : suivi en lecture seule (ne change rien).
   // Personnel : opérationnel (encaissements, confirmations).
   // Catalogue formules : géré par la Direction uniquement.
-  const isDG = user?.role === 'admin' || user?.role === 'manager';
+  const isDG = user?.role === 'admin';
   const {
     subscriptions, formulas, payments, children: kids, parentProfiles,
     walletTxs, collectCashPayment, confirmManualPayment, confirmWalletTopUp, cancelSubscription,
@@ -138,6 +139,29 @@ const SubscriptionsAdminPage = () => {
   const activeSubs = subscriptions.filter((s) => s.status === 'active').length;
   const pendingSubs = subscriptions.filter((s) => s.status === 'pending').length;
 
+  // ---- Paiements VALIDÉS (source serveur)
+  //
+  // La comptabilité ne retient que les paiements dont le règlement est
+  // horodaté par le serveur (v_paiements_valides). On va le chercher à la
+  // source : le statut « payé » seul ne prouve aucun encaissement.
+  const [validated, setValidated] = useState<ValidatedFinance | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchValidatedFinance().then((data) => {
+      if (!cancelled) setValidated(data);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const validatedIds = useMemo(
+    () => new Set((validated?.payments ?? []).map((p) => p.id)),
+    [validated],
+  );
+  /** Règlement confirmé : par la base, ou par l'horodatage local posé à l'appel. */
+  const isSettled = (p: ORestoPayment) => Boolean(p.settledAt) || validatedIds.has(p.id);
+  /** true quand la base sait distinguer un règlement d'un simple statut. */
+  const settlementKnown = validated?.validated === true;
+
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
       <div className="rounded-3xl bg-slate-950 text-white p-6 md:p-8 relative overflow-hidden shadow-xl">
@@ -182,8 +206,7 @@ const SubscriptionsAdminPage = () => {
       <div className="flex gap-2 bg-white border-2 border-slate-100 rounded-2xl p-2 shadow-sm">
         {([
           { id: 'subs', label: `Abonnés (${subscriptions.length})`, icon: <Users className="w-4 h-4" /> },
-          { id: 'formulas', label: `Formules (${formulas.length})`, icon: <CreditCard className="w-4 h-4" /> },
-          { id: 'payments', label: `Paiements (${payments.length})`, icon: <Banknote className="w-4 h-4" /> },
+            { id: 'payments', label: `Paiements (${payments.length})`, icon: <Banknote className="w-4 h-4" /> },
         ] as { id: Tab; label: string; icon: React.ReactNode }[]).map((t) => (
           <button
             key={t.id}
@@ -255,7 +278,7 @@ const SubscriptionsAdminPage = () => {
                       <td className="p-3">
                         {s.status === 'pending' && (
                           <div className="flex gap-1">
-                            <button onClick={() => handleEncaisser(s.id)} className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-bold hover:bg-green-700">Encaisser & activer</button>
+                            <button onClick={() => handleEncaisser(s.id)} className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-bold hover:bg-green-700">Encaisser &amp; activer</button>
                             <button onClick={() => { cancelSubscription(s.id); setMessage('Réservation annulée.'); }} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold">Annuler</button>
                           </div>
                         )}
@@ -389,14 +412,19 @@ const SubscriptionsAdminPage = () => {
       {/* ---- PAIEMENTS ---- */}
       {tab === 'payments' && (
         <div className="bg-white rounded-2xl border overflow-hidden">
+          {settlementKnown && (
+            <p className="px-4 py-2.5 text-xs font-bold text-slate-500 border-b bg-slate-50">
+              {validated?.payments.length ?? 0} paiement(s) validé(s) en base (règlement horodaté) — seuls ceux-là entrent en comptabilité.
+            </p>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500">
-                <tr><th className="text-left p-3">Référence</th><th className="text-left p-3">Parent / Enfant</th><th className="text-left p-3">Montant</th><th className="text-left p-3">Moyen</th><th className="text-left p-3">Statut</th><th className="text-left p-3">Action</th></tr>
+                <tr><th className="text-left p-3">Référence</th><th className="text-left p-3">Parent / Enfant</th><th className="text-left p-3">Montant</th><th className="text-left p-3">Moyen</th><th className="text-left p-3">Statut</th><th className="text-left p-3">Règlement</th><th className="text-left p-3">Action</th></tr>
               </thead>
               <tbody>
                 {payments.length === 0 && walletTxs.filter((t) => t.status === 'pending').length === 0 && (
-                  <tr><td colSpan={6} className="p-4 text-center text-slate-400">Aucun paiement.</td></tr>
+                  <tr><td colSpan={7} className="p-4 text-center text-slate-400">Aucun paiement.</td></tr>
                 )}
                 {walletTxs.filter((t) => t.status === 'pending').map((t) => {
                   const k = kids.find((c) => c.id === t.childId);
@@ -407,6 +435,7 @@ const SubscriptionsAdminPage = () => {
                       <td className="p-3 font-bold">{formatCurrency(t.amount)}</td>
                       <td className="p-3">{methodLabel(t.method)}</td>
                       <td className="p-3"><span className="px-2 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">En attente</span></td>
+                      <td className="p-3"><span className="text-xs text-slate-300">—</span></td>
                       <td className="p-3">
                         {!isDG ? (
                           <button onClick={() => {
@@ -422,7 +451,7 @@ const SubscriptionsAdminPage = () => {
                     </tr>
                   );
                 })}
-                {[...payments].reverse().map((p) => (
+{[...payments].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((p) => (
                   <tr key={p.id} className="border-t">
                     <td className="p-3 font-mono text-xs">{p.reference}</td>
                     <td className="p-3">
@@ -434,6 +463,17 @@ const SubscriptionsAdminPage = () => {
                     <td className="p-3 font-bold">{formatCurrency(p.amount)}</td>
                     <td className="p-3">{methodLabel(p.method)}</td>
                     <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${payStatus(p.status).style}`}>{payStatus(p.status).label}</span></td>
+                    <td className="p-3">
+                      {p.status !== 'paid' ? (
+                        <span className="text-xs text-slate-300">—</span>
+                      ) : settlementKnown ? (
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${isSettled(p) ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
+                          {isSettled(p) ? 'Validé' : 'Non réglé'}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
                     <td className="p-3">
                       {p.status === 'pending' ? (
                         !isDG ? (

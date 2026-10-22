@@ -24,11 +24,16 @@ function mountHarness() {
 const F2_PRICE = 27000;
 const T1_PRICE = 1900;
 
-function setupFamily(api: () => Api, username: string, balance: number) {
-  act(() => { api().saveParentProfile(username, 'Awa', 'Diallo', '771234567'); });
+/**
+ * L'identité d'un parent EST son numéro de téléphone : chaque famille de
+ * test a donc son propre numéro (sinon c'est la même personne, et son
+ * second enfant « Moussa Diallo / CE2 » serait un doublon).
+ */
+function setupFamily(api: () => Api, phone: string, balance: number) {
+  act(() => { api().saveParentProfile(phone, 'Awa', 'Diallo', phone); });
   let childId = '';
   act(() => {
-    const c = api().addChild(username, 'Moussa', 'Diallo', 'CE2', 'primaire');
+    const c = api().addChild(phone, 'Moussa', 'Diallo', 'CE2', 'primaire');
     childId = c.id;
   });
   if (balance > 0) {
@@ -40,12 +45,13 @@ function setupFamily(api: () => Api, username: string, balance: number) {
 describe('Règle carte : tickets uniquement, jamais les abonnements', () => {
   it('ticket payé avec la carte : débit immédiat + repas crédités', () => {
     const { latest } = mountHarness();
-    const childId = setupFamily(latest, 'parent-ticket-ok', 5000);
+    const phone = '771234567';
+    const childId = setupFamily(latest, phone, 5000);
     expect(latest().walletOf(childId)).toBe(5000);
 
     let addedMeals = 0;
     act(() => {
-      ({ addedMeals } = latest().buyTicket('parent-ticket-ok', 'T1', 'balance', childId));
+      ({ addedMeals } = latest().buyTicket(phone, 'T1', 'balance', childId));
     });
     expect(addedMeals).toBeGreaterThan(0);
     expect(latest().walletOf(childId)).toBe(5000 - T1_PRICE);
@@ -55,17 +61,18 @@ describe('Règle carte : tickets uniquement, jamais les abonnements', () => {
     expect(payment?.amount).toBe(T1_PRICE);
   });
 
-  it('abonnement payé avec la carte : refusé (InTouch / espèces uniquement)', () => {
+  it('abonnement payé avec la carte : refusé (Wave / espèces uniquement)', () => {
     const { latest } = mountHarness();
-    const childId = setupFamily(latest, 'parent-abo-ko', 30000);
+    const phone = '771234567';
+    const childId = setupFamily(latest, phone, 30000);
 
     let subId = '';
     act(() => {
-      const sub = latest().subscribe('parent-abo-ko', 'F2', childId);
+      const sub = latest().subscribe(phone, 'F2', childId);
       subId = sub.id;
     });
     expect(() => {
-      act(() => { latest().buyTicket('parent-abo-ko', 'F2', 'balance', childId); });
+      act(() => { latest().buyTicket(phone, 'F2', 'balance', childId); });
     }).toThrow(/carte impossible/i);
 
     expect(() => {
@@ -79,21 +86,23 @@ describe('Règle carte : tickets uniquement, jamais les abonnements', () => {
 
   it('refuse le ticket si solde insuffisant : rien débité, rien crédité', () => {
     const { latest } = mountHarness();
-    const childId = setupFamily(latest, 'parent-ticket-ko', 500);
+    const phone = '771234567';
+    const childId = setupFamily(latest, phone, 500);
 
     expect(() => {
-      act(() => { latest().buyTicket('parent-ticket-ko', 'T1', 'balance', childId); });
+      act(() => { latest().buyTicket(phone, 'T1', 'balance', childId); });
     }).toThrow(/insuffisant/i);
     expect(latest().walletOf(childId)).toBe(500);
   });
 
   it('flux externe inchangé : subscribe + paySubscription même handler (cash → pending)', () => {
     const { latest } = mountHarness();
-    const childId = setupFamily(latest, 'parent-solde-cash', 0);
+    const phone = '771234567';
+    const childId = setupFamily(latest, phone, 0);
 
     let paymentId = '';
     act(() => {
-      const sub = latest().subscribe('parent-solde-cash', 'F2', childId);
+      const sub = latest().subscribe(phone, 'F2', childId);
       const { payment } = latest().paySubscription(sub.id, 'cash', sub);
       paymentId = payment.id;
     });

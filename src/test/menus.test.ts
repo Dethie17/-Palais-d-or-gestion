@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { weeklyMenuTotal, menuTicketTotal, sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete, publishedDays } from '@/lib/menus';
+import { weeklyMenuTotal, menuTicketTotal, sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete, publishedDays, foldDayPriceIntoItems } from '@/lib/menus';
 
 describe('composition des menus du jour (DG)', () => {
   it('total = somme des prix (négatifs ignorés)', () => {
@@ -30,8 +30,28 @@ describe('composition des menus du jour (DG)', () => {
   });
 
   it('plafond de plats par jour raisonnable', () => {
-    expect(MAX_ITEMS_PER_DAY).toBeLessThanOrEqual(10);
+    expect(MAX_ITEMS_PER_DAY).toBe(8);
   });
+
+  it('repli sans colonne price : le total du ticket reste juste', () => {
+    const items = [
+      { name: 'Tacos', price: 0 },
+      { name: 'Jus', price: 0 },
+    ];
+    const folded = foldDayPriceIntoItems(items, 900);
+    // Le prix du jour est reporté sur le premier plat, réparti sur les autres.
+    expect(menuTicketTotal({ price: 0, items: folded })).toBe(900);
+    // Sans plat : on ne fabrique rien.
+    expect(foldDayPriceIntoItems([], 900)).toEqual([]);
+    // Prix déjà sur les plats : on ne double pas le total.
+    const priced = [
+      { name: 'A', price: 400 },
+      { name: 'B', price: 100 },
+    ];
+    expect(weeklyMenuTotal(foldDayPriceIntoItems(priced, 900))).toBe(900);
+    expect(foldDayPriceIntoItems(items, 0)).toEqual(items);
+  });
+
 
   it('semaine complète = 5 jours avec au moins un plat', () => {
     const full = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'].map((day) => ({

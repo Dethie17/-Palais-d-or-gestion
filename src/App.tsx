@@ -1,9 +1,8 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
-import { Menu, ShieldAlert } from 'lucide-react';
-import Sidebar from './components/layout/Sidebar';
+import { ShieldAlert } from 'lucide-react';
+import SpaceTopNav from './components/layout/SpaceTopNav';
 import SplashScreen from './components/SplashScreen';
 import ParentGate from './components/ParentGate';
-import OrestoLogo from './components/brand/OrestoLogo';
 import { getRoleDef } from './lib/roleTasks';
 import { PageName, CartItem, Order } from './types/menu';
 import { canAccess, ROLE_PAGES, PAGE_LABEL } from './lib/permissions';
@@ -31,6 +30,7 @@ const QRCodePage = lazy(() => import('./pages/QRCodePage'));
 const ParentQrPage = lazy(() => import('./pages/ParentQrPage'));
 const QrGalleryPage = lazy(() => import('./pages/QrGalleryPage'));
 const ValidationPage = lazy(() => import('./pages/ValidationPage'));
+const ComplaintsPage = lazy(() => import('./pages/ComplaintsPage'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const EstablishmentsPage = lazy(() => import('./pages/EstablishmentsPage'));
@@ -40,6 +40,8 @@ const EspaceParentPage = lazy(() => import('./pages/EspaceParentPage'));
 const MenuRecreationPage = lazy(() => import('./pages/MenuRecreationPage'));
 const PaymentSuccessPage = lazy(() => import('./pages/PaymentSuccessPage'));
 const PaymentFailurePage = lazy(() => import('./pages/PaymentFailurePage'));
+const SycaPayReturnPage = lazy(() => import('./pages/SycaPayReturnPage'));
+const ImportElevesPage = lazy(() => import('./pages/ImportElevesPage'));
 
 function PageLoader() {
   return (
@@ -59,18 +61,27 @@ function AppContent() {
   const [currentPage, setCurrentPage] = useState<PageName>('home');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Gestion des URLs directes (ex: /paiement/success, /paiement/echec)
   const [intendedPath, setIntendedPath] = useState<string | null>(null);
+  // Retour opérateur SycaPay : l'opérateur ramène le client sur
+  // /paiement/sycapay/ok?ref=… ou /paiement/sycapay/echec?ref=… .
+  // Ces écrans tournent AVANT la garde de connexion et de rôle : un client
+  // qui revient du paiement sans session valide doit quand même voir où en
+  // est son règlement, pas un formulaire de login.
+  const [sycaPayReturn, setSycaPayReturn] = useState<'ok' | 'echec' | null>(null);
   useEffect(() => {
-    const path = window.location.pathname;
+    const path = window.location.pathname.replace(/\/+$/, '');
     if (path === '/paiement/success') {
       setCurrentPage('paymentsuccess');
       setIntendedPath('paymentsuccess');
     } else if (path === '/paiement/echec') {
       setCurrentPage('paymentfailure');
       setIntendedPath('paymentfailure');
+    } else if (path === '/paiement/sycapay/ok') {
+      setSycaPayReturn('ok');
+    } else if (path === '/paiement/sycapay/echec') {
+      setSycaPayReturn('echec');
     }
   }, []);
 
@@ -86,10 +97,28 @@ function AppContent() {
 
   // Sans accueil : Caissier et DG atterrissent direct sur le tableau de bord.
   useEffect(() => {
-    if ((user?.role === 'gestionnaire' || user?.role === 'admin' || user?.role === 'manager') && currentPage === 'home') {
+    // Point d'entrée selon l'espace : l'Espace ISM tombe sur le pilotage,
+    // le caissier directement sur sa caisse.
+    if (user?.role === 'admin' && currentPage === 'home') {
       setCurrentPage('dashboard');
+    } else if (user?.role === 'gestionnaire' && (currentPage === 'home' || currentPage === 'dashboard')) {
+      setCurrentPage('pos');
     }
   }, [user?.role, currentPage]);
+
+  const navigateTo = (page: PageName) => setCurrentPage(page);
+
+  // Retour opérateur : rendu prioritaire, avant le login et la garde de rôle.
+  // Le client vient de payer — ou de tenter de payer — et son session peut
+  // être expirée : on ne lui demande pas de se reconnecter avant de lui dire
+  // où en est sa commande.
+  if (sycaPayReturn) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <SycaPayReturnPage outcome={sycaPayReturn} onNavigate={navigateTo} />
+      </Suspense>
+    );
+  }
 
   // Afficher un loader pendant le chargement initial
   if (loading) {
@@ -120,8 +149,6 @@ function AppContent() {
       </Suspense>
     );
   }
-
-  const navigateTo = (page: PageName) => setCurrentPage(page);
 
   const handleProceedToPayment = (items: CartItem[]) => {
     setCart(items);
@@ -203,9 +230,14 @@ function AppContent() {
         return <QrGalleryPage />;
       case 'validation':
         return <ValidationPage />;
+      case 'reclamations':
+        return <ComplaintsPage />;
 
       case 'users':
         return <UsersPage />;
+      case 'import-eleves':
+        if (user?.role !== 'admin') return <HomePage onNavigate={navigateTo} />;
+        return <ImportElevesPage />;
       case 'establishments':
         return <EstablishmentsPage />;
       case 'settings':
@@ -218,7 +250,14 @@ function AppContent() {
       case 'menu':
         return <MenuManagement />;
       case 'pos':
-        return <POSPage onProceedToPayment={handleProceedToPayment} />;
+        // Vente réglée par carte prépayée → même tunnel qu'une vente classique :
+        // commande enregistrée puis page Reçu imprimable.
+        return (
+          <POSPage
+            onProceedToPayment={handleProceedToPayment}
+            onCardSaleComplete={handlePaymentComplete}
+          />
+        );
       case 'payment':
         return <PaymentPage cart={cart} onPaymentComplete={handlePaymentComplete} onBack={() => setCurrentPage('pos')} />;
       case 'receipt':
@@ -245,28 +284,9 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-50/30 to-slate-100">
-      <Sidebar currentPage={currentPage} onNavigate={navigateTo} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <SpaceTopNav currentPage={currentPage} onNavigate={navigateTo} />
 
-      {/* Mobile header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-30 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200 flex items-center px-4 gap-3 shadow-sm">
-        <button
-          onClick={() => setSidebarOpen(true)}
-          aria-label="Ouvrir le menu"
-          aria-expanded={sidebarOpen}
-          aria-controls="sidebar-principale"
-          className="p-2 rounded-xl hover:bg-slate-100 transition-colors"
-        >
-          <Menu aria-hidden className="w-6 h-6 text-slate-700" />
-        </button>
-        <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-xl bg-white border flex items-center justify-center overflow-hidden">
-            <OrestoLogo variant="mark" imgClassName="w-full h-full object-contain" />
-          </div>
-          <span className="font-black text-slate-800 text-base tracking-tight"><span className="text-green-700">O</span> RESTO</span>
-        </div>
-      </header>
-
-      <main className="lg:ml-72 min-h-screen pt-16 lg:pt-0">
+      <main className="min-h-screen">
         <Suspense fallback={<PageLoader />}>{renderPage()}</Suspense>
       </main>
     </div>

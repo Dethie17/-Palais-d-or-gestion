@@ -168,26 +168,26 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase
         .from('kiosk_orders')
         .select('*')
-        .order('createdAt', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error && !offline) {
         // Fallback localStorage
         try {
           const raw = localStorage.getItem(LS_KIOSK_ORDERS_KEY);
           if (raw) setKioskOrders(JSON.parse(raw));
-        } catch { }
+        } catch { /* copie locale illisible : on garde l'état courant */ }
       } else if (data) {
         setKioskOrders(data as KioskOrder[]);
         try {
           localStorage.setItem(LS_KIOSK_ORDERS_KEY, JSON.stringify(data));
-        } catch { }
+        } catch { /* stockage indisponible */ }
       }
     } catch {
       // Fallback localStorage
       try {
         const raw = localStorage.getItem(LS_KIOSK_ORDERS_KEY);
         if (raw) setKioskOrders(JSON.parse(raw));
-      } catch { }
+      } catch { /* copie locale illisible : on garde l'état courant */ }
     }
   };
 
@@ -235,19 +235,19 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       localStorage.setItem(LS_PRODUCTS_KEY, JSON.stringify(products));
-    } catch { }
+    } catch { /* stockage indisponible */ }
     try {
       localStorage.setItem(LS_KIOSK_ORDERS_KEY, JSON.stringify(kioskOrders));
-    } catch { }
+    } catch { /* stockage indisponible */ }
     try {
       localStorage.setItem(LS_CART_KEY, JSON.stringify(cart));
-    } catch { }
+    } catch { /* stockage indisponible */ }
   }, [products, kioskOrders, cart]);
 
   function writeLocalProducts(products: Product[]): void {
     try {
       localStorage.setItem(LS_PRODUCTS_KEY, JSON.stringify(products));
-    } catch { }
+    } catch { /* stockage indisponible */ }
   }
 
   function readLocalProducts(): Product[] | null {
@@ -278,13 +278,13 @@ export function ProductProvider({ children }: { children: ReactNode }) {
       const next = [...prev, order];
       try {
         localStorage.setItem(LS_KIOSK_ORDERS_KEY, JSON.stringify(next));
-      } catch { }
+      } catch { /* stockage indisponible */ }
       return next;
     });
     setCart([]);
     try {
       localStorage.setItem(LS_CART_KEY, JSON.stringify([]));
-    } catch { }
+    } catch { /* stockage indisponible */ }
     // Persist dans Supabase (best-effort)
     try {
       await supabase.from('kiosk_orders').insert({
@@ -298,7 +298,7 @@ export function ProductProvider({ children }: { children: ReactNode }) {
         created_at: order.createdAt,
         served_at: null,
       });
-    } catch { }
+    } catch { /* la commande reste locale si la base est injoignable */ }
     return order;
   };
 

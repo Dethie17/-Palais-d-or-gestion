@@ -2,7 +2,7 @@
 
 ## 1. Vue d'ensemble
 
-O RESTO est une plateforme web de gestion de restauration scolaire/entreprise (menus, QR Code, paiements Wave/InTouch, caisse POS, abonnements, tableau de bord).
+O RESTO est une plateforme web de gestion de restauration scolaire/entreprise (menus, QR Code, paiements SycaPay — Wave / Max, caisse POS, abonnements, tableau de bord).
 
 - Application React + Vite + TypeScript, interface responsive (desktop / mobilité / kiosque)
 - Base de données Supabase (temps réel), déployée sur Netlify/Vercel
@@ -33,7 +33,7 @@ C'est un parcours continu en 6 étapes (`EspaceParentPage`), avec navigation par
 - 3 formules fixes proposées (comparaison prix/repas)
 - Réservation en 1 clic
 - Achat d'un ticket repas (formule) → paiement
-- Paiement par **Wave** ou **InTouch** ou espèces : modale de paiement avec code de confirmation, minuteur d'expiration, envoi à `{merchantName}`
+- Paiement par **Wave**, **Max / Orange Money** (SycaPay) ou espèces : redirection vers la passerelle sécurisée, retour automatique et activation
 
 ### Étape 3 — Menu du jour
 - Consultation des menus du jour publiés (plats + prix)
@@ -45,7 +45,7 @@ C'est un parcours continu en 6 étapes (`EspaceParentPage`), avec navigation par
 
 ### Étape 5 — Mes cartes
 - Visualisation des cartes prépayées et de leurs soldes
-- **Recharge** de carte (Wave / InTouch / Espèces), suivi du solde par carte
+- **Recharge** de carte (SycaPay Wave / Max, espèces), suivi du solde par carte
 
 ### Étape 6 — Historique des dépenses
 - Filtre par enfant (Tous / chaque enfant)
@@ -103,7 +103,7 @@ Mission : pilotage et suivi.
 
 ## 7. Fonctionnalités transversales
 
-- Paiements mobiles **Wave** et **InTouch** (code de confirmation, expiration)
+- Paiements mobiles **Wave** et **Max / Orange Money** via **SycaPay** (redirection sécurisée, webhook de règlement)
 - **QR Code** par enfant : validation anti-double, export PNG, impression
 - Historique unifié : repas, recharges, abonnements, paiements
 - Matrice de permissions par rôle (`permissions.ts`) — chaque profil ne voit que ses modules

@@ -3,11 +3,13 @@ import {
   OFFICIAL_FORMULA_IDS,
   isOfficialFormula,
   cycleOfFormula,
+  cyclesOfFormula,
   validateFormulaPayload,
   pricePerMeal,
   KIND_LABEL,
   type FormulaPayload,
 } from '@/lib/formulas';
+import { formulaCoversCycle } from '@/lib/schoolCycles';
 
 const base: FormulaPayload = {
   name: 'Abonnement Mensuel — Lycée',
@@ -27,11 +29,26 @@ describe('formules cantine (espace DG)', () => {
     expect(isOfficialFormula('F-perso')).toBe(false);
   });
 
-  it('cycle imposé : F2 → présco-élém, F3 → lycée, autres → tous cycles', () => {
-    expect(cycleOfFormula({ id: 'F2' })).toBe('primaire');
-    expect(cycleOfFormula({ id: 'F3' })).toBe('lycee');
+  it('une formule peut couvrir plusieurs cycles (F2 : maternelle + primaire)', () => {
+    expect(cyclesOfFormula({ id: 'F2' })).toEqual(['maternelle', 'primaire']);
+    expect(cyclesOfFormula({ id: 'F3' })).toEqual(['college', 'lycee']);
+    // Formule transverse : aucun cycle imposé.
+    expect(cyclesOfFormula({ id: 'F1' })).toEqual([]);
+    expect(cyclesOfFormula({ id: 'F-perso' })).toEqual([]);
+    expect(cycleOfFormula({ id: 'F2' })).toBe('maternelle');
+    expect(cycleOfFormula({ id: 'F3' })).toBe('college');
     expect(cycleOfFormula({ id: 'F1' })).toBe(undefined);
-    expect(cycleOfFormula({ id: 'F-perso' })).toBe(undefined);
+  });
+
+  it('une formule ne s’applique qu’aux cycles qu’elle couvre', () => {
+    expect(formulaCoversCycle('F2', 'maternelle')).toBe(true);
+    expect(formulaCoversCycle('F2', 'primaire')).toBe(true);
+    expect(formulaCoversCycle('F2', 'college')).toBe(false);
+    expect(formulaCoversCycle('F3', 'lycee')).toBe(true);
+    expect(formulaCoversCycle('F3', 'primaire')).toBe(false);
+    // Transverse : valable partout.
+    expect(formulaCoversCycle('F1', 'lycee')).toBe(true);
+    expect(formulaCoversCycle('F-perso', 'primaire')).toBe(true);
   });
 
   it('validation cantine : nom, prix, durée, repas, prix barré', () => {

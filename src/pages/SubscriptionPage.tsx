@@ -3,27 +3,41 @@ import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { ORestoPayment, ORestoPaymentMethod, ORestoPaymentStatus, PageName, Subscription } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
-import { isMobileMethod, type WavePaymentRequest } from '@/lib/wave';
+import { isMobileMethod, isOnlineMobileMethod, isValidSnPhone, type WavePaymentRequest } from '@/lib/wave';
 import { isOfficialFormula } from '@/lib/formulas';
 import {
-  CheckCircle, Banknote, Smartphone, Ticket, QrCode, Receipt,
+  CheckCircle, Smartphone, Ticket, QrCode, Receipt,
   Clock, CalendarDays, UtensilsCrossed, AlertCircle, RefreshCw,
   Baby, BadgeCheck, Crown, GraduationCap, Sparkles, ShieldCheck,
   Wallet, History, ChevronRight, Info, Star,
 } from 'lucide-react';
-import { CYCLES, FORMULA_CYCLE } from '@/lib/schoolCycles';
+import { CYCLES, FORMULA_CYCLES } from '@/lib/schoolCycles';
 import type { SchoolCycle } from '@/types/menu';
+import {
+  PARENT_PAYMENT_METHODS, PARENT_METHOD_LABEL, PARENT_METHOD_ERROR,
+  isParentPaymentMethod, type ParentPaymentMethod,
+} from '@/lib/parentPayments';
 import WavePaymentModal from '@/components/WavePaymentModal';
 import PaymentReceiptModal from '@/components/PaymentReceiptModal';
 
-const METHODS: { id: ORestoPaymentMethod; label: string; hint: string }[] = [
-  { id: 'wave', label: 'Wave', hint: 'Paiement mobile instantané — activation automatique après le code à 6 chiffres.' },
-  { id: 'cash', label: 'Espèces', hint: 'Payez au comptoir — le Caissier encaisse et active la carte aussitôt.' },
-];
+const METHOD_HINT: Record<ParentPaymentMethod, string> = {
+  wave: 'Vous êtes envoyé dans Wave pour valider — activation automatique ensuite.',
+  mobile_money: 'Vous êtes envoyé dans Max it / Orange Money pour valider — activation automatique ensuite.',
+};
 
+/** L'espace parent ne propose que des moyens décaissables en ligne. */
+const METHODS: { id: ORestoPaymentMethod; label: string; hint: string }[] =
+  PARENT_PAYMENT_METHODS.map((id) => ({
+    id,
+    label: PARENT_METHOD_LABEL[id],
+    hint: METHOD_HINT[id],
+  }));
+
+/** Libellés d'AFFICHAGE de l'historique — « cash » n'est plus proposé. */
 const METHOD_LABEL: Record<string, string> = {
-  wave: 'Wave', cash: 'Espèces',
+  wave: 'Wave',
   mobile_money: 'Mobile Money', card: 'Carte bancaire',
+  cash: 'Espèces (comptoir)',
   balance: 'Solde carte',
 };
 
@@ -74,10 +88,13 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
   const {
     formulas, mySubscription, mySubscriptions, myPayments,
     subscribe, paySubscription, confirmMobilePayment, resumeMobilePayment,
-    cancelSubscription, renewSubscription, buyTicket, myChildren, addChild,
-    parentProfileOf,
+    cancelSubscription, renewSubscription, myChildren, addChild,
+    parentProfileOf, openProviderPayment, syncPaymentFromProvider,
   } = useResto();
   const [payMethods, setPayMethods] = useState<Record<string, ORestoPaymentMethod>>({});
+  /** Numéro mobile du payeur par dossier (pré-rempli avec le profil parent). */
+  const [payPhones, setPayPhones] = useState<Record<string, string>>({});
+  const phoneForSub = (subId: string) => payPhones[subId] ?? profile?.phone ?? '';
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [receipt, setReceipt] = useState<ORestoPayment | null>(null);
   const [waveModal, setWaveModal] = useState<{ paymentId: string; wave: WavePaymentRequest } | null>(null);
@@ -104,10 +121,6 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
   const bestValue = aboFormulas.length
     ? aboFormulas.reduce((a, b) => (a.price / a.mealsIncluded <= b.price / b.mealsIncluded ? a : b)).id
     : '';
-  // Tickets créés par le Personnel : seuls eux s'affichent côté parent (avec toutes les infos).
-  const customTickets = formulas
-    .filter((f) => f.kind === 'ticket' && !f.name.startsWith('[Ancien]') && !isOfficialFormula(f.id))
-    .sort((a, b) => a.price - b.price);
 
   const paidCount = payments.filter((p) => p.status === 'paid').length;
   const pendingPaymentsCount = payments.filter((p) => p.status === 'pending').length;
@@ -122,45 +135,79 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
   const handleChoose = (formulaId: string, name: string) => {
     const s = subscribe(username, formulaId);
     setPayMethods((prev) => ({ ...prev, [s.id]: 'wave' }));
-    setMessage({ ok: true, text: `Formule « ${name} » réservée. Choisissez Wave ou Espèces ci-dessous pour l’activer.` });
+      setMessage({ ok: true, text: `Formule « ${name} » réservée. Choisissez Wave ou Orange Money ci-dessous pour l’activer.` });
     setTimeout(() => document.getElementById('pending-block')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
   };
 
-  const handlePay = (subId: string) => {
+  /**
+   * Ouvre la fenêtre de paiement pour une commande déjà enregistrée.
+   * La commande reste « en attente » : c'est le webhook qui l'activera, nous
+   * ne faisons qu'ouvrir la session et afficher le défi renvoyé.
+   */
+  const openPayment = async (payment: ORestoPayment, method: 'wave' | 'mobile_money' | 'card', phone?: string) => {
+    setConfirmError(null);
+    const session = await openProviderPayment(
+      { reference: payment.reference, amount: payment.amount, method, phone },
+      'sub',
+      payment.id,
+    );
+    setWaveModal({ paymentId: payment.id, wave: session });
+  };
+
+  const handlePay = async (subId: string) => {
     const method = payMethods[subId] ?? 'wave';
-    if (isMobileMethod(method)) {
+    // Garde : l'espace parent n'ouvre que des paiements Wave / Orange Money.
+    if (!isParentPaymentMethod(method)) {
+      setMessage({ ok: false, text: PARENT_METHOD_ERROR });
+      return;
+    }
+    // Le numéro du payeur est validé AVANT l'initiation : c'est lui qui
+    // désigne le compte Wave / Max it à qui l'opérateur pousse la demande.
+    const phone = payPhones[subId] ?? profile?.phone ?? '';
+    if (isOnlineMobileMethod(method)) {
+      if (!isValidSnPhone(phone)) {
+        setMessage({ ok: false, text: 'Numéro mobile invalide (9 chiffres, ex : 77 123 45 67).' });
+        return;
+      }
       const existing = payments.find(
         (p) => p.subscriptionId === subId && p.status === 'pending' && p.method === method,
       );
       if (existing) {
-        const wave = resumeMobilePayment(existing.id);
-        if (wave) {
-          setConfirmError(null);
-          setWaveModal({ paymentId: existing.id, wave });
-          return;
-        }
+        const session = await openProviderPayment(
+          { reference: existing.reference, amount: existing.amount, method, phone },
+          'sub',
+          existing.id,
+        );
+        setConfirmError(null);
+        setWaveModal({ paymentId: existing.id, wave: session });
+        return;
       }
     }
     const { payment, wave } = paySubscription(subId, method);
-    if (wave && isMobileMethod(method)) {
-      setConfirmError(null);
-      setWaveModal({ paymentId: payment.id, wave });
+    if (wave && isOnlineMobileMethod(method)) {
+      // Le payment vient d'être ouvert : on demande au fournisseur ce qu'il
+      // veut que le client fasse (lien, QR, page carte).
+      await openPayment(payment, method, phone);
       return;
     }
     setMessage({
       ok: true,
-      text: `Réservation enregistrée (${payment.reference} — ${formatCurrency(payment.amount)}). Présentez-vous au comptoir : le Caissier activera la carte après encaissement.`,
+      text: `Réservation enregistrée (${payment.reference} — ${formatCurrency(payment.amount)}). Paiement Wave ou Orange Money requis pour activer automatiquement la carte.`,
     });
   };
 
-  const handleResumePayment = (paymentId: string) => {
-    const wave = resumeMobilePayment(paymentId);
-    if (!wave) {
+  const handleResumePayment = async (paymentId: string) => {
+    const payment = payments.find((p) => p.id === paymentId);
+    if (!payment || !isOnlineMobileMethod(payment.method)) {
       setMessage({ ok: false, text: 'Ce paiement ne peut plus être repris.' });
       return;
     }
-    setConfirmError(null);
-    setWaveModal({ paymentId, wave });
+    const phone = phoneForSub(payment.subscriptionId);
+    if (!isValidSnPhone(phone)) {
+      setMessage({ ok: false, text: 'Numéro mobile invalide (9 chiffres, ex : 77 123 45 67).' });
+      return;
+    }
+    await openPayment(payment, payment.method, phone);
   };
 
   const handleConfirmWave = (code: string) => {
@@ -186,37 +233,29 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
     setMessage({ ok: true, text: 'Réservation annulée. Vous pouvez choisir une autre formule à tout moment.' });
   };
 
-  const handleRenew = (subId: string, method: ORestoPaymentMethod = 'wave') => {
+  const handleRenew = async (subId: string, method: ORestoPaymentMethod = 'wave') => {
+    // Garde AVANT toute écriture : un moyen hors Wave / Orange Money ne doit
+    // surtout pas créer d'abonnement « en attente » ni de paiement fantôme
+    // que le caissier confirmerait ensuite sans encaissement réel.
+    if (!isParentPaymentMethod(method)) {
+      setMessage({ ok: false, text: PARENT_METHOD_ERROR });
+      return;
+    }
     const result = renewSubscription(subId, method);
     if (!result) {
       setMessage({ ok: false, text: 'Renouvellement impossible : soldez ou annulez d’abord la réservation en attente.' });
       return;
     }
-    if (result.wave && isMobileMethod(method)) {
-      setConfirmError(null);
-      setWaveModal({ paymentId: result.payment.id, wave: result.wave });
-      return;
-    }
-    if (method === 'cash') {
-      setMessage({ ok: true, text: `Renouvellement réservé (${result.payment.reference}). Payez au comptoir : le Caissier prolongera la carte aussitôt.` });
+    if (isOnlineMobileMethod(method)) {
+      const phone = phoneForSub(subId);
+      if (!isValidSnPhone(phone)) {
+        setMessage({ ok: false, text: 'Numéro mobile invalide (9 chiffres, ex : 77 123 45 67).' });
+        return;
+      }
+      await openPayment(result.payment, method, phone);
       return;
     }
     setMessage({ ok: true, text: `Renouvellement réservé (${result.payment.reference}), en attente de confirmation.` });
-  };
-
-  // Achat ticket créé par le Personnel : Wave uniquely (paiement mobile, code à confirmer).
-  const handleBuyTicket = (formulaId: string, menuName: string) => {
-    try {
-      const { payment, addedMeals, wave } = buyTicket(username, formulaId, 'wave');
-      if (wave) {
-        setConfirmError(null);
-        setWaveModal({ paymentId: payment.id, wave });
-        return;
-      }
-      setMessage({ ok: true, text: `« ${menuName} » : +${addedMeals} repas crédité(s). Paiement ${payment.reference} (${formatCurrency(payment.amount)} via Wave).` });
-    } catch (err) {
-      setMessage({ ok: false, text: err instanceof Error ? err.message : 'Achat impossible.' });
-    }
   };
 
   return (
@@ -268,7 +307,7 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
           <div className="absolute -bottom-24 left-1/3 w-80 h-80 rounded-full bg-slate-500/10 blur-3xl" />
           <div className="relative">
             <div className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em]">
-              <span className="px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-emerald-200">Espace parents</span>
+              <span className="px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-emerald-200">Accès Abonné</span>
               <span className="px-3 py-1.5 rounded-full bg-emerald-400 text-emerald-950">Année scolaire 2026</span>
               <span className="px-3 py-1.5 rounded-full bg-white/10 border border-white/15 text-slate-200">Lun → Ven · Service du midi</span>
             </div>
@@ -277,7 +316,7 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
             </h1>
             <p className="mt-3 max-w-2xl text-sm md:text-base text-slate-300">
               Une carte par enfant, un QR permanent, 1 repas par jour le midi.
-              Réservez en ligne, payez <strong className="text-white">Wave</strong> ou <strong className="text-white">Espèces au comptoir</strong>, la carte s’active aussitôt.
+              Réservez en ligne, payez <strong className="text-white">Wave</strong> ou <strong className="text-white">Orange Money</strong>, la carte s’active automatiquement.
             </p>
 
             {/* KPIs */}
@@ -392,15 +431,25 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
                             m === x.id ? 'bg-slate-900 text-white border-slate-900 shadow' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                           }`}
                         >
-                          {x.id === 'cash' ? <Banknote className="w-4 h-4" /> : <Smartphone className="w-4 h-4" />} {x.label}
+                          <Smartphone className="w-4 h-4" /> {x.label}
                           {m === x.id && <CheckCircle className="w-4 h-4" />}
                         </button>
                       ))}
                     </div>
                     <p className="text-xs text-slate-500 mt-2 flex gap-1.5"><Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />{METHODS.find((x) => x.id === m)?.hint}</p>
+                    {isOnlineMobileMethod(m) && (
+                      <input
+                        inputMode="tel"
+                        value={payPhones[s.id] ?? profile?.phone ?? ''}
+                        onChange={(e) => setPayPhones((prev) => ({ ...prev, [s.id]: e.target.value.replace(/\D/g, '').slice(0, 12) }))}
+                        placeholder="Numéro Wave / Orange Money (ex : 77 123 45 67)"
+                        aria-label="Numéro mobile du payeur"
+                        className="mt-2 w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-emerald-600"
+                      />
+                    )}
                     <div className="mt-3 flex gap-2">
                       <button onClick={() => handlePay(s.id)} className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 shadow-sm">
-                        {m === 'wave' ? 'Payer avec Wave' : 'Valider — payer au comptoir'} · {formatCurrency(f?.price ?? 0)}
+                        {m === 'wave' ? 'Payer avec Wave' : m === 'mobile_money' ? 'Payer avec Orange Money' : 'Payer'} · {formatCurrency(f?.price ?? 0)}
                       </button>
                       <button onClick={() => handleCancel(s.id)} className="px-4 py-3 rounded-xl bg-white border border-slate-200 text-slate-500 font-semibold text-sm hover:bg-slate-50">
                         Annuler
@@ -421,9 +470,9 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
           />
           <div className="space-y-4">
             {CYCLES.map((cycle) => {
-              const monthly = aboFormulas.filter((f) => FORMULA_CYCLE[f.id] === cycle.id);
+              const monthly = aboFormulas.filter((f) => FORMULA_CYCLES[f.id]?.includes(cycle.id));
               if (monthly.length === 0) return null;
-              const CycleIcon = cycle.id === 'lycee' ? GraduationCap : Baby;
+              const CycleIcon = cycle.id === 'lycee' || cycle.id === 'college' ? GraduationCap : Baby;
               return (
                 <div key={cycle.id} className="bg-white rounded-3xl border-2 border-slate-100 overflow-hidden">
                   <div className={`px-5 md:px-6 py-4 flex flex-wrap items-center gap-3 ${cycle.id === 'lycee' ? 'bg-gradient-to-r from-amber-500 to-slate-600' : 'bg-gradient-to-r from-emerald-600 to-teal-600'}`}>
@@ -462,45 +511,6 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
 
           </div>
         </section>
-
-        {/* ===== TICKETS & CARNETS (créés par le Personnel) ===== */}
-        {customTickets.length > 0 && (
-          <section>
-            <SectionHead
-              kicker="Dépannage"
-              title="Tickets & carnet repas"
-            />
-            <div className="grid md:grid-cols-2 gap-4">
-              {customTickets.map((t) => {
-                const isCarnet = t.mealsIncluded > 1;
-                return (
-                  <div key={t.id} className={`bg-white rounded-3xl border-2 p-6 flex flex-col shadow-sm ${isCarnet ? 'border-slate-300 ring-4 ring-slate-100' : 'border-slate-100'}`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-3">
-                        <span className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isCarnet ? 'bg-gradient-to-br from-slate-500 to-amber-500' : 'bg-slate-900'}`}>
-                          <Ticket className="w-6 h-6 text-white" />
-                        </span>
-                        <div>
-                          <h3 className="font-extrabold text-slate-900">{t.name}</h3>
-                          <p className="text-sm text-slate-500">{t.description}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex items-end gap-2">
-                      <span className="text-3xl font-black text-slate-900">{formatCurrency(t.price)}</span>
-                      <span className="text-sm font-bold text-slate-600 mb-1">· {t.mealsIncluded} repas · {t.durationDays} jours</span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1">≈ {formatCurrency(pricePerMeal(t.price, t.mealsIncluded))} / repas</p>
-                    {t.rules && <p className="text-[11px] text-slate-400 mt-2 italic">{t.rules}</p>}
-                    <button onClick={() => handleBuyTicket(t.id, t.name)} className={`mt-4 w-full py-3 rounded-xl font-bold text-sm transition ${isCarnet ? 'bg-slate-500 text-white hover:bg-slate-600 shadow-md' : 'bg-slate-900 text-white hover:bg-slate-700'}`}>
-                      {isCarnet ? 'Acheter le carnet' : 'Acheter ce ticket'} · {formatCurrency(t.price)}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
 
         {/* ===== ANCIENNES CARTES ===== */}
         {allMine.filter((s) => s.status === 'expired' || s.status === 'cancelled').length > 0 && (
@@ -556,19 +566,19 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
                         <td className="p-4 font-mono text-xs font-bold text-slate-700">{p.reference}</td>
                         <td className="p-4 text-slate-600">{formulas.find((f) => f.id === allMine.find((s) => s.id === p.subscriptionId)?.formulaId)?.name ?? 'Ticket / Abonnement'}</td>
                         <td className="p-4 font-extrabold whitespace-nowrap">{formatCurrency(p.amount)}</td>
-                        <td className="p-4"><span className="inline-flex items-center gap-1 text-xs font-bold text-slate-600">{p.method === 'cash' ? <Banknote className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}{METHOD_LABEL[p.method] ?? p.method}</span></td>
+                        <td className="p-4"><span className="inline-flex items-center gap-1 text-xs font-bold text-slate-600">{isOnlineMobileMethod(p.method) && <Smartphone className="w-3.5 h-3.5" />}{METHOD_LABEL[p.method] ?? p.method}</span></td>
                         <td className="p-4"><span className={`px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_STYLE[p.status]}`}>{STATUS_LABEL[p.status]}</span></td>
                         <td className="p-4 text-right">
                           {p.status === 'paid' && (
                             <button onClick={() => setReceipt(p)} className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-700">Reçu</button>
                           )}
-                          {p.status === 'pending' && isMobileMethod(p.method) && (
+                          {p.status === 'pending' && isOnlineMobileMethod(p.method) && (
                             <button onClick={() => handleResumePayment(p.id)} className="px-4 py-2 rounded-xl bg-green-700 text-white text-xs font-bold hover:bg-green-800 inline-flex items-center gap-1">
                               <Smartphone className="w-3.5 h-3.5" /> Confirmer
                             </button>
                           )}
-                          {p.status === 'pending' && !isMobileMethod(p.method) && (
-                            <span className="text-xs text-slate-400 font-semibold">À payer au comptoir</span>
+                          {p.status === 'pending' && !isOnlineMobileMethod(p.method) && (
+                            <span className="text-xs text-slate-400 font-semibold">Non autorisé</span>
                           )}
                         </td>
                       </tr>
@@ -585,13 +595,23 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
         </p>
       </div>
 
-      {/* ---- MODAL PAIEMENT MOBILE (Wave) ---- */}
+      {/* ---- MODAL PAIEMENT MOBILE (Wave / Orange Money / carte) ---- */}
       {waveModal && (
         <WavePaymentModal
           wave={waveModal.wave}
           error={confirmError}
           confirming={confirming}
           onConfirm={handleConfirmWave}
+          // Fournisseur réel : le webhook a soldé et l'état local est à jour.
+          onPaid={() => {
+            setWaveModal(null);
+            setConfirmError(null);
+            const paid = payments.find((p) => p.id === waveModal.paymentId);
+            if (paid) setReceipt({ ...paid, status: 'paid' });
+            setMessage({ ok: true, text: 'Paiement confirmé : votre carte est ACTIVE. Présentez votre QR Code.' });
+          }}
+          // Rattrapage quand le webhook est passé avant notre affichage.
+          onSync={syncPaymentFromProvider}
           onClose={() => {
             setWaveModal(null);
             setConfirmError(null);
@@ -785,7 +805,7 @@ function FormulaCard({ formulaId, name, description, price, oldPrice, meals, day
       >
         Choisir · {formatCurrency(price)}
       </button>
-      <p className="mt-2 text-center text-[11px] text-slate-400">Réservation gratuite · paiement à l’étape suivante</p>
+        <p className="mt-2 text-center text-[11px] text-slate-400">Réservation gratuite · paiement Wave ou Orange Money</p>
     </article>
   );
 }
@@ -840,8 +860,8 @@ function ActiveCard({ sub, formulaName, included, durationDays, rules, days, pri
             <button onClick={() => onRenew('wave')} className="flex items-center gap-1.5 px-5 py-3 rounded-xl bg-emerald-500 text-white font-extrabold text-sm hover:bg-emerald-400 shadow">
               <RefreshCw className="w-4 h-4" /> Payer avec Wave
             </button>
-            <button onClick={() => onRenew('cash')} className="flex items-center gap-1.5 px-5 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-bold text-sm hover:bg-white/20">
-              <Banknote className="w-4 h-4" /> Payer au comptoir
+            <button onClick={() => onRenew('mobile_money')} className="flex items-center gap-1.5 px-5 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-bold text-sm hover:bg-white/20">
+              <Smartphone className="w-4 h-4" /> Payer avec Orange Money
             </button>
           </div>
         </div>

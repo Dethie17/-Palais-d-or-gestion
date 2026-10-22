@@ -12,14 +12,17 @@ import { useResto } from '@/context/RestoContext';
 
 const MenuManagement = () => {
   const { user } = useAuth();
-  // Seul le Personnel modifie ici (menus, tickets, plats) ; la Direction suit en lecture seule.
-  const isDG = user?.role === 'admin' || user?.role === 'manager';
+  // Seul le Superviseur modifie ici (menus, tickets, plats) ; la Direction suit en lecture seule.
+  const isDG = user?.role === 'admin';
   const { products, updateProduct, addProduct, deleteProduct: deleteProductFromContext } = useProducts();
   const {
     weeklyMenus, updateWeeklyMenu, formulas, subscriptions,
     addFormula, updateFormula, deleteFormula,
+    dayTicket, setDayTicketPublished,
   } = useResto();
   const [activeCategory, setActiveCategory] = useState('Tous');
+  const [ticketDayName, setTicketDayName] = useState('');
+  const [ticketDayPrice, setTicketDayPrice] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -55,6 +58,14 @@ const MenuManagement = () => {
   const openAdd = () => {
     setEditingProduct(null);
     setShowModal(true);
+  };
+  const handlePublishDayTicket = () => {
+    const name = ticketDayName.trim();
+    const price = Number(ticketDayPrice);
+    if (!name || !Number.isFinite(price) || price <= 0) return;
+    setDayTicketPublished({ date: new Date().toISOString().slice(0, 10), name, price, active: true });
+    setTicketDayName('');
+    setTicketDayPrice('');
   };
 
   type DayDraft = { name: string; description: string; price: string; items: WeeklyMenuItem[] };
@@ -95,7 +106,7 @@ const MenuManagement = () => {
     window.setTimeout(() => setWeekSaved(false), 2500);
   };
 
-  {/* ---- Tickets repas : créés ici par DG + personnel (tous les champs + prix) ---- */}
+  {/* ---- Tickets repas : créés ici par le Superviseur (tous les champs + prix) ---- */}
   const [ticketForm, setTicketForm] = useState({
     name: '', description: '', price: '', oldPrice: '', durationDays: '', mealsIncluded: '', rules: '',
   });
@@ -174,17 +185,33 @@ const MenuManagement = () => {
           </button>
         ) : (
           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-white border border-slate-200 px-3 py-2.5 rounded-xl">
-            <Eye className="w-4 h-4" /> Suivi — composition par le Personnel
+            <Eye className="w-4 h-4" /> Suivi — composition par le Superviseur
           </span>
         )}
       </div>
 
-      {/* Menus du jour : composition Personnel, chaque menu avec son prix + cumul */}
+      {/* Ticket du jour : publication Superviseur — chaque jour, un repas à acheter */}
+      <div className="mb-4 rounded-2xl border p-4 bg-emerald-50">
+        <p className="font-bold text-slate-800 flex items-center gap-2">
+          <Ticket className="w-5 h-5 text-emerald-600" /> Ticket du jour
+        </p>
+        <p className="text-xs text-slate-500 mt-1">Publiez le repas du jour. Les parents pourront l’acheter (+1 repas) depuis Accès Abonné.</p>
+        <div className="mt-3 flex flex-wrap gap-3 items-end">
+          <input type="text" placeholder="Nom du repas" value={ticketDayName} onChange={(e) => setTicketDayName(e.target.value)} className="flex-1 min-w-[200px] px-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500" />
+          <input type="number" min="0" step="100" placeholder="Prix" value={ticketDayPrice} onChange={(e) => setTicketDayPrice(e.target.value)} className="w-48 px-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500" />
+          <button onClick={handlePublishDayTicket} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm">Publier</button>
+        </div>
+        {dayTicket?.active && (
+          <p className="mt-2 text-xs text-emerald-700 font-bold flex items-center gap-1"><Check className="w-3 h-3" /> Publié : {dayTicket.name} — {formatCurrency(dayTicket.price)}</p>
+        )}
+      </div>
+
+      {/* Menus du jour : composition Superviseur, chaque menu avec son prix + cumul */}
       <div className="bg-white rounded-2xl border p-5">
         <p className="font-bold text-slate-800 flex items-center gap-2">
           <CalendarDays className="w-5 h-5 text-slate-500" /> Menus du jour — composition
         </p>
-        <p className="text-xs text-slate-500 mt-1">Composez chaque menu : plats (noms uniquement) + un prix unique par jour. La semaine s’affiche aux parents une fois les 5 jours composés, tarifiés et publiés.</p>
+        <p className="text-xs text-slate-500 mt-1">Composez chaque menu : plats (noms uniquement) + un prix unique par jour. La semaine s’affiche — Accès Abonné ET Espace Repas (caisse) — une fois les 5 jours composés, tarifiés et publiés.</p>
         {(() => {
           const dayTotals = WEEK_DAYS.map((d) => dayPriceOf(d));
           const weekTotal = dayTotals.reduce((s, t) => s + t, 0);
@@ -211,7 +238,7 @@ const MenuManagement = () => {
         })()}
         {isDG && (
           <p className="mt-2 text-xs font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-1.5">
-            <Eye className="w-4 h-4 flex-shrink-0" /> Suivi Direction : composition modifiable uniquement par le Personnel.
+            <Eye className="w-4 h-4 flex-shrink-0" /> Suivi Direction : composition modifiable uniquement par le Superviseur.
           </p>
         )}
         <fieldset disabled={isDG} className="contents">
@@ -324,20 +351,20 @@ const MenuManagement = () => {
           <button
             onClick={saveWeekMenus}
             disabled={!weekComplete}
-            title={weekComplete ? 'Publier la semaine (visible page Menus)' : 'Composez et tarifez les 5 jours pour publier'}
+            title={weekComplete ? 'Publier la semaine (Accès Abonné + Espace Repas)' : 'Composez et tarifez les 5 jours pour publier'}
             className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-700 disabled:bg-slate-200 disabled:text-slate-400"
           >
-            Publier les menus de la semaine
+            Publier les menus (parents + Espace Repas)
           </button>
           <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${weekComplete ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
             {composedCount}/5 jours composés · {pricedCount}/5 tarifiés{weekComplete ? '' : ' — plats + prix requis pour publier'}
           </span>
-          {weekSaved && <span className="text-xs font-bold text-green-700">Menus publiés ✓ (visibles page Menus)</span>}
+          {weekSaved && <span className="text-xs font-bold text-green-700">Menus publiés ✓ (visibles Accès Abonné + Espace Repas)</span>}
         </div>
         </fieldset>
       </div>
 
-      {/* Tickets repas — créés ici par DG + personnel, vendus au comptoir */}
+      {/* Tickets repas — créés ici par le Superviseur, vendus au comptoir */}
       <div className="bg-white rounded-2xl border p-5">
         <p className="font-bold text-slate-800 flex items-center gap-2">
           <Ticket className="w-5 h-5 text-slate-500" /> Tickets repas
@@ -345,7 +372,7 @@ const MenuManagement = () => {
         <p className="text-xs text-slate-500 mt-1">Dépannage au comptoir : tous les champs + prix. Vendus sur la page Tickets et à la caisse.</p>
         {isDG && (
           <p className="mt-2 text-xs font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-1.5">
-            <Eye className="w-4 h-4 flex-shrink-0" /> Suivi Direction : tickets modifiables uniquement par le Personnel.
+            <Eye className="w-4 h-4 flex-shrink-0" /> Suivi Direction : tickets modifiables uniquement par le Superviseur.
           </p>
         )}
         {ticketMsg && (

@@ -3,10 +3,13 @@ import { WeeklyMenu, WeeklyMenuItem } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
 import { useResto } from '@/context/RestoContext';
 import { QRCodeSVG } from 'qrcode.react';
-import { WAVE_BUSINESS_URL, WAVE_BUSINESS_NAME, INTOUCH_MERCHANT_NAME, INTOUCH_USSD_URL } from '@/lib/wave';
+import { WAVE_BUSINESS_URL, WAVE_BUSINESS_NAME } from '@/lib/wave';
+import TicketCard from '@/components/TicketCard';
+import { dayPhoto } from '@/data/cantineWeek';
+import { menuTicketTotal } from '@/lib/menus';
 
 import {
-  CalendarDays, Utensils, Banknote, Smartphone, QrCode, CheckCircle,
+  CalendarDays, Banknote, Smartphone, QrCode, CheckCircle,
   XCircle, ArrowLeft, CreditCard, Copy, AlertCircle, ExternalLink,
   Loader2, RefreshCw
 } from 'lucide-react';
@@ -23,16 +26,11 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
   const { weeklyMenus, createWalkInTicket } = useResto();
   const [step, setStep] = useState<POSStep>('select');
   const [selectedMenu, setSelectedMenu] = useState<WeeklyMenu | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wave' | 'intouch'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wave'>('cash');
   const [ticketToken, setTicketToken] = useState<string | null>(null);
   const [ticketReference, setTicketReference] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-
-  // InTouch state
-  const [intouchCode, setIntouchCode] = useState<string>('');
-  const [intouchConfirming, setIntouchConfirming] = useState(false);
-  const [intouchLinkCopied, setIntouchLinkCopied] = useState(false);
 
   const todayName = DAY_INDEX[new Date().getDay()];
   const todayMenu = weeklyMenus.find((m) => m.day === todayName && (m.items ?? []).length > 0);
@@ -46,7 +44,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
     setSuccess(null);
   };
 
-  const handlePaymentMethodChange = (method: 'cash' | 'wave' | 'intouch') => {
+  const handlePaymentMethodChange = (method: 'cash' | 'wave') => {
     setPaymentMethod(method);
     setError(null);
   };
@@ -86,55 +84,11 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
     }
   };
 
-  const copyIntouchLink = async () => {
-    try {
-      await navigator.clipboard.writeText(INTOUCH_USSD_URL || '#');
-      setIntouchLinkCopied(true);
-      setTimeout(() => setIntouchLinkCopied(false), 2000);
-    } catch {
-      /* presse-papiers indisponible */
-    }
-  };
-
-  const handleConfirmIntouch = async () => {
-    if (!selectedMenu || intouchCode.length !== 6) return;
-    setError(null);
-    setSuccess(null);
-    setIntouchConfirming(true);
-
-    try {
-      // En mode démo, on vérifie avec le code stocké
-      const { checkWaveCode } = await import('@/lib/wave');
-      const intouchRef = `INT-${Date.now().toString(36).toUpperCase()}`;
-      const valid = checkWaveCode(intouchRef, intouchCode.trim());
-
-      if (!valid) {
-        setError('Code invalide ou expiré. Réessayez.');
-        setIntouchConfirming(false);
-        return;
-      }
-
-      // Code valide : créer le ticket
-      const { token, reference } = createWalkInTicket(selectedMenu, 'intouch');
-      setTicketToken(token);
-      setTicketReference(reference);
-      setStep('qrcode');
-      setSuccess('Paiement InTouch validé ✓');
-    } catch {
-      setError('Erreur de validation. Réessayez.');
-    } finally {
-      setIntouchConfirming(false);
-    }
-  };
-
   const handleBack = () => {
     if (step === 'payment') {
       setStep('select');
       setSelectedMenu(null);
       setPaymentMethod('cash');
-      setIntouchCode('');
-      setIntouchConfirming(false);
-      setIntouchLinkCopied(false);
     } else if (step === 'qrcode') {
       setStep('payment');
       setTicketToken(null);
@@ -150,9 +104,6 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
     setTicketReference(null);
     setError(null);
     setSuccess(null);
-    setIntouchCode('');
-    setIntouchConfirming(false);
-    setIntouchLinkCopied(false);
   };
 
   const copyToken = () => {
@@ -174,7 +125,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
           <CalendarDays className="w-16 h-16 text-slate-300 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-slate-800">Aucun menu publié</h2>
           <p className="mt-2 text-slate-500 max-w-md mx-auto">
-            Le Personnel doit composer les menus de la semaine dans « Gestion Menu » pour qu'ils apparaissent ici.
+            Le superviseur compose et publie les menus de la semaine dans « Gestion Menu » : ils apparaissent ici automatiquement, sans saisie.
           </p>
         </div>
       </div>
@@ -189,8 +140,12 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-slate-800">Menu Récréation — Vente non-abonnés</h1>
+          <h1 className="text-2xl lg:text-3xl font-bold text-slate-800">Espace Repas — Vente non-abonnés</h1>
           <p className="text-slate-500">Choix du menu · Paiement espèces ou Wave · QR pour le service</p>
+          <p className="mt-1 text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+            <CalendarDays className="w-3.5 h-3.5" />
+            Menus publiés par le Superviseur — les mêmes pour l’Accès Abonné et l’Espace Repas, non modifiables ici.
+          </p>
         </div>
       </div>
 
@@ -210,23 +165,25 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
       {step === 'select' && (
         <div className="space-y-4">
           {todayMenu && (
-            <div className="bg-gradient-to-r from-slate-500 to-red-600 rounded-2xl p-6 text-white shadow-lg">
-              <div className="flex items-center gap-3 mb-2">
-                <CalendarDays className="w-6 h-6" />
-                <span className="text-lg font-bold">Aujourd'hui — {todayMenu.day}</span>
-              </div>
-              <p className="text-xl font-bold">{todayMenu.name || `Menu du ${todayMenu.day}`}</p>
-              <p className="mt-1 opacity-90">{todayMenu.description}</p>
-              <div className="mt-3 flex items-center gap-4 text-sm opacity-90">
-                <span className="flex items-center gap-1"><Utensils className="w-4 h-4" /> {formatMenuItems(todayMenu.items ?? [])}</span>
-                <span className="flex items-center gap-1 font-bold text-lg">{formatCurrency(todayMenu.price ?? 0)}</span>
-              </div>
-              <button
-                onClick={() => handleSelectMenu(todayMenu)}
-                className="mt-4 w-full py-3 bg-white text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2"
-              >
-                <CreditCard className="w-5 h-5" /> Choisir ce menu
-              </button>
+            <div className="max-w-md">
+              <TicketCard
+                day={todayMenu.day}
+                name={todayMenu.name || `Menu du ${todayMenu.day}`}
+                description={todayMenu.description}
+                image={dayPhoto(todayMenu.day)}
+                items={todayMenu.items ?? []}
+                total={menuTicketTotal(todayMenu)}
+                highlight
+                highlightLabel="AUJOURD’HUI"
+                action={
+                  <button
+                    onClick={() => handleSelectMenu(todayMenu)}
+                    className="w-full py-3 min-h-[48px] rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 transition-colors inline-flex items-center justify-center gap-2"
+                  >
+                    <CreditCard className="w-4 h-4" /> Choisir ce menu
+                  </button>
+                }
+              />
             </div>
           )}
 
@@ -235,22 +192,23 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
               <h3 className="font-bold text-slate-800 mb-3">Autres jours publiés</h3>
               <div className="grid sm:grid-cols-2 gap-4">
                 {otherMenus.map((menu) => (
-                  <button
+                  <TicketCard
                     key={menu.day}
-                    onClick={() => handleSelectMenu(menu)}
-                    className="bg-white rounded-2xl border-2 border-slate-200 p-5 hover:border-slate-500 hover:shadow-xl transition-all text-left"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <CalendarDays className="w-5 h-5 text-slate-500" />
-                      <span className="font-bold text-slate-800">{menu.day}</span>
-                    </div>
-                    <p className="font-semibold text-slate-800">{menu.name || `Menu du ${menu.day}`}</p>
-                    <p className="text-sm text-slate-500 mt-1 line-clamp-2">{menu.description}</p>
-                    <div className="mt-3 flex items-center justify-between">
-                      <span className="text-xs text-slate-500">{formatMenuItems(menu.items ?? [])}</span>
-                      <span className="text-xl font-bold text-slate-600">{formatCurrency(menu.price ?? 0)}</span>
-                    </div>
-                  </button>
+                    day={menu.day}
+                    name={menu.name || `Menu du ${menu.day}`}
+                    description={menu.description}
+                    image={dayPhoto(menu.day)}
+                    items={menu.items ?? []}
+                    total={menuTicketTotal(menu)}
+                    action={
+                      <button
+                        onClick={() => handleSelectMenu(menu)}
+                        className="w-full py-3 min-h-[48px] rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 transition-colors inline-flex items-center justify-center gap-2"
+                      >
+                        <CreditCard className="w-4 h-4" /> Choisir ce menu
+                      </button>
+                    }
+                  />
                 ))}
               </div>
             </div>
@@ -274,7 +232,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => handlePaymentMethodChange('cash')}
                 className={`py-4 rounded-xl font-bold text-lg transition-all ${paymentMethod === 'cash'
@@ -292,15 +250,6 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
                 }`}
               >
                 <Smartphone className="w-6 h-6 mx-auto mb-1" /> Wave
-              </button>
-              <button
-                onClick={() => handlePaymentMethodChange('intouch')}
-                className={`py-4 rounded-xl font-bold text-lg transition-all ${paymentMethod === 'intouch'
-                  ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30'
-                  : 'bg-white border-2 border-slate-200 text-slate-700 hover:border-blue-300'
-                }`}
-              >
-                <Smartphone className="w-6 h-6 mx-auto mb-1" /> InTouch
               </button>
             </div>
 
@@ -342,64 +291,6 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
                   className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <CheckCircle className="w-5 h-5" /> Client a payé — Générer le ticket
-                </button>
-              </div>
-            )}
-
-            {paymentMethod === 'intouch' && (
-              <div className="space-y-4">
-                <div className="rounded-2xl border-2 border-purple-200 bg-gradient-to-b from-purple-50 to-white p-5 text-center">
-                  <p className="text-xs font-black uppercase tracking-widest text-purple-600 flex items-center justify-center gap-1.5">
-                    <Smartphone className="w-4 h-4" /> Paiement InTouch
-                  </p>
-                  <p className="mt-1 text-sm font-bold text-slate-800">{INTOUCH_MERCHANT_NAME}</p>
-                  <p className="text-3xl lg:text-4xl font-black text-slate-900 mt-2">{formatCurrency(selectedMenu.price ?? 0)}</p>
-                  <p className="text-xs text-slate-500 mt-1">Le client paie exactement ce montant via InTouch.</p>
-                  <div className="mt-4 inline-block p-3 bg-white rounded-2xl border shadow-sm">
-                    <QRCodeSVG value={INTOUCH_USSD_URL || '#'} size={170} level="M" />
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <button
-                      onClick={copyIntouchLink}
-                      className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50"
-                    >
-                      <Copy className="w-4 h-4" /> {intouchLinkCopied ? 'Copié !' : 'Copier USSD'}
-                    </button>
-                    <button
-                      onClick={() => setIntouchCode('')}
-                      className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50"
-                    >
-                      <RefreshCw className="w-4 h-4" /> Réinitialiser
-                    </button>
-                  </div>
-                  <p className="mt-3 text-xs text-slate-500 bg-white border border-slate-200 rounded-xl px-3 py-2.5">
-                    Le client compose *144# sur son téléphone, suit les instructions, puis vous cliquez sur « Client a payé ».
-                  </p>
-                </div>
-
-                <div className="mt-4">
-                  <label className="block text-sm font-semibold text-purple-800 mb-1">Code de confirmation InTouch (6 chiffres)</label>
-                  <input
-                    type="text"
-                    value={intouchCode}
-                    onChange={(e) => setIntouchCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="Ex: 123456"
-                    maxLength={6}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-purple-200 text-center text-2xl font-bold tracking-widest outline-none focus:border-purple-500"
-                    autoFocus
-                  />
-                </div>
-
-                <button
-                  onClick={handleConfirmIntouch}
-                  disabled={intouchCode.length !== 6}
-                  className="w-full py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {intouchConfirming ? (
-                    <span className="flex items-center justify-center gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Validation...</span>
-                  ) : (
-                    <span className="flex items-center justify-center gap-2"><CheckCircle className="w-5 h-5" /> Valider le code InTouch</span>
-                  )}
                 </button>
               </div>
             )}

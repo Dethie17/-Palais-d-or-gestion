@@ -4,7 +4,7 @@ import {
   UserRound,
   UtensilsCrossed,
   Store,
-  Crown,
+  Briefcase,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -28,12 +28,13 @@ export interface RoleDefinition {
 
 /**
  * Référentiel unique des profils O RESTO.
- * - La caisse comptant (POS) est tenue par le Caissier (sans accueil :
- *   tableau de bord, vente POS, menus récréation en lecture, historique).
- * - Les menus du jour sont composés et publiés par le Personnel de service,
- *   qui gère aussi la validation repas, les utilisateurs et l'établissement.
- * - Abonnements, finance et pilotage global : Direction (DG).
- * Utilisé par : Login, Sidebar, Accueil, Profil, Accès réservé.
+ * - La caisse comptant (POS) est tenue par le Caissier seul (sans accueil :
+ *   tableau de bord, vente POS, espace repas, historique).
+ * - Les menus du jour sont composés et publiés par le Superviseur (Personnel de service),
+ *   pour l'espace parent comme pour l'Espace Repas ; il gère aussi la validation repas,
+ *   les utilisateurs et l'établissement.
+ * - Abonnements, finance et pilotage global : Espace ISM (structure partenaire).
+ * Utilisé par : Login, SpaceTopNav, Accueil, Profil, Accès réservé.
  */
 const SERVICE_TASKS: RoleTask[] = [
   { label: 'Scanner QR caméra / saisie', page: 'validation', detail: 'Contrôle auto : actif, date, solde, anti-double 1/jour' },
@@ -48,12 +49,30 @@ const SERVICE_TASKS: RoleTask[] = [
 ];
 
 const DIRECTION_TASKS: RoleTask[] = [
-  { label: 'Tableau de bord + rapports PDF/Excel', page: 'dashboard', detail: 'CA jour/semaine/mois, top produits, graphiques' },
-  { label: 'Finance & comptabilité', page: 'finance', detail: 'Ventes, abonnements, solde ISM' },
-  { label: 'Suivi des encaissements (lecture)', page: 'subscriptions', detail: 'Paiements Wave, espèces — sans tenir la caisse' },
-  { label: 'Abonnés, formules, paiements', page: 'subscriptions', detail: 'CRUD offres, remboursements, annulations' },
-  { label: 'Utilisateurs & accès', page: 'users', detail: 'Voir abonnés, comptes et périmètres' },
-  { label: 'Paramètres : gérer les caissiers', page: 'settings', detail: 'Ajouter/supprimer, réinitialiser mots de passe' },
+  { label: 'Tableau de bord + rapports PDF/Excel', page: 'dashboard', detail: 'CA connecté aux transactions, jour/semaine/mois' },
+  { label: 'Finance & répartition', page: 'finance', detail: 'CA connecté aux transactions, répartition ISM / SycaPay / MIAMS' },
+  { label: 'Abonnés & paiements (lecture)', page: 'subscriptions', detail: 'Abonnés payés, paiements encaissés, export Excel' },
+  { label: 'Utilisateurs & accès', page: 'users', detail: 'Voir parents, enfants et périmètres' },
+  { label: 'Import du fichier élèves', page: 'import-eleves', detail: 'Créer les accès parents par numéro de téléphone' },
+  { label: 'Historique des commandes', page: 'history', detail: 'Tout ce qui a été vendu ou servi, par enfant' },
+];
+
+/** Référentiel du rôle de direction : Espace ISM (structure partenaire). */
+const DIRECTION_DEF = {
+  title: 'Espace ISM',
+  icon: Briefcase,
+  mission: 'Pilotage du site : tableau de bord, finance répartition, abonnés, utilisateurs, historique des commandes.',
+  color: 'from-slate-600 to-slate-500',
+  tasks: DIRECTION_TASKS,
+  forbidden: [] as string[],
+  kpis: ['CA connecté', 'Abonnés actifs', 'Répartition ISM / MIAMS'],
+} satisfies Omit<RoleDefinition, 'role'>;
+
+const SUPERVISOR_TASKS: RoleTask[] = [
+  ...SERVICE_TASKS,
+  { label: 'Tableau de bord', page: 'dashboard', detail: 'Repas servis, CA, abonnés actifs, alertes' },
+  { label: 'Traiter les réclamations', page: 'reclamations', detail: 'Répondre aux parents, publier une annonce' },
+  { label: 'Suivi financier', page: 'finance', detail: 'Ventes, abonnements, solde ISM' },
 ];
 
 export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
@@ -77,66 +96,37 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     role: 'personnel',
     title: 'Superviseur',
     icon: UtensilsCrossed,
-    mission: 'Supervision complète de la cantine : menus, validation, caisse, utilisateurs, statistiques et paramètres.',
+    mission: 'Supervision de la cantine : menus, validation, réclamations, utilisateurs, statistiques et paramètres.',
     color: 'from-green-700 to-emerald-600',
-    tasks: [
-      ...SERVICE_TASKS,
-      { label: 'Tableau de bord', page: 'dashboard', detail: 'Repas servis, CA, abonnés actifs, alertes' },
-      { label: 'Vente POS au comptoir', page: 'pos', detail: 'Vente directe, ticket, monnaie rendue' },
-      { label: 'Suivi financier', page: 'finance', detail: 'Ventes, abonnements, solde ISM' },
-    ],
+    tasks: SUPERVISOR_TASKS,
     forbidden: [],
-    kpis: ['Servis aujourd’hui', 'CA du jour', 'Abonnés actifs', 'Refusés'],
+    kpis: ['Servis aujourd’hui', 'CA du jour', 'Abonnés actifs', 'Réclamations ouvertes'],
   },
   gestionnaire: {
     role: 'gestionnaire',
     title: 'Caissier',
     icon: Store,
-    mission: 'Vente au comptoir et pilotage du jour : caisse POS, tableau de bord, menus récréation, historique. Sans accueil.',
+    mission: 'Tenue du comptoir : vente au POS, scan du QR élève pour débiter sa carte prépayée, Espace Repas et historique des ventes.',
     color: 'from-slate-800 to-slate-900',
     tasks: [
-      { label: 'Tableau de bord de ma cantine', page: 'dashboard', detail: 'Repas jour, abonnés actifs, alertes' },
       { label: 'Vente POS au comptoir', page: 'pos', detail: 'Vente directe, ticket, monnaie rendue' },
-      { label: 'Menus récréation (lecture)', page: 'menus', detail: 'Annoncer les plats, la vente se fait à la caisse' },
-      { label: 'Consulter l’historique', page: 'history', detail: 'Commandes et passages du jour' },
+      { label: 'Scanner le QR de l’élève', page: 'pos', detail: 'Débiter la carte prépayée de l’élève, pas de Wave par l’enfant' },
+      { label: 'Espace repas', page: 'menurecreation', detail: 'Annoncer les plats, la vente se fait à la caisse' },
+      { label: 'Consulter l’historique', page: 'history', detail: 'Ventes du comptoir et débits cartes' },
     ],
-    forbidden: ['Gérer les menus cantine (personnel)', 'Gérer les abonnements (personnel / Direction)', 'Valider les repas (personnel)', 'Gérer les utilisateurs (personnel / Direction)'],
-    kpis: ['Repas servis (jour)', 'Encaissé du jour', 'Alertes'],
+    forbidden: [
+      'Tableau de bord & pilotage',
+      'Valider les repas (superviseur)',
+      'Traiter les réclamations (superviseur)',
+      'Gérer les menus cantine (superviseur)',
+      'Gérer les abonnements (superviseur / Espace ISM)',
+      'Gérer les utilisateurs (superviseur / Espace ISM)',
+    ],
+    kpis: ['Encaissé du jour', 'Ventes carte élève'],
   },
   admin: {
     role: 'admin',
-    title: 'Directeur Général',
-    icon: Crown,
-    mission: 'Pilotage et suivi : tableau de bord, finance, abonnés, utilisateurs, paramètres.',
-    color: 'from-slate-600 to-slate-500',
-    tasks: DIRECTION_TASKS,
-    forbidden: [],
-    kpis: ['CA tickets & abos', 'Clients actifs', 'Repas du jour'],
-  },
-  caissier: {
-    role: 'caissier',
-    title: 'Superviseur',
-    icon: UtensilsCrossed,
-    mission: 'Supervision complète de la cantine : menus, validation, caisse, utilisateurs, statistiques et paramètres.',
-    color: 'from-green-700 to-emerald-600',
-    tasks: [
-      ...SERVICE_TASKS,
-      { label: 'Tableau de bord', page: 'dashboard', detail: 'Repas servis, CA, abonnés actifs, alertes' },
-      { label: 'Vente POS au comptoir', page: 'pos', detail: 'Vente directe, ticket, monnaie rendue' },
-      { label: 'Suivi financier', page: 'finance', detail: 'Ventes, abonnements, solde ISM' },
-    ],
-    forbidden: [],
-    kpis: ['Servis aujourd’hui', 'CA du jour', 'Abonnés actifs', 'Refusés'],
-  },
-  manager: {
-    role: 'manager',
-    title: 'Directeur Général',
-    icon: Crown,
-    mission: 'Pilotage et suivi : tableau de bord, finance, abonnés, utilisateurs, paramètres.',
-    color: 'from-slate-600 to-slate-500',
-    tasks: DIRECTION_TASKS,
-    forbidden: [],
-    kpis: ['CA tickets & abos', 'Clients actifs', 'Repas du jour'],
+    ...DIRECTION_DEF,
   },
 };
 

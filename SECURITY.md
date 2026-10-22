@@ -1,5 +1,18 @@
 # Politique de Sécurité
 
+## Mise en production
+
+La procédure de durcissement — clé de service, politiques RLS, comptes
+d'authentification, coupure des comptes de démonstration — est décrite
+**pas à pas** dans **[docs/PRODUCTION-SECURITY.md](docs/PRODUCTION-SECURITY.md)**.
+
+Deux scripts à exécuter dans le SQL Editor, dans cet ordre :
+
+| Script | Quand | Rôle |
+| --- | --- | --- |
+| `supabase-security.sql` | Avant toute mise en service | Retire les politiques `USING (true)`, supprime la colonne `password`, lie chaque table à `auth.uid()` |
+| `supabase-link-accounts.sql` | Après la création des comptes dans Authentication | Rattache chaque profil métier à son compte Auth |
+
 ## 🔒 Versions supportées
 
 Actuellement, seule la dernière version de **Palais d'Or** reçoit des mises à jour de sécurité.

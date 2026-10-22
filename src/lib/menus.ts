@@ -20,6 +20,22 @@ export function menuTicketTotal(menu: { price?: number; items: WeeklyMenuItem[] 
 }
 
 /**
+ * Replie le prix UNIQUE du jour dans la liste des plats.
+ *
+ * Utilisé en repli quand la colonne `weekly_menus.price` n'existe pas encore
+ * en base (installation non migrée) : plutôt que de perdre le prix, on le
+ * porte sur le premier plat pour que `menuTicketTotal` (somme des prix) rende
+ * le bon total. Invisible à l'écran (les plats s'affichent sans prix) et sans
+ * double comptage une fois la colonne `price` présente (elle est prioritaire).
+ */
+export function foldDayPriceIntoItems(items: WeeklyMenuItem[], price: number): WeeklyMenuItem[] {
+  const target = Math.max(0, Math.floor(Number(price) || 0));
+  if (target <= 0 || !Array.isArray(items) || items.length === 0) return items;
+  const rest = items.slice(1).reduce((s, it) => s + Math.max(0, Math.floor(Number(it?.price) || 0)), 0);
+  return [{ ...items[0], price: Math.max(0, target - rest) }, ...items.slice(1)];
+}
+
+/**
  * Semaine publiable : les 5 jours (Lun → Ven) ont au moins un plat.
  * Tant que ce n'est pas le cas, la section Menus reste vide (état pro).
  */

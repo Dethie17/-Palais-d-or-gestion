@@ -1,0 +1,78 @@
+  **OBJECTIF : remettre le site ? 0 pour la livraison (d?mo vierge)**
+
+  Tu veux :
+  - Vider les comptes parents cr??s pour les tests
+  - Vider les enfants qu'ils ont cr??s
+  - Vider QR codes / transactions / abonnements / validations / commandes etc
+  - Si la table `parent_profiles` est essentielle, la recr?er proprement
+
+  **VA DANS SUPABASE ? SQL EDITOR ? NEW QUERY**
+
+  Colle UNIQUEMENT ce bloc et clique RUN :
+
+  ```sql
+  -- 1) RECR?ER parent_profiles (m?me sch?ma que le code)
+  DROP TABLE IF EXISTS public.parent_profiles CASCADE;
+  CREATE TABLE public.parent_profiles (
+    parent_username TEXT PRIMARY KEY,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  ALTER TABLE public.parent_profiles ENABLE ROW LEVEL SECURITY;
+  GRANT SELECT, INSERT, UPDATE, DELETE ON public.parent_profiles TO anon;
+  GRANT SELECT, INSERT, UPDATE, DELETE ON public.parent_profiles TO authenticated;
+  DROP POLICY IF EXISTS open_parent_profiles ON public.parent_profiles;
+  DROP POLICY IF EXISTS parent_profiles_access ON public.parent_profiles;
+  CREATE POLICY open_parent_profiles ON public.parent_profiles
+    FOR ALL USING (true) WITH CHECK (true);
+
+  -- 2) PURGE COMPL?TE (parents/enfants/historiques) ? l'exception du PERSONNEL
+  DELETE FROM public.validations;
+  DELETE FROM public.wallet_transactions;
+  DELETE FROM public.oresto_payments;
+  DELETE FROM public.subscriptions;
+  DELETE FROM public.wallets;
+  DELETE FROM public.children;
+  DELETE FROM public.parent_profiles;
+  DELETE FROM public.kiosk_orders;
+  DELETE FROM public.reclamation_messages;
+  DELETE FROM public.reclamations;
+  DELETE FROM public.orders;
+  DELETE FROM public.sycapay_events;
+  DELETE FROM public.payment_callbacks;
+  DELETE FROM public.finance_expenses;
+  DELETE FROM public.users WHERE role = 'client';
+
+  -- 3) GARDER UNIQUEMENT LE PERSONNEL DANS AUTH
+  DELETE FROM auth.users
+  WHERE email LIKE '%@oresto-sn.com'
+    AND email NOT IN (
+      'admin@oresto-sn.com',
+      'caissier@oresto-sn.com',
+      'gestionnaire@oresto-sn.com',
+      'manager@oresto-sn.com',
+      'personnel@oresto-sn.com'
+    );
+
+  -- 4) V?RIFICATION
+  SELECT 'parent_profiles' AS table, count(*) AS restant FROM public.parent_profiles
+  UNION ALL SELECT 'children', count(*) FROM public.children
+  UNION ALL SELECT 'wallet_transactions', count(*) FROM public.wallet_transactions
+  UNION ALL SELECT 'oresto_payments', count(*) FROM public.oresto_payments
+  UNION ALL SELECT 'subscriptions', count(*) FROM public.subscriptions
+  UNION ALL SELECT 'validations', count(*) FROM public.validations
+  UNION ALL SELECT 'orders', count(*) FROM public.orders
+  UNION ALL SELECT 'kiosk_orders', count(*) FROM public.kiosk_orders
+  UNION ALL SELECT 'reclamations', count(*) FROM public.reclamations
+  UNION ALL SELECT 'users (attendu 5)', count(*) FROM public.users
+  UNION ALL SELECT 'auth_autres_qu_personnel', count(*)
+    FROM auth.users WHERE email LIKE '%@oresto-sn.com';
+  ```
+
+  **ATTENDU :**
+  - restant = 0 pour TOUT sauf `users (attendu 5)` = 5, `auth_autres_qu_personnel` = 0
+  - `parent_profiles` existe (plus de 404)
+
+  **APR?S AVOIR CLIQU? RUN, DIS-MOI "FAIT".**

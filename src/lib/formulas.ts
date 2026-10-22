@@ -1,5 +1,5 @@
 import type { Formula, SchoolCycle } from '@/types/menu';
-import { FORMULA_CYCLE, pricePerMeal } from './schoolCycles';
+import { FORMULA_CYCLES, pricePerMeal } from './schoolCycles';
 
 /**
  * Règles métier des formules cantine (flyer 2026) — espace DG.
@@ -15,9 +15,14 @@ export function isOfficialFormula(id: string): boolean {
   return OFFICIAL_FORMULA_IDS.includes(id);
 }
 
+/** Cycles couverts par une formule (vide = transverse / tous cycles). */
+export function cyclesOfFormula(f: Pick<Formula, 'id'>): SchoolCycle[] {
+  return FORMULA_CYCLES[f.id] ?? [];
+}
+
 /** Cycle imposé par la formule (mensuels), undefined = transverse / tous cycles. */
 export function cycleOfFormula(f: Pick<Formula, 'id'>): SchoolCycle | undefined {
-  return FORMULA_CYCLE[f.id];
+  return cyclesOfFormula(f)[0];
 }
 
 export const KIND_LABEL: Record<Formula['kind'], string> = {

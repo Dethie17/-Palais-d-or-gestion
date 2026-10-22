@@ -1,5 +1,6 @@
-import type { FinanceSettings, Formula, ORestoPayment, Order, Subscription } from '@/types/menu';
+import type { FinanceSettings, Formula, Order, Subscription } from '@/types/menu';
 import { FORMULA_CYCLE } from './schoolCycles';
+import { isCountedPayment, paymentDate, type AccountablePayment } from './validatedPayments';
 
 /**
  * Comptabilité ISM 2026 (règle DG) :
@@ -8,13 +9,16 @@ import { FORMULA_CYCLE } from './schoolCycles';
  * Solde mensuel à verser à l'ISM = part abos + part ventes.
  */
 
-export function resolvePaymentFormulaId(p: ORestoPayment, subs: Subscription[]): string | undefined {
+export function resolvePaymentFormulaId(p: AccountablePayment, subs: Subscription[]): string | undefined {
   return p.formulaId ?? subs.find((s) => s.id === p.subscriptionId)?.formulaId;
 }
 
 /** Un paiement compte comme abonnement (tout sauf ticket connu). */
-export function isAboPayment(p: ORestoPayment, subs: Subscription[], formulas: Formula[]): boolean {
+export function isAboPayment(p: AccountablePayment, subs: Subscription[], formulas: Formula[]): boolean {
   const fid = resolvePaymentFormulaId(p, subs);
+  // Le ticket du jour est une vente à l'unité (pas un abonnement) : il rentre
+  // dans le CA « ventes » (ISM prend son % dessus), jamais dans les 2 000 FCFA/abo.
+  if (fid === 'TICKET-JOUR') return false;
   const f = formulas.find((x) => x.id === fid);
   return f ? f.kind !== 'ticket' : true;
 }
@@ -37,16 +41,21 @@ export interface IsmPeriod {
 }
 
 export function ismPeriod(
-  payments: ORestoPayment[],
+  payments: AccountablePayment[],
   orders: Pick<Order, 'status' | 'total' | 'createdAt'>[],
   subscriptions: Subscription[],
   formulas: Formula[],
   settings: FinanceSettings,
   sinceMs: number,
+  salesGrossOverride?: number,
+  untilMs = Number.POSITIVE_INFINITY,
 ): IsmPeriod {
-  const paidAbo = payments.filter(
-    (p) => p.status === 'paid' && new Date(p.createdAt).getTime() >= sinceMs && isAboPayment(p, subscriptions, formulas),
-  );
+  // Seuls les paiements VALIDÉS comptent : statut payé ET règlement horodaté
+  // (même règle que v_paiements_valides côté base).
+  const paidAbo = payments.filter((p) => {
+    const t = paymentDate(p);
+    return isCountedPayment(p, payments) && t >= sinceMs && t < untilMs && isAboPayment(p, subscriptions, formulas);
+  });
   const split: IsmSplit = { primaire: 0, lycee: 0, hebdo: 0, autres: 0 };
   for (const p of paidAbo) {
     const fid = resolvePaymentFormulaId(p, subscriptions);
@@ -55,9 +64,11 @@ export function ismPeriod(
     else if (fid && FORMULA_CYCLE[fid] === 'primaire') split.primaire += 1;
     else split.autres += 1;
   }
-  const salesGross = orders
-    .filter((o) => o.status === 'completed' && o.createdAt.getTime() >= sinceMs)
-    .reduce((s, o) => s + o.total, 0);
+  const salesGross = typeof salesGrossOverride === 'number'
+    ? salesGrossOverride
+    : orders
+        .filter((o) => o.status === 'completed' && o.createdAt.getTime() >= sinceMs && o.createdAt.getTime() < untilMs)
+        .reduce((s, o) => s + o.total, 0);
   const ismAbo = paidAbo.length * settings.ismPerSubscription;
   const ismSales = Math.round((salesGross * settings.ismSalesPct) / 100);
   return { aboCount: paidAbo.length, split, ismAbo, salesGross, ismSales, total: ismAbo + ismSales };
@@ -85,10 +96,19 @@ export interface GlobalPoint {
  * (paiements encaissés). Sans les abos, le graphique reste vide dans
  * une cantine scolaire — d'où l'impression qu'il « ne passe pas ».
  */
+export interface ChartExtras {
+  /** Ventes hors caisse (kiosque, tickets, repas carte) déjà datées. */
+  sales?: { at: number; amount: number }[];
+  /** Fournis ensemble pour ne compter que les vrais abonnements. */
+  subscriptions?: Subscription[];
+  formulas?: Formula[];
+}
+
 export function globalChartData(
   orders: { status: string; total: number; createdAt: Date }[],
-  payments: ORestoPayment[],
+  payments: AccountablePayment[],
   period: ChartPeriod,
+  extras?: ChartExtras,
 ): GlobalPoint[] {
   const now = new Date();
   const buckets: { label: string; start: number; end: number }[] = [];
@@ -125,16 +145,19 @@ export function globalChartData(
   }
 
   const doneOrders = orders.filter((o) => o.status === 'completed');
-  const paid = payments.filter((p) => p.status === 'paid');
+  const aboOnly = !!(extras?.subscriptions && extras?.formulas);
+  const paid = payments.filter(
+    (p) => isCountedPayment(p, payments) && (!aboOnly || isAboPayment(p, extras!.subscriptions!, extras!.formulas!)),
+  );
+  const extraSales = extras?.sales ?? [];
   return buckets.map((b) => {
+    const inBucket = (t: number) => t >= b.start && t <= b.end;
     const caisse = doneOrders
-      .filter((o) => o.createdAt.getTime() >= b.start && o.createdAt.getTime() <= b.end)
-      .reduce((s, o) => s + o.total, 0);
+      .filter((o) => inBucket(o.createdAt.getTime()))
+      .reduce((s, o) => s + o.total, 0)
+      + extraSales.filter((s) => inBucket(s.at)).reduce((s, e) => s + e.amount, 0);
     const abonnements = paid
-      .filter((p) => {
-        const t = new Date(p.createdAt).getTime();
-        return t >= b.start && t <= b.end;
-      })
+      .filter((p) => inBucket(paymentDate(p)))
       .reduce((s, p) => s + p.amount, 0);
     return { label: b.label, caisse, abonnements, total: caisse + abonnements };
   });
@@ -146,19 +169,31 @@ export interface IsmMonth extends IsmPeriod {
 }
 
 /** Solde ISM des n derniers mois (mois courant inclus, ordre chronologique). */export function ismLastMonths(
-  payments: ORestoPayment[],
+  payments: AccountablePayment[],
   orders: Pick<Order, 'status' | 'total' | 'createdAt'>[],
   subscriptions: Subscription[],
   formulas: Formula[],
   settings: FinanceSettings,
   n = 6,
+  extraSales: { at: number; amount: number }[] = [],
 ): IsmMonth[] {
   const now = new Date();
   const out: IsmMonth[] = [];
   for (let i = n - 1; i >= 0; i--) {
     const start = new Date(now.getFullYear(), now.getMonth() - i, 1, 0, 0, 0, 0);
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 1, 0, 0, 0, 0);
     const key = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`;
-    out.push({ key, label: monthLabel(start), ...ismPeriod(payments, orders, subscriptions, formulas, settings, start.getTime()) });
+    const salesGross = orders
+      .filter((o) => o.status === 'completed' && o.createdAt.getTime() >= start.getTime() && o.createdAt.getTime() < end.getTime())
+      .reduce((s, o) => s + o.total, 0) +
+      extraSales
+        .filter((s) => s.at >= start.getTime() && s.at < end.getTime())
+        .reduce((s, e) => s + e.amount, 0);
+    out.push({
+      key,
+      label: monthLabel(start),
+      ...ismPeriod(payments, orders, subscriptions, formulas, settings, start.getTime(), salesGross, end.getTime()),
+    });
   }
   return out;
 }

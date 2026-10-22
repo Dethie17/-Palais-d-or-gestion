@@ -18,8 +18,13 @@ import {
   SchoolCycle,
   ParentProfile,
   KioskOrder,
+  KioskOrderStatus,
+  Complaint,
+  ComplaintMessage,
+  ComplaintCategory,
+  ComplaintStatus,
 } from '@/types/menu';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
   checkWaveCode,
   clearWaveCode,
@@ -28,9 +33,131 @@ import {
   WAVE_TTL_MS,
   type WavePaymentRequest,
 } from '@/lib/wave';
+import {
+  checkPaymentStatus,
+  initProvider,
+  isProviderMethod,
+  provider,
+  startPayment,
+  stepsFor,
+} from '@/lib/payments';
+import { recallPayerPhone, rememberPayerPhone } from '@/lib/payments/payerPhone';
+import type { PaymentStatus, ProviderMethod, StartPaymentInput, StartPaymentResult } from '@/lib/payments/types';
 import { getClientQrToken, isPersonalQrToken, getChildQrToken } from '@/lib/clientQr';
-import { inferCycleFromClass } from '@/lib/schoolCycles';
+import { settlePaymentOnServer } from '@/lib/financeApi';
+import { normalizeParentPhone, isValidParentPhone, formatParentPhone } from '@/lib/parentIdentity';
+import { dedupeChildren, childNaturalKey } from '@/lib/childIdentity';
+import { inferCycleFromClass, normalizeCycle, canonicalClassName } from '@/lib/schoolCycles';
+import { foldDayPriceIntoItems } from '@/lib/menus';
 import { referenceWeek } from '@/data/cantineWeek';
+
+/**
+ * Écritures Supabase « best-effort » : l'application continue en local quand
+ * la base refuse (politique RLS, colonne absente, hors ligne…), mais l'échec
+ * est MAINTENANT affiché en console au lieu d'être avalé. Sans ce log, le
+ * local et la base divergent silencieusement et on croit à tort que tout est
+ * synchronisé.
+ */
+const writeStats = { ok: 0, failed: 0 };
+
+/**
+ * Écritures dont une autre dépend par clé étrangère.
+ *
+ * Un abonnement et le paiement qui le référence (ou un élève et sa carte)
+ * partent en parallèle : la seconde insertion arrive parfois avant que la
+ * première ne soit visible, Postgres refuse alors la clé étrangère (23503)
+ * et la ligne était perdue — le parent ne recevait jamais son lien Wave.
+ * On garde la promesse de l'écriture « parente » pour pouvoir l'attendre.
+ */
+const parentWrites = new Map<string, Promise<void>>();
+
+function persist(label: string, query: PromiseLike<unknown>): Promise<void> {
+  const done = Promise.resolve(query).then(
+    () => {
+      writeStats.ok += 1;
+    },
+    (error: unknown) => {
+      writeStats.failed += 1;
+      console.warn(
+        `[O RESTO] écriture Supabase refusée — ${label} (la donnée reste en local)`,
+        error,
+      );
+    },
+  );
+  return done;
+}
+
+/**
+ * Écriture d'une ligne qui référence une ligne tout juste écrite.
+ *
+ * On attend d'abord l'écriture parente quand on la connaît, puis on réessaie
+ * uniquement la violation de clé étrangère (23503) le temps que la ligne
+ * parente devienne visible ; toute autre erreur est réelle et journalisée.
+ */
+async function persistAfterParent(
+  label: string,
+  parentId: string | undefined,
+  makeQuery: () => PromiseLike<unknown>,
+): Promise<void> {
+  if (parentId) {
+    const pending = parentWrites.get(parentId);
+    if (pending) await pending.catch(() => undefined);
+  }
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const result = (await makeQuery()) as { error?: { code?: string | null; message?: string } | null };
+    const error = result?.error ?? null;
+    if (!error) {
+      writeStats.ok += 1;
+      return;
+    }
+    if (error.code !== '23503') {
+      writeStats.failed += 1;
+      console.warn(
+        `[O RESTO] écriture Supabase refusée — ${label} (la donnée reste en local)`,
+        error,
+      );
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  writeStats.failed += 1;
+  console.warn(
+    `[O RESTO] écriture Supabase refusée — ${label} : ligne liée introuvable après plusieurs essais.`,
+  );
+}
+
+// Compteur consultable depuis la console : __orestoWrites.failed doit rester
+// à 0 ; sinon, la base refuse les écritures (RLS / colonne manquante).
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, '__orestoWrites', { value: writeStats, writable: false });
+}
+
+/**
+ * Réponse de /api/sycapay/initiate quand la commande n'est pas encore visible
+ * en base : ce n'est pas un refus du client, seulement une course.
+ */
+const TRANSACTION_INCONNUE = /n['’]est pas la v/;
+
+/**
+ * Démarre un paiement chez la passerelle en tolérant le délai de visibilité
+ * de la ligne de commande.
+ *
+ * La commande et la requête de paiement sont écrites au moment même où la
+ * passerelle est appelée. Si l'écriture n'est pas encore visible, la route
+ * répond 403 et le parent verrait un échec alors qu'il n'a rien envoyé :
+ * on réessaie ce seul cas quelques instants, sans jamais rejouer un vrai refus.
+ */
+async function startPaymentWhenVisible(input: StartPaymentInput): Promise<StartPaymentResult> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await startPayment(input);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (attempt >= 4 || !TRANSACTION_INCONNUE.test(message)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+  }
+}
 
 const LS_KEYS = {
   establishments: 'o-resto-establishments-v1',
@@ -45,7 +172,12 @@ const LS_KEYS = {
   parentProfiles: 'o-resto-parentprofiles-v1',
   financeSettings: 'o-resto-financesettings-v1',
   financeExpenses: 'o-resto-financeexpenses-v1',
+  inactiveParents: 'o-resto-inactiveparents-v1',
+  dayTicket: 'o-resto-dayticket-v1',
   weeklyMenus: 'o-resto-weeklymenus-v3',
+  complaints: 'o-resto-reclamations-v1',
+  complaintMessages: 'o-resto-reclamationmessages-v1',
+  kioskOrders: 'o-resto-kioskorders-v1',
 };
 
 // Migration douce depuis les anciennes clés sans version
@@ -76,7 +208,55 @@ function hasStoredWeek(): boolean {
 
 const DEFAULT_FINANCE_SETTINGS: FinanceSettings = {
   ismSubscriptionPct: 10, schoolPerSubscription: 2000, otherSalesPct: 5,
-  touchpointPct: 0.5, paydounyaPct: 1.5, ismPerSubscription: 2000, ismSalesPct: 5,
+  touchpointPct: 0.5, sycapayPct: 1, paydounyaPct: 1.5, ismPerSubscription: 2000, ismSalesPct: 5,
+};
+
+/** Fin du mois civil en cours, 23:59:59.999 : expiration de tous les repas achetés. */
+function endOfMonthIso(d = new Date()): string {
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+  return end.toISOString();
+}
+
+/**
+ * Début de la période SUIVANTE pour un réabonnement : le lendemain de la fin
+ * de la période en cours, jamais dans le passé. Un abonnement qui se termine
+ * le 31/10 est donc renouvelé à partir du 01/11 — pas « à la date du jour ».
+ */
+function nextPeriodStart(endDateIso: string, now = new Date()): Date {
+  const end = new Date(endDateIso);
+  const dayAfter = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return dayAfter.getTime() > today.getTime() ? dayAfter : today;
+}
+
+/** Fin du mois civil de `d`, à 23:59:59.999. */
+function endOfThatMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+/**
+ * Un abonnement est UTILISABLE s'il est actif ET dans sa période : un
+ * réabonnement daté du mois suivant ne doit pas servir de repas avant son
+ * premier jour.
+ */
+function isLiveSub(
+  s: { status: string; startDate: string; endDate: string },
+  nowMs = Date.now(),
+): boolean {
+  if (s.status !== 'active') return false;
+  const end = new Date(s.endDate).getTime();
+  if (!Number.isFinite(end) || end < nowMs) return false;
+  const start = new Date(s.startDate).getTime();
+  if (Number.isFinite(start) && start > nowMs) return false;
+  return true;
+}
+
+/** Ticket du jour publié par le Superviseur (clé finance_settings `day_ticket`). */
+export type DayTicket = {
+  date: string;
+  name: string;
+  price: number;
+  active: boolean;
 };
 
 // Site unique : ISM Thiès (le logiciel ne couvre qu'un seul établissement pour le moment)
@@ -246,10 +426,29 @@ interface RestoContextType {
   myChildren: (parentUsername: string) => Child[];
   parentProfiles: ParentProfile[];
   parentProfileOf: (parentUsername: string) => ParentProfile | undefined;
+  /** Clé canonique du parent (son numéro) à partir de n'importe quel identifiant. */
+  parentKeyOf: (parentUsername: string) => string;
   saveParentProfile: (parentUsername: string, firstName: string, lastName: string, phone: string) => ParentProfile;
   walletOf: (childId: string) => number;
+  resolveChildQr: (qrToken: string) => { ok: boolean; message: string; child?: Child; subscription?: Subscription; balance: number };
+  sellToChildCard: (
+    childId: string,
+    items: { productId: string; productName: string; price: number; qty: number }[],
+    cashier?: string,
+  ) => { ok: boolean; message: string; reference?: string; balance: number; order?: KioskOrder };
   childTxs: (childId: string) => WalletTx[];
   addChild: (parentUsername: string, firstName: string, lastName: string, className: string, cycle?: SchoolCycle) => Child;
+  /** Inscription vérifiée d'une ligne d'import Excel (admin). */
+  importStudentRow: (row: {
+    parentUsername: string;
+    parentNom: string;
+    parentPrenom: string;
+    parentTel: string;
+    prenom: string;
+    nom: string;
+    classe: string;
+    cycle: SchoolCycle;
+  }) => Promise<{ childId: string; parentCreated: boolean; duplicate: boolean }>;
   updateChild: (id: string, updates: Partial<Pick<Child, 'firstName' | 'lastName' | 'className' | 'cycle'>>) => void;
   deleteChild: (id: string) => void;
   deleteParent: (username: string) => void;
@@ -258,10 +457,53 @@ interface RestoContextType {
   topUpChild: (childId: string, amount: number, method: ORestoPaymentMethod) => { tx: WalletTx; wave?: WavePaymentRequest };
   confirmWalletTopUp: (txId: string) => boolean;
   confirmWalletTopUpMobile: (txId: string, code: string) => { ok: boolean; message: string };
+  confirmWalletTopUpGroup: (paymentId: string, code: string) => { ok: boolean; message: string };
+  // Compte parent actif/inactif (Superviseur) : les cartes enfants d'un parent inactif sont bloquées.
+  inactiveParents: string[];
+  isParentInactive: (username?: string) => boolean;
+  setParentActive: (parentUsername: string, active: boolean) => void;
+  // Ticket du jour publié par le Superviseur (clé finance_settings `day_ticket`).
+  dayTicket: DayTicket | null;
+  setDayTicketPublished: (ticket: DayTicket | null) => void;
+  /** Achat du ticket du jour pour un enfant : +1 repas, expiration fin de mois civil. */
+  buyDayTicket: (
+    clientUsername: string,
+    childId: string,
+    method: ORestoPaymentMethod,
+  ) => { subscription: Subscription; payment: ORestoPayment; wave?: WavePaymentRequest };
+  /** Recharge plusieurs cartes enfants en un seul paiement Wave / Orange Money. */
+  topUpMulti: (
+    clientUsername: string,
+    items: { childId: string; amount: number }[],
+    method: ORestoPaymentMethod,
+  ) => { payment: ORestoPayment; wave?: WavePaymentRequest; txs: WalletTx[] };
+  creditWalletTx: (txId: string) => boolean;
   // Débit interne (validation repas sans abonnement) — retourne faux si solde insuffisant
   debitWallet: (childId: string, amount: number, label: string) => boolean;
+  // ---- Passerelle de paiement (SycaPay en production, démo sinon) ----
+  /** 'sycapay' quand la passerelle est configurée, 'demo' sinon. */
+  paymentProviderId: string;
+  /** Moyen de paiement pris en charge par une page de paiement. */
+  providerLabel: string;
+  /**
+   * Initie un paiement chez le fournisseur et renvoie la session à afficher.
+   * N'active rien : seul le webhook SycaPay (ou le rattrapage statusV2) solde.
+   */
+  openProviderPayment: (
+    input: StartPaymentInput,
+    kind?: 'sub' | 'topup',
+    paymentId?: string,
+  ) => Promise<WavePaymentRequest>;
+  /**
+   * Rattrapage : interroge le fournisseur sur une référence, et recharge
+   * l'état local si la transaction a été réglée côté serveur. C'est ce que
+   * l'écran d'attente appelle quand le webhook est passé par-dessus.
+   */
+  syncPaymentFromProvider: (reference: string) => Promise<PaymentStatus>;
+  /** Recharge l'état distant depuis Supabase (après un règlement serveur). */
+  refreshRemote: () => Promise<void>;
   // Règle carte : la carte prépayée sert aux TICKETS repas (débit immédiat).
-  // Les ABONNEMENTS se paient InTouch / espèces / Wave — jamais avec le solde.
+  // Les ABONNEMENTS se paient Wave / espèces — jamais avec le solde.
   setFinanceSettings: (s: Partial<FinanceSettings>) => void;
   // ---- Dépenses manuelles DG (loyer, salaires, fournisseurs...) ----
   financeExpenses: FinanceExpense[];
@@ -272,7 +514,40 @@ interface RestoContextType {
   updateWeeklyMenu: (day: WeeklyMenu['day'], name: string, description: string, items?: WeeklyMenuItem[], price?: number) => void;
   // ---- Ticket visiteur (walk-in) ----
   walkInTickets: { token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string }[];
-  createWalkInTicket: (menu: WeeklyMenu, method: 'cash' | 'intouch' | 'wave') => { token: string; reference: string; ticket: { token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string } };
+  createWalkInTicket: (menu: WeeklyMenu, method: 'cash' | 'wave') => { token: string; reference: string; ticket: { token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string } };
+  // ---- Commandes kiosques (carte élève) : file du service ----
+  kioskOrders: KioskOrder[];
+  /** Confirme la remise d'une commande au scan de l'élève. */
+  serveKioskOrder: (orderId: string) => void;
+  /**
+   * Annule une commande NON encore servie : le montant débité est recrédité
+   * sur la carte prépayée de l'enfant (transaction kind='refund') et la
+   * commande passe en 'cancelled' (local + Supabase).
+   * Refusée si la commande est déjà servie (les articles ont été remis).
+   */
+  cancelKioskOrder: (orderId: string) => { ok: boolean; message: string; balance: number };
+  // ---- Réclamations : fil privé parent ↔ superviseur + annonces ----
+  complaints: Complaint[];
+  complaintMessages: ComplaintMessage[];
+  addComplaint: (input: {
+    clientUsername: string;
+    childId?: string;
+    category: ComplaintCategory;
+    subject: string;
+    body: string;
+    photoPath?: string;
+  }) => Complaint;
+  replyComplaint: (
+    complaintId: string,
+    authorUsername: string,
+    authorRole: 'client' | 'staff',
+    body: string,
+    photoPath?: string,
+  ) => ComplaintMessage;
+  setComplaintStatus: (complaintId: string, status: ComplaintStatus) => void;
+  publishAnnouncement: (authorUsername: string, subject: string, body: string) => Complaint;
+  myComplaints: (username: string) => Complaint[];
+  messagesOf: (complaintId: string) => ComplaintMessage[];
 }
 
 const RestoContext = createContext<RestoContextType | undefined>(undefined);
@@ -378,10 +653,13 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       }
       return c;
     });
-    if (changed) {
-      try { localStorage.setItem(LS_KEYS.children, JSON.stringify(migrated)); } catch { /* ignore */ }
+    // Déduplication : le cache local peut contenir deux lignes pour le même
+    // enfant (import rejoué, double-clic avant rechargement).
+    const { kept, duplicates } = dedupeChildren(migrated);
+    if (changed || duplicates.length > 0) {
+      try { localStorage.setItem(LS_KEYS.children, JSON.stringify(kept)); } catch { /* ignore */ }
     }
-    return migrated;
+    return kept;
   });
   const [wallets, setWallets] = useState<Wallet[]>(() => load<Wallet[]>(LS_KEYS.wallets, []));
   const [parentProfiles, setParentProfiles] = useState<ParentProfile[]>(() =>
@@ -392,6 +670,21 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     ...DEFAULT_FINANCE_SETTINGS,
     ...load<Partial<FinanceSettings>>(LS_KEYS.financeSettings, {}),
   }));
+  // Parents dont le compte est désactivé par le Superviseur (clés `inactive_parent_<username>`).
+  const [inactiveParents, setInactiveParentsState] = useState<string[]>(() => {
+    const stored = load<Record<string, string>>(LS_KEYS.financeSettings, {});
+    return Object.entries(stored)
+      .filter(([k, v]) => k.startsWith('inactive_parent_') && v === '1')
+      .map(([k]) => k.slice('inactive_parent_'.length));
+  });
+  const [dayTicket, setDayTicketState] = useState<DayTicket | null>(() => {
+    const stored = load<Record<string, unknown>>(LS_KEYS.financeSettings, {});
+    const raw = stored['day_ticket'];
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw) as DayTicket; } catch { /* ignore */ }
+    }
+    return null;
+  });
   const [financeExpenses, setFinanceExpenses] = useState<FinanceExpense[]>(() =>
     load<FinanceExpense[]>(LS_KEYS.financeExpenses, []),
   );
@@ -405,6 +698,17 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     }));
   });
   const [walkInTickets, setWalkInTickets] = useState<{ token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string }[]>([]);
+  const [complaints, setComplaints] = useState<Complaint[]>(() => load<Complaint[]>(LS_KEYS.complaints, []));
+  const [complaintMessages, setComplaintMessages] = useState<ComplaintMessage[]>(() =>
+    load<ComplaintMessage[]>(LS_KEYS.complaintMessages, []),
+  );
+  // Commandes kiosques (récréation / pause) payées par la carte d'un élève.
+  // C'est la file que le superviseur doit voir au scan : sans cet état, un
+  // achat(parent) ou une vente(comptoir) partait au serveur sans jamais
+  // revenir à l'écran — le service n'avait rien à confirmer.
+  const [kioskOrders, setKioskOrders] = useState<KioskOrder[]>(() =>
+    load<KioskOrder[]>(LS_KEYS.kioskOrders, []),
+  );
 
   useEffect(() => save(LS_KEYS.establishments, establishments), [establishments]);
   useEffect(() => save(LS_KEYS.formulas, formulas), [formulas]);
@@ -417,16 +721,24 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   useEffect(() => save(LS_KEYS.walletTxs, walletTxs), [walletTxs]);
   useEffect(() => save(LS_KEYS.financeSettings, financeSettings), [financeSettings]);
   useEffect(() => save(LS_KEYS.financeExpenses, financeExpenses), [financeExpenses]);
+  useEffect(() => save(LS_KEYS.inactiveParents, inactiveParents), [inactiveParents]);
+  useEffect(() => save(LS_KEYS.dayTicket, dayTicket), [dayTicket]);
   useEffect(() => save(LS_KEYS.weeklyMenus, weeklyMenus), [weeklyMenus]);
+  useEffect(() => save(LS_KEYS.complaints, complaints), [complaints]);
+  useEffect(() => save(LS_KEYS.complaintMessages, complaintMessages), [complaintMessages]);
+  useEffect(() => save(LS_KEYS.kioskOrders, kioskOrders), [kioskOrders]);
 
-  // Full Supabase : chargement initial distant (puis localStorage en repli),
+  // Full Supabase : chargement distant (puis localStorage en repli),
   // + synchronisation best-effort vers Supabase.
   // Tables requises : establishments, formulas, subscriptions, oresto_payments, validations
   // (+ supabase-oresto-full.sql pour formulas.kind et intentions ticket).
-  useEffect(() => {
-    (async () => {
+  //
+  // Exposée comme refreshRemote() parce que le règlement d'un paiement SycaPay
+  // se fait côté SERVEUR (webhook) : quand le client revient sur l'écran
+  // d'attente, l'état local est en retard et doit être rechargé.
+  const refreshRemote = useCallback(async () => {
       try {
-        const [estRes, formRes, subRes, payRes, valRes, childRes, walletRes, txRes, setRes, expRes, weekRes, profRes] = await Promise.all([
+        const [estRes, formRes, subRes, payRes, valRes, childRes, walletRes, txRes, setRes, expRes, weekRes, profRes, reclRes, reclMsgRes, kioskRes] = await Promise.all([
           supabase.from('establishments').select('*'),
           supabase.from('formulas').select('*'),
           supabase.from('subscriptions').select('*').order('created_at', { ascending: false }).limit(500),
@@ -439,7 +751,14 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           supabase.from('finance_expenses').select('*').order('spent_at', { ascending: false }).limit(500),
           supabase.from('weekly_menus').select('*'),
           supabase.from('parent_profiles').select('*').limit(500),
+          supabase.from('reclamations').select('*').order('updated_at', { ascending: false }).limit(500),
+          supabase.from('reclamation_messages').select('*').order('created_at', { ascending: true }).limit(2000),
+          supabase.from('kiosk_orders').select('*').order('created_at', { ascending: false }).limit(300),
         ]);
+
+        // Le schéma « réclamations » peut ne pas être installé (script SQL non
+        // exécuté) : ces 404 sont attendus et sans effet sur l'app.
+        if (reclRes.error) console.info('[O RESTO] Table reclamations absente — exécutez supabase-reclamations.sql.');
         if (estRes.data && estRes.data.length > 0) {
           setEstablishments(
             estRes.data.map((r) => ({
@@ -491,6 +810,10 @@ export function RestoProvider({ children }: { children: ReactNode }) {
               clientUsername: r.client_username ?? undefined, formulaId: r.formula_id ?? undefined,
               amount: Number(r.amount), method: r.method, status: r.status,
               reference: r.reference, createdAt: r.created_at,
+              // Règlement : c'est l'horodatage serveur qui fait foi en
+              // comptabilité (v_paiements_valides côté base).
+              paidAt: r.paid_at ?? undefined,
+              settledAt: r.settled_at ?? undefined,
             })),
           );
         }
@@ -505,15 +828,25 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           );
         }
         if (childRes.data && childRes.data.length > 0) {
-          setChildrenList(
+          // Déduplication defensive : la base peut contenir deux lignes pour
+          // le même enfant (import rejoué, double-clic). On n'en garde qu'une,
+          // sinon le personnel voit deux cartes et deux QR pour le même élève.
+          const { kept, duplicates } = dedupeChildren(
             childRes.data.map((r) => ({
               id: r.id, parentUsername: r.parent_username, firstName: r.first_name,
               lastName: r.last_name, className: r.class_name,
-              cycle: (r.cycle === 'lycee' ? 'lycee' : r.cycle === 'primaire' ? 'primaire' : inferCycleFromClass(r.class_name ?? '')) as SchoolCycle,
+              cycle: normalizeCycle(r.cycle) ?? inferCycleFromClass(r.class_name ?? ''),
               qrToken: r.qr_token,
               createdAt: r.created_at,
             })),
           );
+          if (duplicates.length > 0) {
+            console.info(
+              `[O RESTO] ${duplicates.length} doublon(s) d'enfant ignoré(s) au chargement :`,
+              duplicates.map((d) => `${d.firstName} ${d.lastName} (${d.className})`).join(', '),
+            );
+          }
+          setChildrenList(kept);
         }
         if (walletRes.data && walletRes.data.length > 0) {
           setWallets(
@@ -541,12 +874,18 @@ export function RestoProvider({ children }: { children: ReactNode }) {
               schoolPerSubscription: Number(map.school_per_subscription ?? migrated.schoolPerSubscription ?? 2000) || 0,
               otherSalesPct: Number(map.other_sales_pct ?? migrated.otherSalesPct ?? 5) || 0,
               touchpointPct: Number(map.touchpoint_pct ?? migrated.touchpointPct ?? 0.5) || 0,
+              sycapayPct: Number(map.sycapay_pct ?? migrated.sycapayPct ?? 1) || 0,
               paydounyaPct: Number(map.paydounya_pct ?? migrated.paydounyaPct ?? 1.5) || 0,
               ismPerSubscription: Number(map.ism_per_subscription ?? (migrated as FinanceSettings).ismPerSubscription ?? 2000) || 0,
               ismSalesPct: Number(map.ism_sales_pct ?? (migrated as FinanceSettings).ismSalesPct ?? 5) || 0,
             };
             return next;
           });
+          setInactiveParentsState(Object.entries(map).filter(([k, v]) => k.startsWith('inactive_parent_') && v === '1').map(([k]) => k.slice('inactive_parent_'.length)));
+          const dayTicketRaw = map['day_ticket'];
+          if (typeof dayTicketRaw === 'string') {
+            try { setDayTicketState(JSON.parse(dayTicketRaw)); } catch { /* ignore */ }
+          }
         }
         if (expRes.data && expRes.data.length > 0) {
           setFinanceExpenses(
@@ -588,11 +927,62 @@ export function RestoProvider({ children }: { children: ReactNode }) {
             })),
           );
         }
+        if (reclRes.data && reclRes.data.length > 0) {
+          setComplaints(reclRes.data.map((r) => ({
+            id: r.id, reference: r.reference, clientUsername: r.client_username,
+            childId: r.child_id ?? undefined, category: r.category as ComplaintCategory,
+            subject: r.subject, status: r.status as ComplaintStatus,
+            isAnnouncement: Boolean(r.is_announcement), createdAt: r.created_at,
+            updatedAt: r.updated_at, resolvedAt: r.resolved_at ?? undefined,
+          })));
+        }
+        if (reclMsgRes.data && reclMsgRes.data.length > 0) {
+          setComplaintMessages(reclMsgRes.data.map((r) => ({
+            id: r.id, complaintId: r.complaint_id, authorUsername: r.author_username,
+            authorRole: r.author_role as 'client' | 'staff', body: r.body,
+            photoPath: r.photo_path ?? undefined, createdAt: r.created_at,
+          })));
+        }
+        if (kioskRes.data && kioskRes.data.length > 0) {
+          setKioskOrders(kioskRes.data.map((r) => ({
+            id: r.id, childId: r.child_id, parentUsername: r.parent_username,
+            items: Array.isArray(r.items) ? (r.items as KioskOrder['items']) : [],
+            total: Number(r.total),
+            status: (r.status === 'served' || r.status === 'cancelled' ? r.status : 'pending') as KioskOrderStatus,
+            reference: r.reference, createdAt: r.created_at,
+            servedAt: r.served_at ?? undefined,
+          })));
+        }
       } catch {
         /* offline : le localStorage reste la source de vérité */
       }
-    })();
   }, []);
+
+  useEffect(() => { void refreshRemote(); }, [refreshRemote]);
+
+  // Un paiement SycaPay est solde par le webhook, cote serveur. Rien ne le
+  // redit a cet onglet : sans rafraichissement, la ligne resterait " en
+  // attente " alors que l'argent est encaisse - et le chiffre d'affaires
+  // l'ignorerait. On rescannote donc periodiquement, et des qu'on revient
+  // sur l'application.
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const rescannoter = () => { void refreshRemote(); };
+    const minute = 20000;
+    const horloge = window.setInterval(rescannoter, minute);
+    // Un onglet mis en arriere-plan est suspendu par le navigateur : a son
+    // retour, la verification doit etre immediate, pas dans 20 secondes.
+    const surVisible = () => {
+      if (document.visibilityState === 'visible') rescannoter();
+    };
+    document.addEventListener('visibilitychange', surVisible);
+    window.addEventListener('focus', rescannoter);
+    return () => {
+      window.clearInterval(horloge);
+      document.removeEventListener('visibilitychange', surVisible);
+      window.removeEventListener('focus', rescannoter);
+    };
+  }, [refreshRemote]);
 
   // Répare la base distante : site unique ISM Thiès, tarifs officiels 2026
   // et suppression de l'ancienne « Midi Semaine ». Best-effort.
@@ -658,7 +1048,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     (username: string) => {
       const nowMs = Date.now();
       return subscriptions.find(
-        (s) => s.clientUsername === username && s.status === 'active' && new Date(s.endDate).getTime() >= nowMs,
+        (s) => s.clientUsername === username && isLiveSub(s, nowMs),
       );
     },
     [subscriptions],
@@ -696,14 +1086,14 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         clientUsername,
         formulaId,
         startDate: now.toISOString(),
-        endDate: new Date(now.getTime() + formula.durationDays * 86400000).toISOString(),
+        endDate: endOfMonthIso(now),
         status: 'pending',
         mealsRemaining: formula.mealsIncluded,
         qrToken: child ? child.qrToken : getClientQrToken(clientUsername),
         childId: child?.id,
       };
       setSubscriptions((prev) => [...prev, subscription]);
-      supabase.from('subscriptions').insert({
+      const written = persist('subscriptions', supabase.from('subscriptions').insert({
         id: subscription.id,
         client_username: subscription.clientUsername,
         formula_id: subscription.formulaId,
@@ -713,68 +1103,263 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         meals_remaining: subscription.mealsRemaining,
         qr_token: subscription.qrToken,
         child_id: subscription.childId ?? null,
-      }).then(() => undefined, () => undefined);
+      }));
+      parentWrites.set(subscription.id, written);
+      void written.finally(() => {
+        parentWrites.delete(subscription.id);
+      });
       return subscription;
     },
     [formulas, childrenList],
   );
 
-  // Activation interne idempotente : n'écrase jamais un actif existant,
-  // préserve les crédits tickets (max), n'expire les autres qu'en transition.
+  /** Écrit une clé/valeur brute de finance_settings (compte inactif, ticket du jour…). */
+  const setFinanceSettingKV = useCallback((key: string, value: string | null) => {
+    if (value === null) {
+      void persist('finance_settings', supabase.from('finance_settings').delete().eq('key', key));
+    } else {
+      void persist('finance_settings', supabase.from('finance_settings').upsert([{ key, value }]));
+    }
+  }, []);
+
+  /** Active/désactive le compte d'un parent (carte enfants bloquée si inactif). */
+  const setParentActive = useCallback((parentUsername: string, active: boolean) => {
+    const key = `inactive_parent_${parentUsername}`;
+    if (active) {
+      setInactiveParentsState((prev) => prev.filter((u) => u !== parentUsername));
+      void setFinanceSettingKV(key, null);
+    } else {
+      setInactiveParentsState((prev) =>
+        prev.includes(parentUsername) ? prev : [...prev, parentUsername],
+      );
+      void setFinanceSettingKV(key, '1');
+    }
+  }, [setFinanceSettingKV]);
+
+  /** Est-ce que le compte d'un parent est désactivé (blocage des cartes enfants). */
+  const isParentInactive = useCallback((username?: string) =>
+    !!username && inactiveParents.includes(username),
+  [inactiveParents]);
+
+  /** Publication / retrait du ticket du jour (Superviseur). */
+  const setDayTicketPublished = useCallback((ticket: DayTicket | null) => {
+    setDayTicketState(ticket);
+    if (ticket === null) {
+      void setFinanceSettingKV('day_ticket', null);
+    } else {
+      void setFinanceSettingKV('day_ticket', JSON.stringify(ticket));
+    }
+  }, [setFinanceSettingKV]);
+
+  // Activation interne idempotente.
+  // Règle mensuelle : les repas NON consommés ne se reportent pas — chaque
+  // période repart du quota de la formule. Un réabonnement déjà daté sur le
+  // mois suivant garde ses propres bornes et ne coupe jamais la carte en cours.
   const activateSubscription = useCallback(
-    (subscriptionId: string) => {
-      const target = subscriptions.find((s) => s.id === subscriptionId);
+    (subscriptionId: string, override?: Subscription) => {
+      const target = subscriptions.find((s) => s.id === subscriptionId) ?? override;
       if (!target) return;
       if (target.status === 'active') return; // déjà actif → ne pas écraser le solde
+      const now = new Date();
+      const nowMs = now.getTime();
+      const scheduledStart = new Date(target.startDate).getTime();
+      const isFuture = Number.isFinite(scheduledStart) && scheduledStart > nowMs;
+      const startDate = isFuture ? target.startDate : now.toISOString();
+      const endDate = isFuture ? target.endDate : endOfMonthIso(now);
+
+      // Ticket du jour : +1 repas sur la carte de l'enfant, sans toucher aux
+      // autres abonnements de l'enfant.
+      if (target.formulaId === 'TICKET-JOUR') {
+        setSubscriptions((prev) =>
+          prev.map((s) => {
+            if (s.id === subscriptionId) {
+              return { ...s, status: 'active' as const, mealsRemaining: s.mealsRemaining + 1, startDate: s.startDate, endDate };
+            }
+            return s;
+          }),
+        );
+        persist('subscriptions', supabase.from('subscriptions').update({
+          status: 'active',
+          meals_remaining: target.mealsRemaining + 1,
+          end_date: endDate,
+        }).eq('id', subscriptionId));
+        void setParentActive(target.clientUsername, true);
+        return;
+      }
+
       const formula = formulas.find((f) => f.id === target.formulaId);
       if (!formula) return;
-      const now = new Date();
-      const endDate = new Date(now.getTime() + formula.durationDays * 86400000).toISOString();
-      const startDate = now.toISOString();
+      // Quota NEUF : le solde de la période précédente n'est pas repris.
+      const meals = formula.mealsIncluded;
       setSubscriptions((prev) =>
         prev.map((s) => {
           if (s.id === subscriptionId) {
             return {
               ...s,
               status: 'active' as const,
-              mealsRemaining: Math.max(s.mealsRemaining, formula.mealsIncluded),
+              mealsRemaining: meals,
               startDate,
               endDate,
             };
           }
-          // Un seul actif par bénéficiaire (enfant si childId, sinon compte parent)
+          // Un seul actif par bénéficiaire (enfant si childId, sinon compte
+          // parent) — mais on n'expire QUE les périodes réellement terminées :
+          // un réabonnement futur ne doit pas désactiver la carte en cours.
           const sameOwner = target.childId
             ? s.childId === target.childId
             : !s.childId && s.clientUsername === target.clientUsername;
-          if (sameOwner && s.status === 'active') {
+          if (sameOwner && s.status === 'active' && new Date(s.endDate).getTime() < nowMs) {
             return { ...s, status: 'expired' as const };
           }
           return s;
         }),
       );
-      supabase.from('subscriptions').update({
+      persist('subscriptions', supabase.from('subscriptions').update({
         status: 'active',
-        meals_remaining: Math.max(target.mealsRemaining, formula.mealsIncluded),
+        meals_remaining: meals,
         start_date: startDate,
         end_date: endDate,
-      }).eq('id', subscriptionId).then(() => undefined, () => undefined);
+      }).eq('id', subscriptionId));
+      void setParentActive(target.clientUsername, true);
     },
-    [formulas, subscriptions],
+    [formulas, subscriptions, setParentActive],
   );
 
   // Tout mode non-espèces = confirmation externe (Wave/OM/carte), jamais immédiat.
   // 'balance' (solde carte) : interne, activation immédiate, jamais de confirmation externe.
   const needsExternalConfirm = (method: ORestoPaymentMethod) => method !== 'cash' && method !== 'balance';
 
+  // ---------- Passerelle de paiement ----------
+  //
+  // Un fournisseur (SycaPay en production, démo sinon) décide de la FORME du
+  // paiement ; il ne décide jamais de l'activation d'un abonnement ni du crédit
+  // d'une carte : cela passe par le webhook, ou par le rattrapage statusV2
+  // qu'on expose plus bas (syncPaymentFromProvider).
+  //
+  // Ce que fait openProviderPayment : appeler la passerelle. Ce qu'elle ne fait
+  // PAS : solder. Un 201 veut dire « demande partie », pas « argent encaissé ».
+
+  // Détection de la passerelle : une fois par session. Sans réponse (déploiement
+  // sans /api, hors ligne, `vite dev` seul) on reste en mode démo — l'app
+  // démarre et les parcours restent démontrables.
+  const [activeProvider, setActiveProvider] = useState(() => provider());
+  useEffect(() => {
+    let alive = true;
+    void initProvider().then((next) => {
+      if (alive) setActiveProvider(next);
+    });
+    return () => { alive = false; };
+  }, []);
+  const paymentProviderId = activeProvider.id;
+  const providerLabel = activeProvider.label;
+
+  /**
+   * Initie un paiement chez le fournisseur et renvoie la session à afficher.
+   * En mode démo, aucun appel réseau : le code à 6 chiffres d'avant.
+   * Ne solde rien, dans aucun mode.
+   */
+  const openProviderPayment = useCallback(
+    async (input: StartPaymentInput, kind: 'sub' | 'topup' = 'sub', paymentId?: string): Promise<WavePaymentRequest> => {
+      // Le code de démonstration ne voyage jamais avec une session réelle :
+      // sa présence faisait passer un paiement SycaPay pour une démo, et
+      // l'écran affichait un code à saisir au lieu de rediriger.
+      const { demoCode: _codeDemo, ...base } = {
+        ...initiateWavePayment(input.amount, input.method as 'wave', input.reference),
+        paymentId,
+        kind,
+        provider: activeProvider.id,
+      };
+      // Repli : passerelle injoignable, ou moyen non géré en ligne.
+      // Démonstration en développement seulement ; en production on refuse.
+      const enRepli =
+        activeProvider.id !== 'sycapay' || !isProviderMethod(input.method);
+      if (enRepli) {
+        if (import.meta.env.PROD) {
+          return {
+            ...base,
+            provider: activeProvider.id,
+            error: isProviderMethod(input.method)
+              ? "Paiement momentanément indisponible. Aucun montant n'a été débité — réessayez dans quelques instants."
+              : "Ce moyen de paiement n'est pas disponible en ligne.",
+          };
+        }
+        return { ...base, challenge: { kind: 'prompt', phone: input.phone ?? '', label: base.methodLabel } };
+      }
+
+      // Le numéro du payeur : celui qui vient d'être saisi, sinon celui
+      // mémorisé pour cette référence (reprise d'un paiement commencé sur
+      // cet appareil). SycaPay le refuse sans lui.
+      const phone = input.phone?.trim() || recallPayerPhone(input.reference);
+      if (phone) rememberPayerPhone(input.reference, phone);
+
+      try {
+        // La ligne de commande vient d'être créée localement : elle peut
+        // n'être pas encore visible côté base, et la passerelle répond alors
+        // « Cette transaction n'est pas la vôtre. » — on lui laisse le temps
+        // d'arriver au lieu de renvoyer une erreur au parent qui vient de
+        // choisir sa formule (rien n'est engagé chez l'opérateur).
+        const result = await startPaymentWhenVisible({ ...input, phone });
+        if (!result.ok || !result.challenge) {
+          return {
+            ...base,
+            provider: activeProvider.id,
+            challenge: { kind: 'prompt', phone: input.phone ?? '', label: activeProvider.label },
+            error: result.error ?? 'Paiement refusé.',
+          };
+        }
+        return {
+          ...base,
+          provider: activeProvider.id,
+          challenge: result.challenge,
+          expiresAt: result.expiresAt ?? base.expiresAt,
+          steps: stepsFor(result.challenge, input.amount),
+        };
+      } catch (err) {
+        // Panne de passerelle : on dit ce qu'on sait, sans solde ni invitation
+        // à réessayer si l'appel a pu être engagé chez l'opérateur.
+        const message = (err as Error).message;
+        return {
+          ...base,
+          provider: activeProvider.id,
+          challenge: { kind: 'prompt', phone: input.phone ?? '', label: activeProvider.label },
+          error: message,
+        };
+      }
+    },
+    [activeProvider.id, activeProvider.label],
+  );
+
+  /**
+   * Rattrapage : interroge le fournisseur sur une référence et, si la
+   * transaction est réglée, recharge l'état local depuis Supabase (c'est le
+   * serveur qui a soldé, via le webhook ou ce statusV2).
+   *
+   * C'est ce que l'écran d'attente appelle en boucle quand le webhook est
+   * passé par-dessus : un client qui a payé mais fermé l'onglet retrouve son
+   * abonnement.
+   */
+  const syncPaymentFromProvider = useCallback(
+    async (reference: string): Promise<PaymentStatus> => {
+      if (activeProvider.id === 'demo') {
+        // En démo il n'y a pas d'opérateur : c'est le code saisi qui décide.
+        return { status: 'pending', reference };
+      }
+      const status = await checkPaymentStatus(reference);
+      if (status.status === 'paid') await refreshRemote();
+      return status;
+    },
+    [activeProvider.id, refreshRemote],
+  );
+
   // Paiement d'un abonnement en attente (avec déduplication).
   // Espèces → pending (encaissement au comptoir par le Caissier).
   // Wave/OM/carte → demande pending à confirmer (manuelle ou code Wave).
   // 'balance' REFUSÉ : un abonnement ne se paie jamais avec la carte
-  // (la carte sert aux tickets repas). InTouch / espèces uniquement.
+  // (la carte sert aux tickets repas). Wave / espèces uniquement.
   const paySubscription = useCallback(
     (subscriptionId: string, method: ORestoPaymentMethod, subOverride?: Subscription) => {
       if (method === 'balance') {
-        throw new Error('Abonnement : paiement par carte impossible — payez via InTouch ou en espèces. La carte sert aux tickets repas.');
+        throw new Error('Abonnement : paiement par carte impossible — payez via Wave ou en espèces. La carte sert aux tickets repas.');
       }
       // subOverride : objet frais retourné par subscribe() — permet d'enchaîner
       // subscribe() + paySubscription() dans le même handler (state pas encore à jour).
@@ -782,14 +1367,15 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       if (!sub) throw new Error('Abonnement introuvable');
       if (sub.status === 'cancelled') throw new Error('Abonnement annulé');
       const formula = formulas.find((f) => f.id === sub.formulaId);
-      if (!formula) throw new Error('Formule inconnue');
+      if (!formula && sub.formulaId !== 'TICKET-JOUR') throw new Error('Formule inconnue');
+      const price = sub.formulaId === 'TICKET-JOUR' ? (dayTicket?.price ?? 0) : (formula?.price ?? 0);
       // Déduplication : réutiliser le pending existant même méthode
       const existingPending = payments.find(
         (p) => p.subscriptionId === subscriptionId && p.status === 'pending' && p.method === method,
       );
       if (existingPending) {
         if (isMobileMethod(method)) {
-          const wave = initiateWavePayment(formula.price, method, existingPending.reference);
+          const wave = initiateWavePayment(price, method, existingPending.reference);
           return { payment: existingPending, activated: false, wave };
         }
         return { payment: existingPending, activated: false };
@@ -799,35 +1385,41 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const payment: ORestoPayment = {
         id: uid('P'),
         subscriptionId: sub.id,
-        amount: formula.price,
+        amount: price,
         method,
         status: 'pending',
         reference,
         createdAt: now.toISOString(),
       };
       setPayments((prev) => [...prev, payment]);
-      supabase.from('oresto_payments').insert({
-        id: payment.id,
-        subscription_id: payment.subscriptionId,
-        client_username: sub.clientUsername,
-        formula_id: sub.formulaId,
-        amount: payment.amount,
-        method: payment.method,
-        status: payment.status,
-        reference: payment.reference,
-      }).then(() => undefined, () => undefined);
+      // Le paiement référence l'abonnement : il attend son écriture pour ne
+      // jamais violer la clé étrangère (voir persistAfterParent).
+      void persistAfterParent('oresto_payments', payment.subscriptionId, () =>
+        supabase.from('oresto_payments').insert({
+          id: payment.id,
+          subscription_id: payment.subscriptionId,
+          client_username: sub.clientUsername,
+          formula_id: sub.formulaId,
+          amount: payment.amount,
+          method: payment.method,
+          status: payment.status,
+          reference: payment.reference,
+          // Contexte de règlement : le webhook active l'abonnement lié, et
+          // n'a pas d'autre moyen de savoir à qui il appartient.
+          child_id: sub.childId ?? null,
+        }));
       if (!needsExternalConfirm(method)) return { payment, activated: false };
       if (isMobileMethod(method)) {
-        const wave = initiateWavePayment(formula.price, method, reference);
+        const wave = initiateWavePayment(price, method, reference);
         return { payment, activated: false, wave };
       }
       return { payment, activated: false };
     },
-    [formulas, subscriptions, payments],
+    [formulas, subscriptions, payments, dayTicket],
   );
 
   // Règle carte : un abonnement ne se paie JAMAIS avec le solde prépayé
-  // (InTouch / espèces / Wave uniquement). La carte sert aux tickets repas.
+  // (Wave / espèces uniquement). La carte sert aux tickets repas.
 
   // Crédite les repas d'un ticket (abonnement actif existant ou mini-abonnement ticket)
   const creditTicketMeals = useCallback(
@@ -840,9 +1432,9 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         setSubscriptions((prev) =>
           prev.map((s) => (s.id === existing.id ? { ...s, mealsRemaining: s.mealsRemaining + formula.mealsIncluded } : s)),
         );
-        supabase.from('subscriptions').update({
+        persist('subscriptions', supabase.from('subscriptions').update({
           meals_remaining: existing.mealsRemaining + formula.mealsIncluded,
-        }).eq('id', existing.id).then(() => undefined, () => undefined);
+        }).eq('id', existing.id));
         return { added: formula.mealsIncluded, subscriptionId: existing.id };
       }
       const ticket: Subscription = {
@@ -850,13 +1442,13 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         clientUsername,
         formulaId,
         startDate: now.toISOString(),
-        endDate: new Date(now.getTime() + formula.durationDays * 86400000).toISOString(),
+        endDate: endOfMonthIso(now),
         status: 'active',
         mealsRemaining: formula.mealsIncluded,
         qrToken: getClientQrToken(clientUsername),
       };
       setSubscriptions((prev) => [...prev, ticket]);
-      supabase.from('subscriptions').insert({
+      const written = persist('subscriptions', supabase.from('subscriptions').insert({
         id: ticket.id,
         client_username: ticket.clientUsername,
         formula_id: ticket.formulaId,
@@ -865,10 +1457,56 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         status: ticket.status,
         meals_remaining: ticket.mealsRemaining,
         qr_token: ticket.qrToken,
-      }).then(() => undefined, () => undefined);
+      }));
+      parentWrites.set(ticket.id, written);
+      void written.finally(() => {
+        parentWrites.delete(ticket.id);
+      });
       return { added: formula.mealsIncluded, subscriptionId: ticket.id };
     },
     [formulas, subscriptions],
+  );
+
+  /** Achat du ticket du jour pour un enfant : +1 repas, expirant fin de mois civil. */
+  const buyDayTicket = useCallback(
+    (clientUsername: string, childId: string, method: ORestoPaymentMethod) => {
+      if (!dayTicket?.active || !Number.isFinite(dayTicket.price) || dayTicket.price <= 0) {
+        throw new Error("Aucun ticket du jour publié. Revenez après sa publication par la cantine.");
+      }
+      const child = childrenList.find((c) => c.id === childId);
+      if (!child) throw new Error('Enfant introuvable.');
+      const now = new Date();
+      const sub: Subscription = {
+        id: uid('S'),
+        clientUsername,
+        formulaId: 'TICKET-JOUR',
+        startDate: now.toISOString(),
+        endDate: endOfMonthIso(now),
+        status: 'pending',
+        mealsRemaining: 0,
+        qrToken: child.qrToken,
+        childId: child.id,
+      };
+      setSubscriptions((prev) => [...prev, sub]);
+      const written = persist('subscriptions', supabase.from('subscriptions').insert({
+        id: sub.id,
+        client_username: sub.clientUsername,
+        formula_id: sub.formulaId,
+        start_date: sub.startDate,
+        end_date: sub.endDate,
+        status: sub.status,
+        meals_remaining: sub.mealsRemaining,
+        qr_token: sub.qrToken,
+        child_id: sub.childId ?? null,
+      }));
+      parentWrites.set(sub.id, written);
+      void written.finally(() => {
+        parentWrites.delete(sub.id);
+      });
+      const { payment, wave } = paySubscription(sub.id, method, sub);
+      return { subscription: sub, payment, wave };
+    },
+    [childrenList, dayTicket, paySubscription],
   );
 
   // Client : reprend un paiement mobile en attente (instructions + code actualisés).
@@ -895,14 +1533,22 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const created = new Date(payment.createdAt).getTime();
       if (Number.isFinite(created) && Date.now() - created > WAVE_TTL_MS) {
         setPayments((prev) => prev.map((p) => (p.id === paymentId ? { ...p, status: 'failed' as const } : p)));
-        supabase.from('oresto_payments').update({ status: 'failed' }).eq('id', paymentId).then(() => undefined, () => undefined);
+        persist('oresto_payments', supabase.from('oresto_payments').update({ status: 'failed' }).eq('id', paymentId));
         return { ok: false, message: 'Demande expirée (15 min). Relancez le paiement.' };
+      }
+      // Hors développement, le code de démonstration n'existe pas : personne ne
+      // peut valider un paiement depuis l'application. Seul le webhook solde.
+      if (import.meta.env.PROD) {
+        return {
+          ok: false,
+          message: 'Le paiement est confirmé automatiquement par la passerelle. Rechargez la page dans un instant.',
+        };
       }
       if (!checkWaveCode(payment.reference, code)) {
         return { ok: false, message: 'Code incorrect : vérifiez le code à 6 chiffres reçu après votre envoi.' };
       }
       setPayments((prev) => prev.map((p) => (p.id === paymentId ? { ...p, status: 'paid' as const } : p)));
-      supabase.from('oresto_payments').update({ status: 'paid' }).eq('id', paymentId).then(() => undefined, () => undefined);
+      persist('oresto_payments', supabase.from('oresto_payments').update({ status: 'paid' }).eq('id', paymentId));
       clearWaveCode(payment.reference);
       // Discriminant : abonnement d'abord (subscriptionId), ticket ensuite.
       if (payment.subscriptionId) {
@@ -927,6 +1573,32 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     [payments, activateSubscription, creditTicketMeals],
   );
 
+  /**
+   * Horodatage du règlement.
+   *
+   * La colonne `settled_at` fait foi en comptabilité, et le navigateur n'a
+   * pas le droit de l'écrire : c'est le serveur (clé de service) qui la pose
+   * après avoir vérifié que l'appelant est du personnel. On ne fait donc
+   * qu'un seul appel — et on reporte sa confirmation en local pour que
+   * l'écran et la comptabilité locale voient le même état.
+   */
+  const settleOnServer = useCallback((paymentId: string, delayMs = 0) => {
+    void (async () => {
+      if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+      const result = await settlePaymentOnServer(paymentId);
+      if (!result.ok) {
+        // Échec assumé : l'encaissement n'est pas « validé », donc pas
+        // comptabilisé. Aucun montant inventé.
+        console.warn('[O RESTO] règlement non validé par le serveur —', result.error ?? 'raison inconnue');
+        return;
+      }
+      const settledAt = result.settledAt ?? new Date().toISOString();
+      setPayments((prev) => prev.map((p) => (
+        p.id === paymentId ? { ...p, status: 'paid' as const, paidAt: p.paidAt ?? settledAt, settledAt } : p
+      )));
+    })();
+  }, []);
+
   // Staff : encaisse les espèces → paiement soldé + abonnement activé.
   // N'accepte que cash avec subscriptionId (tickets Wave/OM/carte → coche manuelle).
   const confirmCashPayment = useCallback(
@@ -935,11 +1607,13 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       if (!payment || payment.status !== 'pending' || !payment.subscriptionId) return false;
       if (payment.method !== 'cash') return false;
       setPayments((prev) => prev.map((p) => (p.id === paymentId ? { ...p, status: 'paid' as const } : p)));
-      supabase.from('oresto_payments').update({ status: 'paid' }).eq('id', paymentId).then(() => undefined, () => undefined);
+      persist('oresto_payments', supabase.from('oresto_payments').update({ status: 'paid' }).eq('id', paymentId));
+      // L'horodatage de règlement, c'est le serveur qui le pose (seul habilité).
+      settleOnServer(paymentId);
       activateSubscription(payment.subscriptionId);
       return true;
     },
-    [payments, activateSubscription],
+    [payments, activateSubscription, settleOnServer],
   );
 
   // Encaissement comptant en une passe (sans pending stale) : crée un paiement
@@ -955,31 +1629,23 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const payment: ORestoPayment = {
         id: uid('P'), subscriptionId: sub.id, amount: formula.price,
         method: 'cash', status: 'paid', reference, createdAt: now.toISOString(),
-      };
-      setPayments((prev) => [...prev, payment]);
-      supabase.from('oresto_payments').insert({
+      };      setPayments((prev) => [...prev, payment]);
+      persist('oresto_payments', supabase.from('oresto_payments').insert({
         id: payment.id, subscription_id: payment.subscriptionId, client_username: sub.clientUsername,
         formula_id: sub.formulaId, amount: payment.amount, method: 'cash',
         status: 'paid', reference: payment.reference,
-      }).then(() => undefined, () => undefined);
-      const startDate = now.toISOString();
-      const endDate = new Date(now.getTime() + formula.durationDays * 86400000).toISOString();
-      setSubscriptions((prev) => prev.map((s) => {
-        if (s.id === subscriptionId) {
-          return { ...s, status: 'active' as const, mealsRemaining: Math.max(s.mealsRemaining, formula.mealsIncluded), startDate, endDate };
-        }
-        const sameOwner = sub.childId
-          ? s.childId === sub.childId
-          : !s.childId && s.clientUsername === sub.clientUsername;
-        if (sameOwner && s.status === 'active') return { ...s, status: 'expired' as const };
-        return s;
       }));
-      supabase.from('subscriptions').update({
-        status: 'active', meals_remaining: formula.mealsIncluded, start_date: startDate, end_date: endDate,
-      }).eq('id', subscriptionId).then(() => undefined, () => undefined);
+      // Le règlement est horodaté par le serveur : on lui laisse le temps de
+      // voir la ligne qu'on vient d'écrire (l'insertion part en parallèle).
+      settleOnServer(payment.id, 700);
+      // Activation par la MÊME règle que les autres canaux : une période
+      // future (réabonnement de fin de mois) garde ses bornes, et le quota
+      // de repas repart de zéro (pas de report d'un mois sur l'autre).
+      activateSubscription(subscriptionId);
+      void setParentActive(sub.clientUsername, true);
       return payment;
     },
-    [subscriptions, formulas],
+    [subscriptions, formulas, setParentActive, activateSubscription, settleOnServer],
   );
 
   // Staff (Caissier) : confirme la réception d'un paiement EXTERNE (Wave/OM/espèces/carte).
@@ -990,7 +1656,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const payment = payments.find((p) => p.id === paymentId);
       if (!payment || payment.status !== 'pending') return false;
       setPayments((prev) => prev.map((p) => (p.id === paymentId ? { ...p, status: 'paid' as const } : p)));
-      supabase.from('oresto_payments').update({ status: 'paid' }).eq('id', paymentId).then(() => undefined, () => undefined);
+      persist('oresto_payments', supabase.from('oresto_payments').update({ status: 'paid' }).eq('id', paymentId));
+      settleOnServer(paymentId);
       if (payment.reference) clearWaveCode(payment.reference);
       // Abonnement d'abord, ticket ensuite (évite de transformer un abo en crédit)
       if (payment.subscriptionId) {
@@ -1017,7 +1684,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       }
       return true;
     },
-    [payments, activateSubscription, creditTicketMeals],
+    [payments, activateSubscription, creditTicketMeals, settleOnServer],
   );
 
   // Annulation d'une réservation en attente (+ paiements en attente, tickets inclus)
@@ -1026,13 +1693,13 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const target = subscriptions.find((s) => s.id === subscriptionId);
       setSubscriptions((prev) => prev.map((s) => (s.id === subscriptionId && s.status === 'pending' ? { ...s, status: 'cancelled' as const } : s)));
       setPayments((prev) => prev.map((p) => (p.subscriptionId === subscriptionId && p.status === 'pending' ? { ...p, status: 'cancelled' as const } : p)));
-      supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', subscriptionId).then(() => undefined, () => undefined);
-      supabase.from('oresto_payments').update({ status: 'cancelled' }).eq('subscription_id', subscriptionId).then(() => undefined, () => undefined);
+      persist('subscriptions', supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', subscriptionId));
+      persist('oresto_payments', supabase.from('oresto_payments').update({ status: 'cancelled' }).eq('subscription_id', subscriptionId));
       if (target) {
         // Annule aussi les tickets externes en attente du même client/formule + nettoie intents/codes
-        supabase.from('oresto_payments').update({ status: 'cancelled' })
+        persist('oresto_payments', supabase.from('oresto_payments').update({ status: 'cancelled' })
           .eq('client_username', target.clientUsername).eq('formula_id', target.formulaId).eq('status', 'pending')
-          .then(() => undefined, () => undefined);
+          );
         setPayments((prev) => prev.map((p) =>
           p.status === 'pending' && !p.subscriptionId && p.clientUsername === target.clientUsername && p.formulaId === target.formulaId
             ? { ...p, status: 'cancelled' as const } : p));
@@ -1046,7 +1713,17 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     [subscriptions],
   );
 
-  const renewSubscription = useCallback(    (subscriptionId: string, method: ORestoPaymentMethod) => {
+  /**
+   * Réabonnement mensuel.
+   *
+   * On ne réutilise PAS la carte en cours : on prépare la PÉRIODE SUIVANTE
+   * (lendemain de la fin, bornée à la fin de son mois). La carte actuelle
+   * reste utilisable jusqu'à son terme, puis la nouvelle prend le relais.
+   * Les repas non consommés ne se reportent jamais : la nouvelle période
+   * repart du quota de la formule.
+   */
+  const renewSubscription = useCallback(
+    (subscriptionId: string, method: ORestoPaymentMethod) => {
       // Renouvellement = nouvel abonnement : jamais payé avec la carte.
       if (method === 'balance') return null;
       const sub = subscriptions.find((s) => s.id === subscriptionId);
@@ -1055,22 +1732,73 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       if (sub.status === 'pending' || sub.status === 'cancelled') return null;
       const formula = formulas.find((f) => f.id === sub.formulaId);
       if (!formula) return null;
-      // Déduplication : pending existant même méthode
-      const existingPending = payments.find(
-        (p) => p.subscriptionId === subscriptionId && p.status === 'pending' && p.method === method,
-      );
-      if (existingPending) {
-        if (isMobileMethod(method)) {
-          const wave = initiateWavePayment(formula.price, method, existingPending.reference);
-          return { payment: existingPending, wave };
-        }
-        return { payment: existingPending };
-      }
       const now = new Date();
+      const currentEndMs = new Date(sub.endDate).getTime();
+      const ownerKey = sub.childId ?? `parent:${sub.clientUsername}`;
+
+      // Renouvellement déjà préparé (période future en attente ou déjà
+      // payée) : on réutilise la même période au lieu d'en empiler une autre.
+      const already = subscriptions.find(
+        (s) =>
+          s.id !== sub.id
+          && (s.childId ?? `parent:${s.clientUsername}`) === ownerKey
+          && s.formulaId === sub.formulaId
+          && s.status !== 'cancelled'
+          && new Date(s.startDate).getTime() > currentEndMs - 86400000,
+      );
+      if (already) {
+        const pending = payments.find(
+          (p) => p.subscriptionId === already.id && p.status === 'pending' && p.method === method,
+        );
+        if (pending) {
+          const wave = isMobileMethod(method)
+            ? initiateWavePayment(pending.amount, method, pending.reference)
+            : undefined;
+          return { payment: pending, wave };
+        }
+        if (already.status === 'active') return null;
+        return null;
+      }
+
+      // Période suivante : le lendemain de la fin en cours, jamais avant.
+      const start = nextPeriodStart(sub.endDate, now);
+      const end = endOfThatMonth(start);
+      const renewal: Subscription = {
+        id: uid('S'),
+        clientUsername: sub.clientUsername,
+        formulaId: sub.formulaId,
+        childId: sub.childId,
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        status: 'pending',
+        mealsRemaining: formula.mealsIncluded,
+        qrToken: sub.qrToken || (sub.childId
+          ? childrenList.find((c) => c.id === sub.childId)?.qrToken ?? getClientQrToken(sub.clientUsername)
+          : getClientQrToken(sub.clientUsername)),
+      };
+      setSubscriptions((prev) => [...prev, renewal]);
+      const written = persist('subscriptions', supabase.from('subscriptions').insert({
+        id: renewal.id,
+        client_username: renewal.clientUsername,
+        formula_id: renewal.formulaId,
+        start_date: renewal.startDate,
+        end_date: renewal.endDate,
+        status: renewal.status,
+        meals_remaining: renewal.mealsRemaining,
+        qr_token: renewal.qrToken,
+        child_id: renewal.childId ?? null,
+      }));
+      parentWrites.set(renewal.id, written);
+      void written.finally(() => {
+        parentWrites.delete(renewal.id);
+      });
+
       const reference = `PAY-${Date.now().toString(36).toUpperCase()}`;
       const payment: ORestoPayment = {
         id: uid('P'),
-        subscriptionId: sub.id,
+        subscriptionId: renewal.id,
+        clientUsername: sub.clientUsername,
+        formulaId: sub.formulaId,
         amount: formula.price,
         method,
         status: 'pending',
@@ -1078,7 +1806,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         createdAt: now.toISOString(),
       };
       setPayments((prev) => [...prev, payment]);
-      supabase.from('oresto_payments').insert({
+      persist('oresto_payments', supabase.from('oresto_payments').insert({
         id: payment.id,
         subscription_id: payment.subscriptionId,
         client_username: sub.clientUsername,
@@ -1087,7 +1815,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         method: payment.method,
         status: payment.status,
         reference: payment.reference,
-      }).then(() => undefined, () => undefined);
+        child_id: sub.childId ?? null,
+      }));
       // Espèces : le Caissier encaisse au comptoir (Abonnés & paiements).
       // Wave : code à 6 chiffres. OM/carte : coche manuelle (pas de code).
       if (!needsExternalConfirm(method)) return { payment };
@@ -1097,7 +1826,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       }
       return { payment };
     },
-    [subscriptions, formulas, payments],
+    [subscriptions, formulas, payments, childrenList],
   );
 
   // Achat d'un ticket repas (menu de la semaine) : crédite des repas SANS résilier
@@ -1110,7 +1839,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const formula = formulas.find((f) => f.id === formulaId);
       if (!formula) throw new Error('Formule inconnue');
       if (method === 'balance' && formula.kind !== 'ticket') {
-        throw new Error('Abonnement : paiement par carte impossible — payez via InTouch ou en espèces. La carte sert aux tickets repas.');
+        throw new Error('Abonnement : paiement par carte impossible — payez via Wave ou en espèces. La carte sert aux tickets repas.');
       }
       const now = new Date();
       const reference = `PAY-${Date.now().toString(36).toUpperCase()}`;
@@ -1142,18 +1871,18 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         setWalletTxs((prev) => [...prev, tx]);
         setWallets((prev) => prev.map((w) => (w.childId === childId ? { ...w, balance: w.balance - formula.price } : w)));
         setPayments((prev) => [...prev, payment]);
-        supabase.from('wallet_transactions').insert({
+        persist('wallet_transactions', supabase.from('wallet_transactions').insert({
           id: tx.id, child_id: tx.childId, kind: tx.kind, amount: tx.amount,
           method: 'card', status: 'paid', reference: tx.reference, label: tx.label,
-        }).then(() => undefined, () => undefined);
-        supabase.from('wallets').upsert({ child_id: childId, balance: nextBalance })
-          .then(() => undefined, () => undefined);
-        supabase.from('oresto_payments').insert({
+        }));
+        persist('wallets', supabase.from('wallets').upsert({ child_id: childId, balance: nextBalance })
+          );
+        persist('oresto_payments', supabase.from('oresto_payments').insert({
           id: payment.id, subscription_id: payment.subscriptionId,
           client_username: clientUsername, formula_id: formulaId,
           amount: payment.amount, method: payment.method, status: payment.status,
           reference: payment.reference,
-        }).then(() => undefined, () => undefined);
+        }));
         return { payment, addedMeals };
       }
       if (needsExternalConfirm(method)) {
@@ -1168,7 +1897,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           createdAt: now.toISOString(),
         };
         setPayments((prev) => [...prev, payment]);
-        supabase.from('oresto_payments').insert({
+        persist('oresto_payments', supabase.from('oresto_payments').insert({
           id: payment.id,
           subscription_id: null,
           client_username: clientUsername,
@@ -1177,7 +1906,16 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           method: payment.method,
           status: payment.status,
           reference: payment.reference,
-        }).then(() => undefined, () => undefined);
+          // Le ticket n'a pas d'abonnement : le webhook déduit le bénéficiaire
+          // de ces colonnes, et c'est child_id qui fait la différence entre
+          // deux enfants d'une même famille.
+          child_id: childId ?? null,
+          // QR du bénéficiaire : sans lui, un ticket payé pour un enfant sans
+          // abonnement actif créerait un mini-abonnement au QR du parent.
+          qr_token: childId
+            ? childrenList.find((c) => c.id === childId)?.qrToken ?? getClientQrToken(clientUsername)
+            : getClientQrToken(clientUsername),
+        }));
         const intents = load<Record<string, { username: string; formulaId: string }>>(LS_KEYS.ticketIntents, {});
         save(LS_KEYS.ticketIntents, { ...intents, [payment.id]: { username: clientUsername, formulaId } });
         if (isMobileMethod(method)) {
@@ -1197,7 +1935,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         createdAt: now.toISOString(),
       };
       setPayments((prev) => [...prev, payment]);
-      supabase.from('oresto_payments').insert({
+      persist('oresto_payments', supabase.from('oresto_payments').insert({
         id: payment.id,
         subscription_id: payment.subscriptionId,
         client_username: clientUsername,
@@ -1206,7 +1944,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         method: payment.method,
         status: payment.status,
         reference: payment.reference,
-      }).then(() => undefined, () => undefined);
+      }));
       return { payment, addedMeals };
     },
     [formulas, creditTicketMeals, childrenList, wallets],
@@ -1235,7 +1973,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       };
       const nowTs = now.getTime();
       const active = subscriptions.find(
-        (s) => s.childId === childId && s.status === 'active' && new Date(s.endDate).getTime() >= nowTs,
+        (s) => s.childId === childId && isLiveSub(s, nowTs),
       );
       let subscriptionId: string;
       if (active) {
@@ -1243,9 +1981,9 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         setSubscriptions((prev) =>
           prev.map((s) => (s.id === active.id ? { ...s, mealsRemaining: s.mealsRemaining + 1 } : s)),
         );
-        supabase.from('subscriptions').update({
+        persist('subscriptions', supabase.from('subscriptions').update({
           meals_remaining: active.mealsRemaining + 1,
-        }).eq('id', active.id).then(() => undefined, () => undefined);
+        }).eq('id', active.id));
       } else {
         const pass: Subscription = {
           id: uid('S'),
@@ -1260,7 +1998,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         };
         subscriptionId = pass.id;
         setSubscriptions((prev) => [...prev, pass]);
-        supabase.from('subscriptions').insert({
+        persist('subscriptions', supabase.from('subscriptions').insert({
           id: pass.id,
           client_username: pass.clientUsername,
           formula_id: pass.formulaId,
@@ -1270,7 +2008,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           meals_remaining: pass.mealsRemaining,
           qr_token: pass.qrToken,
           child_id: pass.childId ?? null,
-        }).then(() => undefined, () => undefined);
+        }));
       }
       const payment: ORestoPayment = {
         id: uid('P'), subscriptionId,
@@ -1284,18 +2022,18 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       setWalletTxs((prev) => [...prev, tx]);
       setWallets((prev) => prev.map((w) => (w.childId === childId ? { ...w, balance: w.balance - total } : w)));
       setPayments((prev) => [...prev, payment]);
-      supabase.from('wallet_transactions').insert({
+      persist('wallet_transactions', supabase.from('wallet_transactions').insert({
         id: tx.id, child_id: tx.childId, kind: tx.kind, amount: tx.amount,
         method: 'card', status: 'paid', reference: tx.reference, label: tx.label,
-      }).then(() => undefined, () => undefined);
-      supabase.from('wallets').upsert({ child_id: childId, balance: nextBalance })
-        .then(() => undefined, () => undefined);
-      supabase.from('oresto_payments').insert({
+      }));
+      persist('wallets', supabase.from('wallets').upsert({ child_id: childId, balance: nextBalance })
+        );
+      persist('oresto_payments', supabase.from('oresto_payments').insert({
         id: payment.id, subscription_id: payment.subscriptionId,
         client_username: clientUsername, formula_id: payment.formulaId,
         amount: payment.amount, method: payment.method, status: payment.status,
         reference: payment.reference,
-      }).then(() => undefined, () => undefined);
+      }));
       return { addedMeals: 1 };
     },
     [childrenList, wallets, subscriptions],
@@ -1338,15 +2076,18 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const nextBalance = balance - total;
       setWalletTxs((prev) => [...prev, tx]);
       setWallets((prev) => prev.map((w) => (w.childId === childId ? { ...w, balance: nextBalance } : w)));
+      // La commande part en attente : c'est le superviseur qui la sert au scan
+      // du QR de l'élève. Sans cet état local, le service n'avait rien à voir.
+      setKioskOrders((prev) => [...prev, kioskOrder]);
       // Persist wallet
-      supabase.from('wallet_transactions').insert({
+      persist('wallet_transactions', supabase.from('wallet_transactions').insert({
         id: tx.id, child_id: tx.childId, kind: tx.kind, amount: tx.amount,
         method: 'card', status: 'paid', reference: tx.reference, label: tx.label,
-      }).then(() => undefined, () => undefined);
-      supabase.from('wallets').upsert({ child_id: childId, balance: nextBalance })
-        .then(() => undefined, () => undefined);
+      }));
+      persist('wallets', supabase.from('wallets').upsert({ child_id: childId, balance: nextBalance })
+        );
       // Persist kiosk order (best-effort)
-      supabase.from('kiosk_orders').insert({
+      persist('kiosk_orders', supabase.from('kiosk_orders').insert({
         id: kioskOrder.id,
         child_id: childId,
         parent_username: clientUsername,
@@ -1356,15 +2097,96 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         reference: orderRef,
         created_at: now.toISOString(),
         served_at: null,
-      }).then(() => undefined, () => undefined);
+      }));
       return { order: kioskOrder, balance: nextBalance };
     },
     [childrenList, wallets],
   );
 
+  // Le superviseur confirme la remise au scan de l'élève : la commande passe
+  // en servie (local + distant) et l'élève peut présenter de nouveau son QR
+  // sans que la même commande soit resservie.
+  const serveKioskOrder = useCallback((orderId: string) => {
+    const nowIso = new Date().toISOString();
+    setKioskOrders((prev) =>
+      prev.map((o) => (o.id === orderId && o.status === 'pending' ? { ...o, status: 'served' as KioskOrderStatus, servedAt: nowIso } : o)),
+    );
+    persist('kiosk_orders', supabase.from('kiosk_orders')
+      .update({ status: 'served', served_at: nowIso })
+      .eq('id', orderId)
+      );
+  }, []);
+
+  // Annulation d'une commande payée par carte et pas encore remise :
+  // la commande passe en 'cancelled' et le montant débité revient sur la
+  // carte prépayée de l'enfant. Une commande déjà servie ne s'annule pas.
+  const cancelKioskOrder = useCallback(
+    (orderId: string) => {
+      const order = kioskOrders.find((o) => o.id === orderId);
+      const balanceOf = (childId: string) => wallets.find((w) => w.childId === childId)?.balance ?? 0;
+      if (!order) return { ok: false, message: 'Commande introuvable.', balance: 0 };
+      if (order.status === 'cancelled') {
+        return {
+          ok: false,
+          message: `Commande ${order.reference} déjà annulée.`,
+          balance: balanceOf(order.childId),
+        };
+      }
+      if (order.status === 'served') {
+        return {
+          ok: false,
+          message: `Commande ${order.reference} déjà servie : annulation impossible, les articles ont été remis.`,
+          balance: balanceOf(order.childId),
+        };
+      }
+
+      const balance = balanceOf(order.childId);
+      const nextBalance = balance + order.total;
+      const now = new Date();
+      const rand = Math.floor(Math.random() * 36 * 36).toString(36).toUpperCase();
+      const tx: WalletTx = {
+        id: uid('W'),
+        childId: order.childId,
+        kind: 'refund',
+        amount: order.total,
+        method: 'card',
+        status: 'paid',
+        reference: `RFB-${now.getFullYear().toString().slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}-${rand}`,
+        label: `Annulation commande ${order.reference} — remboursement sur la carte`,
+        createdAt: now.toISOString(),
+      };
+
+      setWalletTxs((prev) => [...prev, tx]);
+      setWallets((prev) =>
+        prev.map((w) => (w.childId === order.childId ? { ...w, balance: nextBalance } : w)),
+      );
+      setKioskOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: 'cancelled' as KioskOrderStatus } : o)),
+      );
+
+      persist('wallet_transactions', supabase.from('wallet_transactions').insert({
+        id: tx.id, child_id: tx.childId, kind: 'refund', amount: tx.amount,
+        method: 'card', status: 'paid', reference: tx.reference, label: tx.label,
+      }));
+      persist('wallets', supabase.from('wallets').upsert({ child_id: order.childId, balance: nextBalance })
+        );
+      persist('kiosk_orders', supabase.from('kiosk_orders')
+        .update({ status: 'cancelled' })
+        .eq('id', orderId)
+        );
+
+      return {
+        ok: true,
+        message: `Commande ${order.reference} annulée — ${order.total} FCFA recrédités sur la carte. Nouveau solde : ${nextBalance} FCFA.`,
+        balance: nextBalance,
+      };
+    },
+    [kioskOrders, wallets],
+  );
+
   // Créer un ticket visiteur (walk-in) pour le menu du jour — génère un QR TICKET-XXXXXX
   const createWalkInTicket = useCallback(
-    (menu: WeeklyMenu, method: 'cash' | 'intouch' | 'wave') => {
+    (menu: WeeklyMenu, method: 'cash' | 'wave') => {
       const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
       const token = `TICKET-${Date.now().toString(36).toUpperCase()}${rand}`;
       const reference = `WLK-${Date.now().toString(36).toUpperCase()}`;
@@ -1418,11 +2240,15 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         };
         if (!pendingSub) {
           setSubscriptions((prev) => [...prev, sub]);
-          supabase.from('subscriptions').insert({
+          const written = persist('subscriptions', supabase.from('subscriptions').insert({
             id: sub.id, client_username: sub.clientUsername, formula_id: sub.formulaId,
             start_date: sub.startDate, end_date: sub.endDate, status: sub.status,
             meals_remaining: sub.mealsRemaining, qr_token: sub.qrToken,
-          }).then(() => undefined, () => undefined);
+          }));
+          parentWrites.set(sub.id, written);
+          void written.finally(() => {
+            parentWrites.delete(sub.id);
+          });
         }
         const reference = `PAY-${Date.now().toString(36).toUpperCase()}`;
         const payment: ORestoPayment = {
@@ -1430,24 +2256,15 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           method, status: 'paid', reference, createdAt: now.toISOString(),
         };
         setPayments((prev) => [...prev, payment]);
-        supabase.from('oresto_payments').insert({
-          id: payment.id, subscription_id: payment.subscriptionId, client_username: name,
-          formula_id: formulaId, amount: payment.amount, method: payment.method,
-          status: 'paid', reference: payment.reference,
-        }).then(() => undefined, () => undefined);
-        // Activation directe (sans re-lecture stale)
-        const startDate = now.toISOString();
-        const endDate = new Date(now.getTime() + formula.durationDays * 86400000).toISOString();
-        setSubscriptions((prev) => prev.map((s) => {
-          if (s.id === sub.id) {
-            return { ...s, status: 'active' as const, mealsRemaining: Math.max(s.mealsRemaining, formula.mealsIncluded), startDate, endDate };
-          }
-          if (s.clientUsername === name && s.status === 'active') return { ...s, status: 'expired' as const };
-          return s;
-        }));
-        supabase.from('subscriptions').update({
-          status: 'active', meals_remaining: formula.mealsIncluded, start_date: startDate, end_date: endDate,
-        }).eq('id', sub.id).then(() => undefined, () => undefined);
+        void persistAfterParent('oresto_payments', payment.subscriptionId, () =>
+          supabase.from('oresto_payments').insert({
+            id: payment.id, subscription_id: payment.subscriptionId, client_username: name,
+            formula_id: formulaId, amount: payment.amount, method: payment.method,
+            status: 'paid', reference: payment.reference,
+          }));
+        // Activation par la règle commune : période du mois en cours et
+        // quota NEUF (les repas d'un mois ne se reportent pas).
+        activateSubscription(sub.id, sub);
         return { payment, addedMeals: formula.mealsIncluded, activated: true };
       }
       const pending = subscriptions.find(
@@ -1457,7 +2274,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const { payment, wave } = paySubscription(sub.id, method);
       return { payment, wave, addedMeals: 0, activated: false };
     },
-    [formulas, subscriptions, subscribe, paySubscription, buyTicket],
+    [formulas, subscriptions, subscribe, paySubscription, buyTicket, activateSubscription],
   );
 
   const validateMeal = useCallback(
@@ -1476,7 +2293,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           childId,
         };
         setValidations((prev) => [...prev, validation]);
-        supabase.from('validations').insert({
+        persist('validations', supabase.from('validations').insert({
           id: validation.id,
           qr_token: validation.qrToken,
           client_username: validation.clientUsername,
@@ -1484,7 +2301,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           status: 'rejected',
           reason: message,
           child_id: childId ?? null,
-        }).then(() => undefined, () => undefined);
+        }));
         return { ok: false, message, validation };
       };
 
@@ -1509,7 +2326,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           childId: undefined,
         };
         setValidations((prev) => [...prev, validation]);
-        supabase.from('validations').insert({
+        persist('validations', supabase.from('validations').insert({
           id: validation.id,
           qr_token: validation.qrToken,
           client_username: validation.clientUsername,
@@ -1517,7 +2334,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           status: 'accepted',
           reason: null,
           child_id: null,
-        }).then(() => undefined, () => undefined);
+        }));
         return { ok: true, message: 'Repas visiteur validé ✓', validation };
       }
 
@@ -1525,9 +2342,12 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const child = childrenList.find((c) => c.qrToken.toUpperCase() === token);
       if (child) {
         const childName = `${child.firstName} ${child.lastName}`;
-        const nowMsChild = now.getTime();
-        const liveChildSub = subscriptions.find(
-          (s) => s.childId === child.id && s.status === 'active' && new Date(s.endDate).getTime() >= nowMsChild,
+         const nowMsChild = now.getTime();
+         if (isParentInactive(child.parentUsername)) {
+           return fail(`Compte parent inactif : contactez la cantine pour réactiver le compte.`, child.parentUsername, child.id);
+         }
+         const liveChildSub = subscriptions.find(
+          (s) => s.childId === child.id && isLiveSub(s, nowMsChild),
         );
         const formulaChild = liveChildSub ? formulas.find((f) => f.id === liveChildSub.formulaId) : undefined;
         const maxPerDayChild = 1;
@@ -1544,11 +2364,11 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           };
           setValidations((prev) => [...prev, validation]);
           setSubscriptions((prev) => prev.map((s) => (s.id === liveChildSub.id ? { ...s, mealsRemaining: s.mealsRemaining - 1 } : s)));
-          supabase.from('subscriptions').update({ meals_remaining: liveChildSub.mealsRemaining - 1 }).eq('id', liveChildSub.id).then(() => undefined, () => undefined);
-          supabase.from('validations').insert({
+          persist('subscriptions', supabase.from('subscriptions').update({ meals_remaining: liveChildSub.mealsRemaining - 1 }).eq('id', liveChildSub.id));
+          persist('validations', supabase.from('validations').insert({
             id: validation.id, qr_token: token, client_username: validation.clientUsername,
             establishment_id: establishmentId, status: 'accepted', reason: null, child_id: child.id,
-          }).then(() => undefined, () => undefined);
+          }));
           return { ok: true, message: `Repas validé pour ${childName} (${child.className}). Repas restants : ${liveChildSub.mealsRemaining - 1}.`, validation };
         }
         // Sans abonnement : débit du prix du repas sur la carte
@@ -1566,20 +2386,20 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           status: 'paid', reference, label, createdAt: now.toISOString(),
         }]);
         setWallets((prev) => prev.map((w) => (w.childId === child.id ? { ...w, balance: w.balance - mealPrice } : w)));
-        supabase.from('wallet_transactions').insert({
+        persist('wallet_transactions', supabase.from('wallet_transactions').insert({
           id: txId, child_id: child.id, kind: 'debit', amount: mealPrice,
           method: 'card', status: 'paid', reference, label,
-        }).then(() => undefined, () => undefined);
-        supabase.from('wallets').upsert({ child_id: child.id, balance: balance - mealPrice }).then(() => undefined, () => undefined);
+        }));
+        persist('wallets', supabase.from('wallets').upsert({ child_id: child.id, balance: balance - mealPrice }));
         const validation: MealValidation = {
           id: uid('V'), qrToken: token, clientUsername: child.parentUsername,
           establishmentId, validatedAt: now.toISOString(), status: 'accepted', childId: child.id,
         };
         setValidations((prev) => [...prev, validation]);
-        supabase.from('validations').insert({
+        persist('validations', supabase.from('validations').insert({
           id: validation.id, qr_token: token, client_username: validation.clientUsername,
           establishment_id: establishmentId, status: 'accepted', reason: null, child_id: child.id,
-        }).then(() => undefined, () => undefined);
+        }));
         return { ok: true, message: `Repas validé pour ${childName}. Débité ${mealPrice} FCFA. Solde : ${balance - mealPrice} FCFA.`, validation };
       }
 
@@ -1587,7 +2407,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       // D'abord les actifs dont le token correspond, puis les personnels actifs,
       // puis seulement les inactifs (pour un message d'erreur précis).
       const nowMs = now.getTime();
-      const isLive = (s: Subscription) => s.status === 'active' && new Date(s.endDate).getTime() >= nowMs;
+      const isLive = (s: Subscription) => isLiveSub(s, nowMs);
       const candidates = subscriptions.filter(
         (s) => s.qrToken.toUpperCase() === token || isPersonalQrToken(s.clientUsername, token),
       );
@@ -1595,10 +2415,11 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         ?? candidates.find((s) => isLive(s))
         ?? candidates.sort((a, b) => (a.status === 'active' ? 0 : 1) - (b.status === 'active' ? 0 : 1))[0];
       if (!sub) return fail('QR Code inconnu : aucun abonnement associé.');
-      if (sub.status !== 'active') return fail('Abonnement inactif ou expiré.', sub.clientUsername);
-      if (new Date(sub.endDate).getTime() < now.getTime()) {
+       if (sub.status !== 'active') return fail('Abonnement inactif ou expiré.', sub.clientUsername);
+       if (isParentInactive(sub.clientUsername)) return fail(`Compte parent inactif : contactez la cantine pour réactiver le compte.`, sub.clientUsername);
+       if (new Date(sub.endDate).getTime() < now.getTime()) {
         setSubscriptions((prev) => prev.map((s) => (s.id === sub.id ? { ...s, status: 'expired' as const } : s)));
-        supabase.from('subscriptions').update({ status: 'expired' }).eq('id', sub.id).then(() => undefined, () => undefined);
+        persist('subscriptions', supabase.from('subscriptions').update({ status: 'expired' }).eq('id', sub.id));
         return fail('Abonnement expiré.', sub.clientUsername);
       }
       if (sub.mealsRemaining <= 0) return fail('Plus de repas disponibles sur cet abonnement.', sub.clientUsername);
@@ -1624,8 +2445,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       };
       setValidations((prev) => [...prev, validation]);
       setSubscriptions((prev) => prev.map((s) => (s.id === sub.id ? { ...s, mealsRemaining: s.mealsRemaining - 1 } : s)));
-      supabase.from('subscriptions').update({ meals_remaining: sub.mealsRemaining - 1 }).eq('id', sub.id).then(() => undefined, () => undefined);
-      supabase.from('validations').insert({
+      persist('subscriptions', supabase.from('subscriptions').update({ meals_remaining: sub.mealsRemaining - 1 }).eq('id', sub.id));
+      persist('validations', supabase.from('validations').insert({
         id: validation.id,
         qr_token: validation.qrToken,
         client_username: validation.clientUsername,
@@ -1633,7 +2454,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         status: validation.status,
         reason: validation.reason ?? null,
         child_id: sub.childId ?? null,
-      }).then(() => undefined, () => undefined);
+      }));
       return { ok: true, message: `Repas validé pour ${sub.clientUsername}. Repas restants : ${sub.mealsRemaining - 1}.`, validation };
     },
     [subscriptions, validations, formulas, childrenList, wallets],
@@ -1648,8 +2469,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         const next = prev.map((s) => {
           if (s.status === 'active' && new Date(s.endDate).getTime() < nowMs) {
             changed = true;
-            supabase.from('subscriptions').update({ status: 'expired' }).eq('id', s.id)
-              .then(() => undefined, () => undefined);
+            persist('subscriptions', supabase.from('subscriptions').update({ status: 'expired' }).eq('id', s.id)
+              );
             return { ...s, status: 'expired' as const };
           }
           return s;
@@ -1665,10 +2486,10 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   const addEstablishment = useCallback((e: Omit<Establishment, 'id'>) => {
     const created: Establishment = { ...e, id: uid('E') };
     setEstablishments((prev) => [...prev, created]);
-    supabase.from('establishments').insert({
+    persist('establishments', supabase.from('establishments').insert({
       id: created.id, name: created.name, address: created.address ?? null,
       manager: created.manager ?? null, phone: created.phone ?? null,
-    }).then(() => undefined, () => undefined);
+    }));
   }, []);
 
   const updateEstablishment = useCallback((id: string, updates: Partial<Establishment>) => {
@@ -1679,19 +2500,19 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     if (updates.manager !== undefined) payload.manager = updates.manager ?? null;
     if (updates.phone !== undefined) payload.phone = updates.phone ?? null;
     if (Object.keys(payload).length > 0) {
-      supabase.from('establishments').update(payload).eq('id', id).then(() => undefined, () => undefined);
+      persist('establishments', supabase.from('establishments').update(payload).eq('id', id));
     }
   }, []);
 
   const deleteEstablishment = useCallback((id: string) => {
     setEstablishments((prev) => prev.filter((e) => e.id !== id));
-    supabase.from('establishments').delete().eq('id', id).then(() => undefined, () => undefined);
+    persist('establishments', supabase.from('establishments').delete().eq('id', id));
   }, []);
 
   const addFormula = useCallback((f: Omit<Formula, 'id'>) => {
     const formula: Formula = { ...f, id: uid('F') };
     setFormulas((prev) => [...prev, formula]);
-    supabase.from('formulas').insert({
+    persist('formulas', supabase.from('formulas').insert({
       id: formula.id,
       name: formula.name,
       description: formula.description,
@@ -1701,7 +2522,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       meals_included: formula.mealsIncluded,
       rules: formula.rules ?? null,
       kind: formula.kind ?? 'subscription',
-    }).then(() => undefined, () => undefined);
+    }));
   }, []);
 
   const updateFormula = useCallback((id: string, updates: Partial<Formula>) => {
@@ -1716,53 +2537,116 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     if (updates.rules !== undefined) payload.rules = updates.rules ?? null;
     if (updates.kind !== undefined) payload.kind = updates.kind;
     if (Object.keys(payload).length > 0) {
-      supabase.from('formulas').update(payload).eq('id', id).then(() => undefined, () => undefined);
+      persist('formulas', supabase.from('formulas').update(payload).eq('id', id));
     }
   }, []);
 
   const deleteFormula = useCallback((id: string) => {
     setFormulas((prev) => prev.filter((f) => f.id !== id));
-    supabase.from('formulas').delete().eq('id', id).then(() => undefined, () => undefined);
+    persist('formulas', supabase.from('formulas').delete().eq('id', id));
   }, []);
 
   // ================= Profil parent (fiche identité + contact) =================
 
+  /**
+   * Retrouve la fiche d'un parent à partir de N'IMPORTE QUEL identifiant :
+   * son numéro (clé canonique), son nom d'utilisateur Auth, ou son ancien
+   * identifiant. Un parent ne doit jamais avoir deux fiches.
+   */
   const parentProfileOf = useCallback(
-    (parentUsername: string) =>
-      parentProfiles.find((p) => p.parentUsername === parentUsername.trim().toLowerCase()),
+    (identifier: string) => {
+      const key = (identifier ?? '').trim().toLowerCase();
+      if (!key) return undefined;
+      const digits = normalizeParentPhone(identifier);
+      return parentProfiles.find(
+        (p) =>
+          p.parentUsername.toLowerCase() === key ||
+          (p.authUsername ?? '').toLowerCase() === key ||
+          (digits.length > 0 && p.phone === digits),
+      );
+    },
     [parentProfiles],
   );
 
+  /**
+   * Clé canonique d'un parent (son numéro) à partir de n'importe quel
+   * identifiant. C'est cette clé qui rattache les enfants : elle ne doit
+   * jamais dépendre de la façon dont le parent s'est connecté.
+   */
+  const parentKeyOf = useCallback(
+    (identifier: string) => parentProfileOf(identifier)?.parentUsername ?? normalizeParentPhone(identifier),
+    [parentProfileOf],
+  );
+
+  /**
+   * Fiche identité d'un parent. L'IDENTIFIANT EST LE NUMÉRO : c'est la clé
+   * que le parent utilise pour se connecter et celle à laquelle ses enfants
+   * sont rattachés. Un parent ne peut donc avoir qu'une fiche par numéro —
+   * une nouvelle fiche avec un autre identifiant pour la même personne
+   * séparerait ses enfants de son accès.
+   */
   const saveParentProfile = useCallback((parentUsername: string, firstName: string, lastName: string, phone: string) => {
-    const parent = parentUsername.trim().toLowerCase();
     const first = firstName.trim();
     const last = lastName.trim();
-    const digits = phone.replace(/\D/g, '');
-    if (!parent || !first || !last) throw new Error('Nom et prénom du parent requis');
-    if (digits.length < 9) throw new Error('Numéro de téléphone invalide (9 chiffres minimum)');
+    if (!first || !last) throw new Error('Nom et prénom du parent requis');
+    const digits = normalizeParentPhone(phone);
+    if (!isValidParentPhone(digits)) {
+      throw new Error('Numéro de téléphone invalide : 9 chiffres commençant par 6 ou 7 (ex 77 123 45 67).');
+    }
+    // L'identifiant = le numéro. Si l'appelant fournit un autre identifiant
+    // (compte de démonstration, ancienne fiche), il est conservé comme
+    // simple lien vers le compte Auth, jamais comme clé métier.
+    const parent = digits;
+    const authUser = parentUsername.trim().toLowerCase();
     const profile: ParentProfile = {
-      parentUsername: parent, firstName: first, lastName: last,
+      parentUsername: parent,
+      authUsername: authUser && authUser !== parent ? authUser : undefined,
+      firstName: first, lastName: last,
       phone: digits, updatedAt: new Date().toISOString(),
     };
     setParentProfiles((prev) => {
-      const next = prev.filter((p) => p.parentUsername !== parent);
+      // On remplace aussi l'ancienne fiche rattachée au même compte Auth :
+      // sans cela, le parent resterait « sans fiche » et serait renvoyé
+      // vers le portail de saisie en boucle.
+      const next = prev.filter(
+        (p) => p.parentUsername !== parent && (profile.authUsername ? p.authUsername !== profile.authUsername : true),
+      );
       return [...next, profile];
     });
-    supabase.from('parent_profiles').upsert({
+    persist('parent_profiles', supabase.from('parent_profiles').upsert({
       parent_username: profile.parentUsername, first_name: profile.firstName,
       last_name: profile.lastName, phone: profile.phone,
-    }).then(() => undefined, () => undefined);
+    }));
+    if (profile.authUsername) {
+      persist('parent_profiles.auth_username', supabase
+        .from('parent_profiles')
+        .update({ auth_username: profile.authUsername })
+        .eq('parent_username', profile.parentUsername));
+    }
     return profile;
   }, []);
 
   // ================= Enfants + wallet QR (espace parents) =================
 
+  /**
+   * Enfants d'un parent. Le paramètre peut être le numéro (clé canonique),
+   * le nom d'utilisateur Auth ou un ancien identifiant : on résout toujours
+   * vers la clé canonique avant de filtrer.
+   */
   const myChildren = useCallback(
-    (parentUsername: string) =>
-      childrenList
-        .filter((c) => c.parentUsername === parentUsername.trim().toLowerCase())
-        .sort((a, b) => a.firstName.localeCompare(b.firstName)),
-    [childrenList],
+    (parentIdentifier: string) => {
+      const profile = parentProfileOf(parentIdentifier);
+      const key = profile?.parentUsername ?? parentIdentifier.trim().toLowerCase();
+      const digits = normalizeParentPhone(parentIdentifier);
+      return childrenList
+        .filter(
+          (c) =>
+            c.parentUsername === key ||
+            (digits.length > 0 && c.parentUsername === digits),
+        )
+        .sort((a, b) => a.firstName.localeCompare(b.firstName));
+    },
+    [childrenList, parentProfileOf],
   );
 
   const walletOf = useCallback(
@@ -1776,15 +2660,38 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     [walletTxs],
   );
 
-  const addChild = useCallback((parentUsername: string, firstName: string, lastName: string, className: string, cycle?: SchoolCycle) => {
-    const parent = parentUsername.trim().toLowerCase();
+  /**
+   * Inscrit un enfant et lui crée sa carte + son QR.
+   *
+   * Deux garde-fous :
+   * 1. L'enfant est rattaché à la CLÉ CANONIQUE du parent (son numéro), pas
+   *    au nom d'utilisateur de la session : sinon les enfants importés par
+   *    la DAF et ceux créés par le parent ne seraient pas au même endroit.
+   * 2. On refuse un enfant déjà inscrit (même parent, même prénom, même nom,
+   *    même classe) : c'est la source des doublons d'enfants ET de QR
+   *    Cartes que le personnel constatait.
+   */
+  const addChild = useCallback((parentIdentifier: string, firstName: string, lastName: string, className: string, cycle?: SchoolCycle) => {
     const first = firstName.trim();
     const last = lastName.trim();
-    const cls = className.trim();
-    if (!parent || !first || !last || !cls) throw new Error('Nom, prénom et classe requis');
-    if (!parentProfiles.some((p) => p.parentUsername === parent)) {
-      throw new Error('Complétez d’abord votre profil parent (nom, prénom, téléphone).');
+    const cls = canonicalClassName(className);
+    if (!first || !last || !cls) throw new Error('Nom, prénom et classe requis');
+    const profile = parentProfileOf(parentIdentifier);
+    if (!profile) {
+      throw new Error('Complétez d’abord votre profil parent (nom, prénom et téléphone).');
     }
+    const parent = profile.parentUsername;
+
+    const key = childNaturalKey(parent, first, last, cls);
+    const existing = childrenList.find(
+      (c) => childNaturalKey(c.parentUsername, c.firstName, c.lastName, c.className) === key,
+    );
+    if (existing) {
+      throw new Error(
+        `${existing.firstName} ${existing.lastName} (${existing.className}) est déjà inscrit — son QR Carte existe déjà.`,
+      );
+    }
+
     const id = uid('C');
     const child: Child = {
       id, parentUsername: parent, firstName: first, lastName: last,
@@ -1793,14 +2700,124 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     };
     setChildrenList((prev) => [...prev, child]);
     setWallets((prev) => [...prev, { childId: id, balance: 0 }]);
-    supabase.from('children').insert({
+    // La carte référence l'élève : on écrit l'élève d'abord (voir
+    // persistAfterParent) pour ne jamais perdre sa carte prépayée.
+    const writtenChild = persist('children', supabase.from('children').insert({
       id: child.id, parent_username: child.parentUsername, first_name: child.firstName,
       last_name: child.lastName, class_name: child.className, cycle: child.cycle,
       qr_token: child.qrToken,
-    }).then(() => undefined, () => undefined);
-    supabase.from('wallets').upsert({ child_id: id, balance: 0 }).then(() => undefined, () => undefined);
+    }));
+    parentWrites.set(child.id, writtenChild);
+    void writtenChild.finally(() => {
+      parentWrites.delete(child.id);
+    });
+    void persistAfterParent('wallets', child.id, () =>
+      supabase.from('wallets').upsert({ child_id: id, balance: 0 }));
     return child;
-  }, [parentProfiles]);
+  }, [childrenList, parentProfileOf]);
+
+  // ================= Import Excel (admin) =================
+
+  /**
+   * Inscription d'une ligne d'import, avec écritures VÉRIFIÉES.
+   *
+   * Contrairement à addChild (tire-et-oublie, pensé pour un clic humain),
+   * chaque écriture est attendue ici : un import de 200 élèves doit dire
+   * exactement lesquels sont passés.
+   *
+   * Règles :
+   * - le parent est identifié par son NUMÉRO (son futur identifiant de
+   *   connexion). On le crée si besoin, et on le rattache à ce numéro ;
+   * - un enfant déjà inscrit (même parent, même prénom, nom, classe) n'est
+   *   PAS réinscrit : on renvoie l'existant, sans créer un second QR.
+   */
+  const importStudentRow = useCallback(
+    async (row: {
+      parentUsername: string;
+      parentNom: string;
+      parentPrenom: string;
+      parentTel: string;
+      prenom: string;
+      nom: string;
+      classe: string;
+      cycle: SchoolCycle;
+    }): Promise<{ childId: string; parentCreated: boolean; duplicate: boolean }> => {
+      // Identité canonique = numéro de téléphone du parent.
+      const digits = normalizeParentPhone(row.parentTel) || normalizeParentPhone(row.parentUsername);
+      if (!isValidParentPhone(digits)) {
+        throw new Error(
+          `Parent « ${row.parentUsername || row.parentTel || 'inconnu'} » : numéro de téléphone obligatoire (9 chiffres, ex 77 123 45 67) — c'est son identifiant de connexion.`,
+        );
+      }
+      const parent = digits;
+      let parentCreated = false;
+
+      const existingProfile = parentProfileOf(parent);
+      if (!existingProfile) {
+        if (!row.parentNom.trim() || !row.parentPrenom.trim()) {
+          throw new Error(`Parent ${formatParentPhone(parent)} inconnu : nom et prénom requis pour le créer.`);
+        }
+        const profile: ParentProfile = {
+          parentUsername: parent,
+          firstName: row.parentPrenom.trim(),
+          lastName: row.parentNom.trim(),
+          phone: parent,
+          updatedAt: new Date().toISOString(),
+        };
+        const { error: profileError } = await supabase.from('parent_profiles').upsert({
+          parent_username: profile.parentUsername,
+          first_name: profile.firstName,
+          last_name: profile.lastName,
+          phone: profile.phone,
+        });
+        if (profileError) throw new Error(`Parent ${formatParentPhone(parent)} : ${profileError.message}`);
+        setParentProfiles((prev) => {
+          const next = prev.filter((p) => p.parentUsername !== parent);
+          return [...next, profile];
+        });
+        parentCreated = true;
+      }
+
+      const firstName = row.prenom.trim();
+      const lastName = row.nom.trim();
+      const className = canonicalClassName(row.classe);
+      const key = childNaturalKey(parent, firstName, lastName, className);
+      const existingChild = childrenList.find(
+        (c) => childNaturalKey(c.parentUsername, c.firstName, c.lastName, c.className) === key,
+      );
+      if (existingChild) {
+        return { childId: existingChild.id, parentCreated, duplicate: true };
+      }
+
+      const id = uid('C');
+      const child: Child = {
+        id,
+        parentUsername: parent,
+        firstName,
+        lastName,
+        className,
+        cycle: row.cycle ?? inferCycleFromClass(className),
+        qrToken: getChildQrToken(id),
+        createdAt: new Date().toISOString(),
+      };
+      const { error: childError } = await supabase.from('children').insert({
+        id: child.id,
+        parent_username: child.parentUsername,
+        first_name: child.firstName,
+        last_name: child.lastName,
+        class_name: child.className,
+        cycle: child.cycle,
+        qr_token: child.qrToken,
+      });
+      if (childError) throw new Error(`${child.firstName} ${child.lastName} : ${childError.message}`);
+      const { error: walletError } = await supabase.from('wallets').upsert({ child_id: id, balance: 0 });
+      if (walletError) throw new Error(`${child.firstName} ${child.lastName} (portefeuille) : ${walletError.message}`);
+      setChildrenList((prev) => [...prev, child]);
+      setWallets((prev) => [...prev, { childId: id, balance: 0 }]);
+      return { childId: id, parentCreated, duplicate: false };
+    },
+    [childrenList, parentProfileOf],
+  );
 
   const updateChild = useCallback((id: string, updates: Partial<Pick<Child, 'firstName' | 'lastName' | 'className' | 'cycle'>>) => {
     setChildrenList((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
@@ -1810,7 +2827,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     if (updates.className !== undefined) payload.class_name = updates.className;
     if (updates.cycle !== undefined) payload.cycle = updates.cycle;
     if (Object.keys(payload).length > 0) {
-      supabase.from('children').update(payload).eq('id', id).then(() => undefined, () => undefined);
+      persist('children', supabase.from('children').update(payload).eq('id', id));
     }
   }, []);
 
@@ -1818,7 +2835,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     setChildrenList((prev) => prev.filter((c) => c.id !== id));
     setWallets((prev) => prev.filter((w) => w.childId !== id));
     setWalletTxs((prev) => prev.filter((t) => t.childId !== id));
-    supabase.from('children').delete().eq('id', id).then(() => undefined, () => undefined);
+    persist('children', supabase.from('children').delete().eq('id', id));
   }, []);
 
   const deleteParent = useCallback((username: string) => {
@@ -1829,23 +2846,23 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       setWallets((prev) => prev.filter((w) => w.childId !== child.id));
       setWalletTxs((prev) => prev.filter((t) => t.childId !== child.id));
     });
-    supabase.from('children').delete().eq('parent_username', username).then(() => undefined, () => undefined);
+    persist('children', supabase.from('children').delete().eq('parent_username', username));
 
     // Supprimer les abonnements
     setSubscriptions((prev) => prev.filter((s) => s.clientUsername !== username));
-    supabase.from('subscriptions').delete().eq('client_username', username).then(() => undefined, () => undefined);
+    persist('subscriptions', supabase.from('subscriptions').delete().eq('client_username', username));
 
     // Supprimer les paiements
     setPayments((prev) => prev.filter((p) => p.clientUsername !== username));
-    supabase.from('oresto_payments').delete().eq('client_username', username).then(() => undefined, () => undefined);
+    persist('oresto_payments', supabase.from('oresto_payments').delete().eq('client_username', username));
 
     // Supprimer les validations
     setValidations((prev) => prev.filter((v) => v.clientUsername !== username));
-    supabase.from('validations').delete().eq('client_username', username).then(() => undefined, () => undefined);
+    persist('validations', supabase.from('validations').delete().eq('client_username', username));
 
     // Supprimer le profil parent
     setParentProfiles((prev) => prev.filter((p) => p.parentUsername !== username));
-    supabase.from('parent_profiles').delete().eq('parent_username', username).then(() => undefined, () => undefined);
+    persist('parent_profiles', supabase.from('parent_profiles').delete().eq('parent_username', username));
 
     // Supprimer le wallet (via enfants déjà supprimés)
     // Les wallets sont déjà supprimés via les enfants
@@ -1871,12 +2888,12 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           const next = prev.filter((w) => w.childId !== childId);
           return [...next, { childId, balance: cur + amount }];
         });
-        supabase.from('wallet_transactions').insert({
+        persist('wallet_transactions', supabase.from('wallet_transactions').insert({
           id: tx.id, child_id: tx.childId, kind: tx.kind, amount: tx.amount,
           method: tx.method, status: 'paid', reference: tx.reference, label: tx.label,
-        }).then(() => undefined, () => undefined);
-        supabase.from('wallets').upsert({ child_id: childId, balance: walletOf(childId) + amount })
-          .then(() => undefined, () => undefined);
+        }));
+        persist('wallets', supabase.from('wallets').upsert({ child_id: childId, balance: walletOf(childId) + amount })
+          );
         return { tx };
       }
       const tx: WalletTx = {
@@ -1885,17 +2902,84 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         createdAt: now.toISOString(),
       };
       setWalletTxs((prev) => [...prev, tx]);
-      supabase.from('wallet_transactions').insert({
+      persist('wallet_transactions', supabase.from('wallet_transactions').insert({
         id: tx.id, child_id: tx.childId, kind: tx.kind, amount: tx.amount,
         method: tx.method, status: 'pending', reference: tx.reference, label: tx.label,
-      }).then(() => undefined, () => undefined);
+        // Le webhook SycaPay crédite cette recharge par sa référence.
+        provider: isProviderMethod(method) ? paymentProviderId : null,
+      }));
       if (isMobileMethod(method)) {
         const wave = initiateWavePayment(amount, method, reference);
         return { tx, wave };
       }
       return { tx };
     },
-    [childrenList, walletOf],
+    [childrenList, walletOf, paymentProviderId],
+  );
+
+  /** Recharge plusieurs cartes enfants en une fois : un seul paiement Wave/OM, plusieurs crédits. */
+  const topUpMulti = useCallback(
+    (clientUsername: string, items: { childId: string; amount: number }[], method: ORestoPaymentMethod) => {
+      if (!items.length) throw new Error('Sélectionnez au moins un enfant.');
+      const total = items.reduce((acc, i) => acc + i.amount, 0);
+      if (!Number.isFinite(total) || total <= 0) throw new Error('Montant total invalide.');
+      if (method !== 'wave' && method !== 'mobile_money') throw new Error('Paiement en ligne requis (Wave / Orange Money).');
+      const now = new Date();
+      const reference = `TOP-${Date.now().toString(36).toUpperCase()}`;
+      const payment: ORestoPayment = {
+        id: uid('P'),
+        clientUsername,
+        formulaId: 'TOPUP-MULTI',
+        amount: total,
+        method,
+        status: 'pending',
+        reference,
+        createdAt: now.toISOString(),
+      };
+      setPayments((prev) => [...prev, payment]);
+      persist('oresto_payments', supabase.from('oresto_payments').insert({
+        id: payment.id,
+        subscription_id: null,
+        client_username: clientUsername,
+        formula_id: 'TOPUP-MULTI',
+        amount: total,
+        method: payment.method,
+        status: 'pending',
+        reference,
+      }));
+      const wave = isMobileMethod(method) ? initiateWavePayment(total, method, reference) : undefined;
+      const txs: WalletTx[] = items.map((item, index) => {
+        const child = childrenList.find((c) => c.id === item.childId);
+        const tx: WalletTx = {
+          id: uid('W'),
+          childId: item.childId,
+          kind: 'topup',
+          amount: item.amount,
+          method,
+          status: 'pending',
+          reference: `${reference}-${index}`,
+          paymentId: payment.id,
+          label: `Recharge ${child?.firstName ?? ''} ${child?.lastName ?? ''}`,
+          createdAt: now.toISOString(),
+        };
+        setWalletTxs((prev) => [...prev, tx]);
+        persist('wallet_transactions', supabase.from('wallet_transactions').insert({
+          id: tx.id,
+          child_id: tx.childId,
+          kind: tx.kind,
+          amount: tx.amount,
+          method: tx.method,
+          status: 'pending',
+          reference: tx.reference,
+          label: tx.label,
+          payment_id: payment.id,
+          provider: isProviderMethod(method) ? paymentProviderId : null,
+        }));
+        return tx;
+      });
+      return { payment, wave, txs };
+    },
+    [childrenList, paymentProviderId],
   );
 
   const creditWalletTx = useCallback((txId: string) => {
@@ -1907,10 +2991,10 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const next = prev.filter((w) => w.childId !== tx.childId);
       return [...next, { childId: tx.childId, balance: cur + tx.amount }];
     });
-    supabase.from('wallet_transactions').update({ status: 'paid' }).eq('id', txId)
-      .then(() => undefined, () => undefined);
-    supabase.from('wallets').upsert({ child_id: tx.childId, balance: walletOf(tx.childId) + tx.amount })
-      .then(() => undefined, () => undefined);
+    persist('wallet_transactions', supabase.from('wallet_transactions').update({ status: 'paid' }).eq('id', txId)
+      );
+    persist('wallets', supabase.from('wallets').upsert({ child_id: tx.childId, balance: walletOf(tx.childId) + tx.amount })
+      );
     return true;
   }, [walletTxs, walletOf]);
 
@@ -1928,11 +3012,19 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     if (tx.status === 'paid') return { ok: true, message: 'Recharge déjà confirmée.' };
     if (tx.status !== 'pending') return { ok: false, message: 'Cette recharge ne peut plus être confirmée.' };
     if (!isMobileMethod(tx.method)) return { ok: false, message: 'Recharge espèces : coche manuelle du caissier.' };
+    // Hors développement, le code de démonstration n'existe pas : une recharge
+    // ne se solde jamais depuis l'application, seulement par le webhook.
+    if (import.meta.env.PROD) {
+      return {
+        ok: false,
+        message: 'La recharge est confirmée automatiquement par la passerelle. Rechargez la page dans un instant.',
+      };
+    }
     const created = new Date(tx.createdAt).getTime();
     if (Number.isFinite(created) && Date.now() - created > WAVE_TTL_MS) {
       setWalletTxs((prev) => prev.map((t) => (t.id === txId ? { ...t, status: 'failed' as const } : t)));
-      supabase.from('wallet_transactions').update({ status: 'failed' }).eq('id', txId)
-        .then(() => undefined, () => undefined);
+      persist('wallet_transactions', supabase.from('wallet_transactions').update({ status: 'failed' }).eq('id', txId)
+        );
       return { ok: false, message: 'Demande expirée (15 min). Relancez la recharge.' };
     }
     if (!checkWaveCode(tx.reference, code)) {
@@ -1942,6 +3034,220 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     creditWalletTx(txId);
     return { ok: true, message: `Recharge confirmée : +${tx.amount} FCFA sur la carte.` };
   }, [walletTxs, creditWalletTx]);
+
+  /**
+   * Recharge GROUPÉE (plusieurs enfants, un seul paiement) : vérifie le code
+   * sur la référence du paiement, puis crédite chacune des cartes.
+   */
+  const confirmWalletTopUpGroup = useCallback(
+    (paymentId: string, code: string) => {
+      const payment = payments.find((p) => p.id === paymentId);
+      if (!payment) return { ok: false, message: 'Paiement introuvable.' };
+      if (payment.status === 'paid') return { ok: true, message: 'Recharge déjà confirmée.' };
+      if (payment.status !== 'pending') return { ok: false, message: 'Cette recharge ne peut plus être confirmée.' };
+      if (import.meta.env.PROD) {
+        return {
+          ok: false,
+          message: 'La recharge est confirmée automatiquement par la passerelle. Rechargez la page dans un instant.',
+        };
+      }
+      const created = new Date(payment.createdAt).getTime();
+      if (Number.isFinite(created) && Date.now() - created > WAVE_TTL_MS) {
+        setPayments((prev) => prev.map((p) => (p.id === paymentId ? { ...p, status: 'failed' as const } : p)));
+        persist('oresto_payments', supabase.from('oresto_payments').update({ status: 'failed' }).eq('id', paymentId));
+        return { ok: false, message: 'Demande expirée (15 min). Relancez la recharge.' };
+      }
+      if (!checkWaveCode(payment.reference, code)) {
+        return { ok: false, message: 'Code incorrect : vérifiez le code à 6 chiffres.' };
+      }
+      clearWaveCode(payment.reference);
+      const group = walletTxs.filter((t) => t.paymentId === paymentId && t.status === 'pending');
+      if (group.length === 0) return { ok: false, message: 'Aucune carte à créditer.' };
+
+      setPayments((prev) => prev.map((p) => (p.id === paymentId ? { ...p, status: 'paid' as const } : p)));
+      persist('oresto_payments', supabase.from('oresto_payments').update({ status: 'paid' }).eq('id', paymentId));
+      const ids = new Set(group.map((t) => t.id));
+      setWalletTxs((prev) => prev.map((t) => (ids.has(t.id) ? { ...t, status: 'paid' as const } : t)));
+      setWallets((prev) => {
+        let next = [...prev];
+        for (const t of group) {
+          const cur = next.find((w) => w.childId === t.childId)?.balance ?? 0;
+          next = [...next.filter((w) => w.childId !== t.childId), { childId: t.childId, balance: cur + t.amount }];
+        }
+        return next;
+      });
+      for (const t of group) {
+        persist('wallet_transactions', supabase.from('wallet_transactions').update({ status: 'paid' }).eq('id', t.id));
+        persist('wallets', supabase.from('wallets').upsert({
+          child_id: t.childId,
+          balance: (wallets.find((w) => w.childId === t.childId)?.balance ?? 0) + t.amount,
+        }));
+      }
+      const total = group.reduce((sum, t) => sum + t.amount, 0);
+      return {
+        ok: true,
+        message: `${group.length} carte(s) rechargée(s) — ${total} FCFA au total.`,
+      };
+    },
+    [payments, walletTxs, wallets],
+  );
+
+  // ---------- Caisse : scan du QR élève puis débit sur sa carte prépayée ----------
+
+  /**
+   * Résout un QR scanné à la caisse vers un élève abonné.
+   * Accepte le QR de l'enfant, le QR d'abonnement ou le QR personnel du parent.
+   */
+  const resolveChildQr = useCallback(
+    (qrToken: string) => {
+      const token = qrToken.trim().toUpperCase();
+      const none = { ok: false, message: 'QR Code inconnu : aucun élève associé.', balance: 0 };
+      if (!token) return none;
+
+      const nowMs = Date.now();
+      // 1. QR direct d'un enfant
+      let child = childrenList.find((c) => (c.qrToken ?? '').toUpperCase() === token);
+      // 2. QR d'abonnement rattaché à un enfant
+      if (!child) {
+        const sub = subscriptions.find((s) => (s.qrToken ?? '').toUpperCase() === token);
+        if (sub?.childId) child = childrenList.find((c) => c.id === sub.childId);
+      }
+      // 3. QR personnel d'un parent : on retient d'abord l'enfant abonné,
+      //    sinon celui dont la carte prépayée a encore du crédit.
+      if (!child) {
+        const parent = parentProfiles.find((p) => isPersonalQrToken(p.parentUsername, token));
+        if (parent) {
+          const freres = childrenList.filter((c) => c.parentUsername === parent.parentUsername);
+          child =
+            freres.find((c) =>
+              subscriptions.some((s) => s.childId === c.id && isLiveSub(s, nowMs)),
+            ) ??
+            freres.find((c) => (wallets.find((w) => w.childId === c.id)?.balance ?? 0) > 0);
+        }
+      }
+      if (!child) return none;
+
+      const subscription = subscriptions.find(
+        (s) => s.childId === child!.id && isLiveSub(s, nowMs),
+      );
+      const balance = wallets.find((w) => w.childId === child!.id)?.balance ?? 0;
+      const childName = `${child.firstName} ${child.lastName}`;
+
+      if (!subscription) {
+        // Pas d'abonnement actif, mais une carte prépayée créditée : l'élève
+        // peut être servi au comptoir, l'argent est déjà sur la carte. La
+        // validation d'un repas, elle, continue d'exiger l'abonnement.
+        if (balance <= 0) {
+          return {
+            ok: false,
+            message: `${childName} n'a pas d'abonnement actif et sa carte est vide : vente impossible.`,
+            child,
+            balance,
+          };
+        }
+        return {
+          ok: true,
+          message: `${childName} · ${child.className} — sans abonnement, carte prépayée à ${balance} FCFA.`,
+          child,
+          balance,
+        };
+      }
+      return {
+        ok: true,
+        message: `${childName} · ${child.className} — abonné, carte à ${balance} FCFA.`,
+        child,
+        subscription,
+        balance,
+      };
+    },
+    [childrenList, subscriptions, wallets, parentProfiles],
+  );
+
+  /**
+   * Débite le panier de la caisse sur la carte prépayée de l'élève scanné.
+   * L'élève ne paie donc rien par Wave : la vente est imputée sur sa carte.
+   * La commande est créée « en attente » : elle n'est remise qu'au scan du QR
+   * de l'élève par le superviseur (bouton « Servir »).
+   */
+  const sellToChildCard = useCallback(
+    (
+      childId: string,
+      items: { productId: string; productName: string; price: number; qty: number }[],
+      cashier?: string,
+    ) => {
+      const child = childrenList.find((c) => c.id === childId);
+      if (!child) return { ok: false, message: 'Élève introuvable.', balance: 0 };
+      if (!items.length) return { ok: false, message: 'Panier vide.', balance: 0 };
+
+      const nowMs = Date.now();
+      // L'abonnement n'est plus une condition de vente : la carte prépayée
+      // suffit. Il ne sert qu'à préciser la provenance du crédit.
+      const subscription = subscriptions.find(
+        (s) => s.childId === childId && isLiveSub(s, nowMs),
+      );
+
+      const total = items.reduce((sum, it) => sum + it.price * it.qty, 0);
+      const balance = wallets.find((w) => w.childId === childId)?.balance ?? 0;
+      if (balance < total) {
+        return {
+          ok: false,
+          message: `Solde insuffisant sur la carte de ${child.firstName} (${balance} FCFA, ${total} FCFA requis).`,
+          balance,
+        };
+      }
+
+      const now = new Date();
+      const nextBalance = balance - total;
+      const reference = `POS-${now.getFullYear().toString().slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      const label = `Vente POS ${child.firstName} ${child.lastName} — ${items.map((i) => `${i.productName}×${i.qty}`).join(', ')}`;
+
+      const tx: WalletTx = {
+        id: uid('W'), childId, kind: 'debit', amount: total, method: 'card',
+        status: 'paid', reference, label, createdAt: now.toISOString(),
+      };
+      setWalletTxs((prev) => [...prev, tx]);
+      setWallets((prev) => prev.map((w) => (w.childId === childId ? { ...w, balance: nextBalance } : w)));
+      persist('wallet_transactions', supabase.from('wallet_transactions').insert({
+        id: tx.id, child_id: childId, kind: 'debit', amount: total,
+        method: 'card', status: 'paid', reference, label,
+      }));
+      persist('wallets', supabase.from('wallets').upsert({ child_id: childId, balance: nextBalance })
+        );
+
+      // La vente est PAYÉE mais pas encore remise : elle part en « en attente ».
+      // C'est l'élève qui présente son QR au superviseur, qui voit la commande
+      // et clique sur « Servir ». Tant qu'elle n'est pas servie, le caissier
+      // (ou le superviseur) peut l'annuler → remboursement sur la carte.
+      const orderId = uid('K');
+      const comptoirItems = items.map((it) => ({ productId: it.productId, name: it.productName, price: it.price, qty: it.qty }));
+      const newOrder: KioskOrder = {
+        id: orderId, childId, parentUsername: child.parentUsername,
+        items: comptoirItems, total, status: 'pending' as KioskOrderStatus,
+        reference, createdAt: now.toISOString(),
+      };
+      setKioskOrders((prev) => [...prev, newOrder]);
+      persist('kiosk_orders', supabase.from('kiosk_orders').insert({
+        id: orderId,
+        child_id: childId,
+        parent_username: child.parentUsername,
+        items: comptoirItems,
+        total,
+        status: 'pending',
+        reference,
+        created_at: now.toISOString(),
+        served_at: null,
+      }));
+
+      return {
+        ok: true,
+        message: `${total} FCFA débités sur la carte de ${child.firstName} ${child.lastName}${subscription ? '' : ' (sans abonnement)'} · nouveau solde : ${nextBalance} FCFA. Commande ${reference} à retirer au scan.`,
+        reference,
+        balance: nextBalance,
+        order: newOrder,
+      };
+    },
+    [childrenList, subscriptions, wallets],
+  );
 
   // Débit interne (repas sans abonnement) — faux si solde insuffisant
   const debitWallet = useCallback((childId: string, amount: number, label: string) => {
@@ -1954,30 +3260,32 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     };
     setWalletTxs((prev) => [...prev, tx]);
     setWallets((prev) => prev.map((w) => (w.childId === childId ? { ...w, balance: w.balance - amount } : w)));
-    supabase.from('wallet_transactions').insert({
+    persist('wallet_transactions', supabase.from('wallet_transactions').insert({
       id: tx.id, child_id: tx.childId, kind: 'debit', amount: tx.amount,
       method: 'card', status: 'paid', reference: tx.reference, label: tx.label,
-    }).then(() => undefined, () => undefined);
-    supabase.from('wallets').upsert({ child_id: childId, balance: balance - amount })
-      .then(() => undefined, () => undefined);
+    }));
+    persist('wallets', supabase.from('wallets').upsert({ child_id: childId, balance: balance - amount })
+      );
     return true;
   }, [wallets]);
 
   const setFinanceSettings = useCallback((s: Partial<FinanceSettings>) => {
     setFinanceSettingsState((prev) => {
       const next = { ...prev, ...s };
-      supabase.from('finance_settings').upsert([
+      persist('finance_settings', supabase.from('finance_settings').upsert([
         { key: 'ism_subscription_pct', value: String(next.ismSubscriptionPct) },
         { key: 'school_per_subscription', value: String(next.schoolPerSubscription) },
         { key: 'other_sales_pct', value: String(next.otherSalesPct) },
         { key: 'touchpoint_pct', value: String(next.touchpointPct) },
+        { key: 'sycapay_pct', value: String(next.sycapayPct) },
         { key: 'paydounya_pct', value: String(next.paydounyaPct) },
         { key: 'ism_per_subscription', value: String(next.ismPerSubscription) },
         { key: 'ism_sales_pct', value: String(next.ismSalesPct) },
-      ]).then(() => undefined, () => undefined);
+      ]));
       return next;
     });
   }, []);
+
 
   const addExpense = useCallback((label: string, category: ExpenseCategory, amount: number, spentAt: string, createdBy?: string) => {
     const clean = label.trim();
@@ -1988,17 +3296,234 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       spentAt: spentAt || new Date().toISOString(), createdBy,
     };
     setFinanceExpenses((prev) => [expense, ...prev]);
-    supabase.from('finance_expenses').insert({
+    persist('finance_expenses', supabase.from('finance_expenses').insert({
       id: expense.id, label: expense.label, category: expense.category,
       amount: expense.amount, spent_at: expense.spentAt, created_by: expense.createdBy ?? null,
-    }).then(() => undefined, () => undefined);
+    }));
     return expense;
   }, []);
 
   const deleteExpense = useCallback((id: string) => {
     setFinanceExpenses((prev) => prev.filter((e) => e.id !== id));
-    supabase.from('finance_expenses').delete().eq('id', id).then(() => undefined, () => undefined);
+    persist('finance_expenses', supabase.from('finance_expenses').delete().eq('id', id));
   }, []);
+
+  // ---------- Réclamations : fil privé parent ↔ superviseur + annonces ----------
+
+  /** Référence courte lisible : REC-2607-A1B2. */
+  function complaintReference(): string {
+    const yy = new Date().getFullYear().toString().slice(2);
+    const mm = new Date().getMonth() + 1;
+    const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+    return `REC-${yy}${String(mm).padStart(2, '0')}-${rand}`;
+  }
+
+  /** Insertion locale + distante best-effort (identique au reste du contexte). */
+  const pushComplaintMessage = useCallback(
+    (message: ComplaintMessage) => {
+      setComplaintMessages((prev) =>
+        prev.some((m) => m.id === message.id) ? prev : [...prev, message],
+      );
+      persist('reclamation_messages', supabase
+        .from('reclamation_messages')
+        .insert({
+          id: message.id,
+          complaint_id: message.complaintId,
+          author_username: message.authorUsername,
+          author_role: message.authorRole,
+          body: message.body,
+          photo_path: message.photoPath ?? null,
+        })
+        );
+      return message;
+    },
+    [],
+  );
+
+  const addComplaint = useCallback(
+    (input: {
+      clientUsername: string;
+      childId?: string;
+      category: ComplaintCategory;
+      subject: string;
+      body: string;
+      photoPath?: string;
+    }) => {
+      const subject = input.subject.trim();
+      const body = input.body.trim();
+      if (!subject) throw new Error('Objet requis');
+      if (!body) throw new Error('Message requis');
+      const now = new Date().toISOString();
+      const complaint: Complaint = {
+        id: uid('REC'),
+        reference: complaintReference(),
+        clientUsername: input.clientUsername,
+        childId: input.childId,
+        category: input.category,
+        subject,
+        status: 'open',
+        isAnnouncement: false,
+        createdAt: now,
+        updatedAt: now,
+      };
+      setComplaints((prev) => [complaint, ...prev]);
+      persist('reclamations', supabase
+        .from('reclamations')
+        .insert({
+          id: complaint.id,
+          reference: complaint.reference,
+          client_username: complaint.clientUsername,
+          child_id: complaint.childId ?? null,
+          category: complaint.category,
+          subject: complaint.subject,
+          status: complaint.status,
+          is_announcement: false,
+        })
+        );
+      pushComplaintMessage({
+        id: uid('MSG'),
+        complaintId: complaint.id,
+        authorUsername: input.clientUsername,
+        authorRole: 'client',
+        body,
+        photoPath: input.photoPath,
+        createdAt: now,
+      });
+      return complaint;
+    },
+    [pushComplaintMessage],
+  );
+
+  const replyComplaint = useCallback(
+    (
+      complaintId: string,
+      authorUsername: string,
+      authorRole: 'client' | 'staff',
+      body: string,
+      photoPath?: string,
+    ) => {
+      const clean = body.trim();
+      if (!clean) throw new Error('Message requis');
+      const now = new Date().toISOString();
+      // Une réponse du superviseur sur un fil « nouvelle » le passe « en cours ».
+      setComplaints((prev) =>
+        prev.map((c) =>
+          c.id === complaintId
+            ? {
+                ...c,
+                status: c.status === 'open' && authorRole === 'staff' ? 'in_progress' : c.status,
+                updatedAt: now,
+              }
+            : c,
+        ),
+      );
+      persist('reclamations', supabase
+        .from('reclamations')
+        .update(
+          authorRole === 'staff'
+            ? { updated_at: now, status: 'in_progress' }
+            : { updated_at: now },
+        )
+        .eq('id', complaintId)
+        );
+      return pushComplaintMessage({
+        id: uid('MSG'),
+        complaintId,
+        authorUsername,
+        authorRole,
+        body: clean,
+        photoPath,
+        createdAt: now,
+      });
+    },
+    [pushComplaintMessage],
+  );
+
+  const setComplaintStatus = useCallback((complaintId: string, status: ComplaintStatus) => {
+    const now = new Date().toISOString();
+    setComplaints((prev) =>
+      prev.map((c) =>
+        c.id === complaintId
+          ? {
+              ...c,
+              status,
+              updatedAt: now,
+              resolvedAt: status === 'resolved' || status === 'rejected' ? now : undefined,
+            }
+          : c,
+      ),
+    );
+    persist('reclamations', supabase
+      .from('reclamations')
+      .update({
+        status,
+        updated_at: now,
+        resolved_at: status === 'resolved' || status === 'rejected' ? now : null,
+      })
+      .eq('id', complaintId)
+      );
+  }, []);
+
+  /** Annonce publique : visible par tous les parents, pas rattachée à un parent. */
+  const publishAnnouncement = useCallback(
+    (authorUsername: string, subject: string, body: string) => {
+      const cleanSubject = subject.trim();
+      const cleanBody = body.trim();
+      if (!cleanSubject) throw new Error('Objet requis');
+      if (!cleanBody) throw new Error('Message requis');
+      const now = new Date().toISOString();
+      const complaint: Complaint = {
+        id: uid('ANN'),
+        reference: complaintReference(),
+        clientUsername: authorUsername,
+        category: 'other',
+        subject: cleanSubject,
+        status: 'resolved',
+        isAnnouncement: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      setComplaints((prev) => [complaint, ...prev]);
+      persist('reclamations', supabase
+        .from('reclamations')
+        .insert({
+          id: complaint.id,
+          reference: complaint.reference,
+          client_username: authorUsername,
+          category: complaint.category,
+          subject: complaint.subject,
+          status: complaint.status,
+          is_announcement: true,
+        })
+        );
+      pushComplaintMessage({
+        id: uid('MSG'),
+        complaintId: complaint.id,
+        authorUsername,
+        authorRole: 'staff',
+        body: cleanBody,
+        createdAt: now,
+      });
+      return complaint;
+    },
+    [pushComplaintMessage],
+  );
+
+  const myComplaints = useCallback(
+    (username: string) =>
+      complaints
+        .filter((c) => c.clientUsername === username && !c.isAnnouncement)
+        .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt)),
+    [complaints],
+  );
+
+  const messagesOf = useCallback(
+    (complaintId: string) =>
+      complaintMessages
+        .filter((m) => m.complaintId === complaintId)
+        .sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt)),
+    [complaintMessages],
+  );
 
   const updateWeeklyMenu = useCallback((day: WeeklyMenu['day'], name: string, description: string, items: WeeklyMenuItem[] = [], price?: number) => {
     const clean = items
@@ -2008,12 +3533,28 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       .slice(0, 8);
     const dayPrice = Math.max(0, Math.floor(Number(price) || 0));
     setWeeklyMenus((prev) => prev.map((m) => (m.day === day ? { ...m, name, description, items: clean, price: dayPrice } : m)));
-    supabase.from('weekly_menus').upsert({ day, name, description, items: clean, price: dayPrice }).then(() => undefined, () => undefined);
+    // Persistance : l'état local est optimiste (affichage immédiat). On écrit
+    // en base sans jamais avaler l'erreur en silence.
+    void (async () => {
+      const { error } = await supabase
+        .from('weekly_menus')
+        .upsert({ day, name, description, items: clean, price: dayPrice });
+      if (!error) return;
+      // Colonne `price` absente (base non migrée) : on réessaie sans elle, en
+      // repliant le prix du jour dans les plats pour que les parents / la
+      // caisse voient le bon total et que la publication soit bien partagée.
+      const { error: retryError } = await supabase
+        .from('weekly_menus')
+        .upsert({ day, name, description, items: foldDayPriceIntoItems(clean, dayPrice) });
+      if (retryError) {
+        console.warn(`[menus] Publication de ${day} non enregistrée en base :`, retryError.message);
+      }
+    })();
   }, []);
 
   const nowMsStats = Date.now();
   const stats = {
-    activeClients: subscriptions.filter((s) => s.status === 'active' && new Date(s.endDate).getTime() >= nowMsStats).length,
+    activeClients: subscriptions.filter((s) => isLiveSub(s, nowMsStats)).length,
     mealsToday: validations.filter((v) => v.status === 'accepted' && sameDay(new Date(v.validatedAt), new Date())).length,
     revenue: payments.filter((p) => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0),
   };
@@ -2058,17 +3599,35 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         myChildren,
         parentProfiles,
         parentProfileOf,
+        parentKeyOf,
         saveParentProfile,
         walletOf,
+        resolveChildQr,
+        sellToChildCard,
         childTxs,
         addChild,
+        importStudentRow,
         updateChild,
         deleteChild,
         deleteParent,
         topUpChild,
         confirmWalletTopUp,
         confirmWalletTopUpMobile,
+        confirmWalletTopUpGroup,
+        inactiveParents,
+        isParentInactive,
+        setParentActive,
+        dayTicket,
+        setDayTicketPublished,
+        buyDayTicket,
+        topUpMulti,
+        creditWalletTx,
         debitWallet,
+        paymentProviderId,
+        providerLabel,
+        openProviderPayment,
+        syncPaymentFromProvider,
+        refreshRemote,
         setFinanceSettings,
         financeExpenses,
         addExpense,
@@ -2077,6 +3636,17 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         updateWeeklyMenu,
         createWalkInTicket,
         walkInTickets,
+        kioskOrders,
+        serveKioskOrder,
+        cancelKioskOrder,
+        complaints,
+        complaintMessages,
+        addComplaint,
+        replyComplaint,
+        setComplaintStatus,
+        publishAnnouncement,
+        myComplaints,
+        messagesOf,
       }}
     >
       {children}

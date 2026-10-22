@@ -53,3 +53,58 @@ describe('règles nom d’utilisateur', () => {
     expect(isValidUsername('awa@sn')).toBe(false);
   });
 });
+
+describe('élévation de privilèges par fabrication de session', () => {
+  /**
+   * Régression : la session était un objet JSON écrit par l'application dans
+   * localStorage. Écrire `{"username":"x","role":"admin"}` suffisait à ouvrir
+   * l'espace de direction — le rôle n'était relu nulle part.
+   *
+   * La session est désormais un jeton signé par Supabase et le rôle est relu
+   * en base. Ces tests verrouillent les deux points de ce contrat.
+   */
+  it('ne lit plus aucun rôle depuis le stockage local', async () => {
+    const { DEMO_LOGIN_ENABLED, authEmailFor, normalizeRole } = await import('@/context/AuthContext');
+
+    // L'adresse de connexion est dérivée du seul nom d'utilisateur : aucune
+    // information de rôle n'y circule. Le domaine est un vrai domaine :
+    // Supabase refuse les adresses en `.local`.
+    expect(authEmailFor('Admin')).toBe('admin@oresto-sn.com');
+    expect(authEmailFor('  awa  ')).toBe('awa@oresto-sn.com');
+
+    // Les alias historiques sont normalisés, jamais acceptés tels quels.
+    expect(normalizeRole('caissier')).toBe('gestionnaire');
+    expect(normalizeRole('manager')).toBe('admin');
+    expect(normalizeRole('ADMIN')).toBe('admin');
+
+    // Un rôle inventé ne donne aucun accès.
+    expect(normalizeRole('superadmin')).toBeNull();
+    expect(normalizeRole('')).toBeNull();
+    expect(normalizeRole(undefined)).toBeNull();
+    expect(normalizeRole({ toString: () => 'admin' })).toBeNull();
+
+    if (import.meta.env.PROD) {
+      expect(DEMO_LOGIN_ENABLED).toBe(false);
+    }
+  });
+
+  it('purge l’ancienne session JSON au démarrage', async () => {
+    // Une valeur peut rester dans localStorage après le durcissement : elle doit
+    // être effacée, pas lue.
+    localStorage.setItem('o-resto-current-user', '{"username":"pirate","role":"admin"}');
+
+    const { render, waitFor } = await import('@testing-library/react');
+    const React = await import('react');
+    const { AuthProvider } = await import('@/context/AuthContext');
+
+    function Probe() {
+      return React.createElement('span', null, 'ok');
+    }
+
+    render(React.createElement(AuthProvider, null, React.createElement(Probe)));
+
+    await waitFor(() => {
+      expect(localStorage.getItem('o-resto-current-user')).toBeNull();
+    });
+  });
+});

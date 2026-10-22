@@ -35,11 +35,32 @@ const QrGalleryPage = () => {
       .sort((a, b) => a.className.localeCompare(b.className) || a.firstName.localeCompare(b.firstName));
   }, [kids, search, classFilter]);
 
+  /** Abonnement UTILISABLE aujourd'hui (période en cours uniquement). */
   const childSub = (childId: string) => {
     const now = Date.now();
-    return subscriptions.find(
-      (s) => s.childId === childId && s.status === 'active' && new Date(s.endDate).getTime() >= now,
-    );
+    return subscriptions.find((s) => {
+      if (s.childId !== childId || s.status !== 'active') return false;
+      const start = new Date(s.startDate).getTime();
+      const end = new Date(s.endDate).getTime();
+      return (!Number.isFinite(start) || start <= now) && Number.isFinite(end) && end >= now;
+    });
+  };
+
+  /** Période suivante déjà réglée (réabonnement de fin de mois). */
+  const childNext = (childId: string) => {
+    const now = Date.now();
+    return subscriptions.find((s) => {
+      if (s.childId !== childId || s.status !== 'active') return false;
+      return new Date(s.startDate).getTime() > now;
+    });
+  };
+
+  /** Dernière période close : sert à afficher « expiré le … ». */
+  const childLast = (childId: string) => {
+    const now = Date.now();
+    return [...subscriptions]
+      .filter((s) => s.childId === childId && s.status !== 'cancelled' && new Date(s.endDate).getTime() < now)
+      .sort((a, b) => +new Date(b.endDate) - +new Date(a.endDate))[0];
   };
 
   const fileName = (firstName: string, lastName: string, token: string) =>
@@ -116,7 +137,7 @@ const QrGalleryPage = () => {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 flex items-center gap-2">
-            <QrCode className="w-6 h-6 text-green-700" /> QR Élèves ({filtered.length})
+            <QrCode className="w-6 h-6 text-green-700" /> QR Code — Cartes élèves ({filtered.length})
           </h1>
           <p className="text-slate-500 text-sm mt-0.5">Toutes les QR Cartes, nom en dessous — impression et export PNG.</p>
         </div>
@@ -175,6 +196,8 @@ const QrGalleryPage = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
           {filtered.map((k) => {
             const sub = childSub(k.id);
+            const next = childNext(k.id);
+            const last = childLast(k.id);
             return (
               <article key={k.id} className="bg-white rounded-2xl border-2 border-slate-100 overflow-hidden break-inside-avoid">
                 <div id={`qr-gallery-${k.qrToken}`} className="bg-white p-3 flex justify-center">
@@ -187,6 +210,22 @@ const QrGalleryPage = () => {
                     <Wallet className="w-3 h-3" /> {formatCurrency(walletOf(k.id))}
                     {sub && <span className="text-emerald-700"> · {sub.mealsRemaining} repas</span>}
                   </p>
+                  {sub ? (
+                    <p className="mt-1 text-[10px] font-bold text-emerald-700">
+                      Valable jusqu’au {new Date(sub.endDate).toLocaleDateString('fr-FR')}
+                    </p>
+                  ) : last ? (
+                    <p className="mt-1 text-[10px] font-bold text-amber-700">
+                      Expiré le {new Date(last.endDate).toLocaleDateString('fr-FR')}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[10px] font-bold text-slate-400">Sans abonnement</p>
+                  )}
+                  {next && (
+                    <p className="mt-0.5 text-[10px] font-bold text-slate-500">
+                      Renouvelé : {new Date(next.startDate).toLocaleDateString('fr-FR')}
+                    </p>
+                  )}
                   <p className="font-mono text-[10px] text-slate-400 mt-0.5">{k.qrToken}</p>
                   <button
                     onClick={() => downloadOne(k.qrToken, k.firstName, k.lastName, k.className)}

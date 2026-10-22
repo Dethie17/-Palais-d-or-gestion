@@ -43,7 +43,6 @@
 # 
 # SUPABASE_URL = https://votre-projet.supabase.co
 # SUPABASE_SERVICE_ROLE_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (clé service_role, pas anon)
-# INTOUCH_CALLBACK_SECRET = votre_cle_secrete_fournie_par_intouch
 # 
 # Optionnel - pour les emails/notifications :
 # SENDGRID_API_KEY = SG.xxx

@@ -1,8 +1,21 @@
 import type { ORestoPaymentMethod } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
+import type { PaymentChallenge } from '@/lib/payments/types';
 
-export type MobileMethod = 'wave' | 'intouch';
+export type MobileMethod = 'wave';
 
+/**
+ * Session de paiement en cours : ce qu'un écran doit afficher pendant qu'un
+ * client règle une commande.
+ *
+ * Historiquement décrivait le seul parcours Wave (numéro marchand + code à 6
+ * chiffres). Le champ `challenge` porte aujourd'hui la forme réelle du
+ * paiement, décidée par le prestataire : un lien (Wave), un QR et des liens
+ * profonds (Orange Money), une page carte hébergée, ou une invite poussée sur
+ * le téléphone. Les anciens champs restent renseignés pour que les écrans non
+ * migrés continuent de fonctionner, et `demoCode` n'existe qu'en mode démo —
+ * aucun argent ne circule dans ce mode.
+ */
 export interface WavePaymentRequest {
   reference: string;
   amount: number;
@@ -13,8 +26,19 @@ export interface WavePaymentRequest {
   merchantName: string;
   ussdCode: string;
   expiresAt: string;
-  demoCode: string;
+  /** Code à 6 chiffres — mode démo uniquement (jamais en production). */
+  demoCode?: string;
   steps: string[];
+  /** Identifiant de la commande locale (paiement ou recharge). */
+  paymentId?: string;
+  /** 'sub' = abonnement/ticket, 'topup' = recharge de carte prépayée. */
+  kind?: 'sub' | 'topup';
+  /** Fournisseur actif : 'sycapay' en production, 'demo' en démonstration. */
+  provider?: string;
+  /** Ce que le client doit faire pour payer. Absent tant que l'appel n'est pas revenu. */
+  challenge?: PaymentChallenge;
+  /** Message d'erreur de l'initiation, quand l'appel a échoué. */
+  error?: string;
 }
 
 const CODES_KEY = 'o-resto-wave-codes';
@@ -40,11 +64,6 @@ export const WAVE_MERCHANT_NUMBER =
 export const WAVE_MERCHANT_NAME =
   (import.meta.env.VITE_WAVE_MERCHANT_NAME as string | undefined) ?? 'O RESTO';
 
-export const INTOUCH_MERCHANT_NUMBER =
-  (import.meta.env.VITE_INTOUCH_MERCHANT_NUMBER as string | undefined) ?? '+221 77 000 00 00';
-export const INTOUCH_MERCHANT_NAME =
-  (import.meta.env.VITE_INTOUCH_MERCHANT_NAME as string | undefined) ?? 'O RESTO';
-
 /**
  * Lien de paiement Wave Business (encaissement comptoir / POS).
  * Configurable via VITE_WAVE_BUSINESS_URL / VITE_WAVE_BUSINESS_NAME.
@@ -58,23 +77,28 @@ export const WAVE_BUSINESS_NAME =
   (import.meta.env.VITE_WAVE_BUSINESS_NAME as string | undefined) ??
   'O RESTO';
 
-export const INTOUCH_USSD_URL =
-  (import.meta.env.VITE_INTOUCH_USSD_URL as string | undefined) ??
-  'https://intouch.sn/ussd'; // Placeholder - à configurer selon la doc InTouch
-
 /** Expiration d'une demande de paiement mobile : 15 minutes. */
 export const WAVE_TTL_MS = 15 * 60 * 1000;
 
 export function isMobileMethod(method: ORestoPaymentMethod): method is MobileMethod {
-  return method === 'wave' || method === 'intouch';
+  return method === 'wave';
+}
+
+/**
+ * Moyens qui partent en ligne vers l'application du client (Wave,
+ * Orange Money / Max it) : le parent choisit, saisit son numéro, et le
+ * modal le redirige pour valider. Espèces et carte restent au comptoir.
+ */
+export function isOnlineMobileMethod(
+  method: ORestoPaymentMethod,
+): method is Extract<ORestoPaymentMethod, 'wave' | 'mobile_money'> {
+  return method === 'wave' || method === 'mobile_money';
 }
 
 export function methodLabel(method: ORestoPaymentMethod): string {
   switch (method) {
     case 'wave':
       return 'Wave';
-    case 'intouch':
-      return 'InTouch';
     case 'cash':
       return 'Espèces';
     case 'mobile_money':
@@ -93,41 +117,26 @@ function randomCode(): string {
 }
 
 /**
- * Crée une demande de paiement mobile.
- * Mode démo / sans clé API : génère un code de confirmation à 6 chiffres
- * (affiché dans l'app pour valider le parcours de bout en bout).
- * Avec un vrai compte marchand Wave/OM : remplacez cet appel par l'API
- * d'initiation (paiement marchand) et la vérification du callback.
+ * Demande de paiement mobile « à l'ancienne » : merchant + code à 6 chiffres.
+ *
+ * C'est le chemin du fournisseur de DÉMONSTRATION. En production, l'initiation
+ * passe par la passerelle SycaPay (voir lib/payments) et cette fonction n'est
+ * plus appelée que pour produire l'affichage commun (montant, référence,
+ * expiration) — jamais pour solder quoi que ce soit.
  */
 export function initiateWavePayment(
   amount: number,
   method: MobileMethod,
   reference: string,
 ): WavePaymentRequest {
-  const demoCode = randomCode();
-  const codes = readCodes();
-  codes[reference] = demoCode;
-  writeCodes(codes);
-
-  if (method === 'intouch') {
-    return {
-      reference,
-      amount,
-      amountLabel: formatCurrency(amount),
-      method,
-      methodLabel: methodLabel(method),
-      merchantNumber: INTOUCH_MERCHANT_NUMBER,
-      merchantName: INTOUCH_MERCHANT_NAME,
-      ussdCode: '#144#',
-      expiresAt: new Date(Date.now() + WAVE_TTL_MS).toISOString(),
-      demoCode,
-      steps: [
-        `Ouvrez InTouch et envoyez ${formatCurrency(amount)} au marchand ${INTOUCH_MERCHANT_NAME} (${INTOUCH_MERCHANT_NUMBER}).`,
-        `Motif / référence : ${reference}.`,
-        'Validez avec votre code secret InTouch.',
-        'Saisissez ci-dessous le code de confirmation à 6 chiffres pour activer votre carte.',
-      ],
-    };
+  // Le code de démonstration n'existe qu'en développement. En
+  // production, il n'a aucun opérateur derrière lui : sa seule fonction
+  // serait de laisser croire qu'un paiement a eu lieu.
+  const demoCode = import.meta.env.PROD ? undefined : randomCode();
+  if (demoCode) {
+    const codes = readCodes();
+    codes[reference] = demoCode;
+    writeCodes(codes);
   }
 
   return {
@@ -156,9 +165,12 @@ export function isValidWaveCode(code: string): boolean {
 }
 
 /**
- * Vérifie le code saisi. Exige le code généré à l'initiation sur cet appareil.
- * Sans code attendu (stockage vidé / autre appareil) : refusé — passez par
- * la coche manuelle du caissier (confirmation externe vérifiée).
+ * Vérifie le code de DÉMONSTRATION. Exige le code généré à l'initiation sur
+ * cet appareil. Sans code attendu (stockage vidé / autre appareil) : refusé.
+ *
+ * Ce contrôle n'a rien à voir avec une vérification de paiement : en
+ * production, seul le webhook SycaPay déclare un encaissement. Il n'existe
+ * que pour que le parcours de démonstration soit jouable de bout en bout.
  */
 export function checkWaveCode(reference: string, code: string): boolean {
   const clean = code.trim();

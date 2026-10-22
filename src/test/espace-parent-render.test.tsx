@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, act, cleanup } from '@testing-library/react';
 import { AuthProvider } from '@/context/AuthContext';
 import { RestoProvider, useResto } from '@/context/RestoContext';
+import { ProductProvider } from '@/context/ProductContext';
 import EspaceParentPage from '@/pages/EspaceParentPage';
 
 const WEEK_KEY = 'o-resto-weeklymenus-v3';
@@ -19,7 +20,10 @@ function seedPublishedWeek() {
 beforeEach(() => {
   cleanup();
   localStorage.clear();
-  localStorage.setItem('o-resto-current-user', JSON.stringify({ username: 'client', role: 'client', password: '', qrToken: 'ORESTO-CLIENT' }));
+  // La session ne se règle plus ici : elle vient du serveur d'authentification
+  // (voir src/test/setup.ts). Écrire `o-resto-current-user` dans localStorage
+  // ne connecterait plus personne — c'est exactement le contournement que le
+  // durcissement interdit.
   localStorage.setItem('o-resto-parentprofiles-v1', JSON.stringify([
     { parentUsername: 'client', firstName: 'Awa', lastName: 'Diallo', phone: '771234567', updatedAt: new Date().toISOString() },
   ]));
@@ -50,34 +54,39 @@ function renderPage() {
   render(
     <AuthProvider>
       <RestoProvider>
-        <EspaceParentPage />
+        <ProductProvider>
+          <EspaceParentPage />
+        </ProductProvider>
       </RestoProvider>
     </AuthProvider>,
   );
 }
 
 describe('EspaceParentPage render (repro crash childId)', () => {
-  it('rend les 5 sections sans planter (semaine publiée)', () => {
+  it('rend les 5 sections sans planter (semaine publiée)', async () => {
     seedPublishedWeek();
     seedChild();
     // Le seed enfant réinitialise le provider : republier la semaine après.
     seedPublishedWeek();
     renderPage();
-    expect(screen.getByText(/Je choisis l’abonnement/)).toBeTruthy();
+    // `findBy…` et non `getBy…` : le profil est désormais résolu de façon
+    // asynchrone (session serveur → lecture du rôle en base). Au premier
+    // rendu, l'écran affiche encore « Chargement… ».
+    await screen.findByText(/Je choisis l’abonnement/);
     expect(screen.getAllByText(/Menu du jour/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/Historique des dépenses/)).toBeTruthy();
     expect(screen.getByText(/Recharger ma carte/)).toBeTruthy();
   });
 
-  it('semaine de référence affichée par défaut (menus validés + photos)', () => {
+  it('semaine de référence affichée par défaut (menus validés + photos)', async () => {
     seedChild();
     renderPage();
-    expect(screen.getByText('Menu Élève')).toBeTruthy();
+    await screen.findByText('Menu Élève');
     expect(screen.getByText('Menu Burger')).toBeTruthy();
     expect(screen.getAllByText(/900 FCFA/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('semaine explicitement vidée par le Personnel (bel état vide)', () => {
+  it('semaine explicitement vidée par le Personnel (bel état vide)', async () => {
     localStorage.setItem(WEEK_KEY, JSON.stringify([
       { day: 'Lundi', name: '', description: '', items: [] },
       { day: 'Mardi', name: '', description: '', items: [] },
@@ -95,18 +104,18 @@ describe('EspaceParentPage render (repro crash childId)', () => {
       { day: 'Vendredi', name: '', description: '', items: [] },
     ]));
     renderPage();
-    expect(screen.getByText(/Menus en préparation/)).toBeTruthy();
+    await screen.findByText(/Menus en préparation/);
     expect(screen.getByText(/Semaine pas encore publiée/)).toBeTruthy();
   });
 
-  it('supporte un paiement distant sans abonnement lié (pas de crash childId)', () => {
+  it('supporte un paiement distant sans abonnement lié (pas de crash childId)', async () => {
     localStorage.setItem('o-resto-payments-v1', JSON.stringify([
       { id: 'P-DANGLING', amount: 1900, method: 'balance', status: 'paid', reference: 'PAY-X', createdAt: new Date().toISOString(), clientUsername: 'client' },
     ]));
     seedChild();
     // Le paiement pré-existant doit survivre au seed (addChild ne touche pas aux paiements)
     renderPage();
-    expect(screen.getByText(/Historique des dépenses/)).toBeTruthy();
+    await screen.findByText(/Historique des dépenses/);
     expect(screen.getByText('Abonnement')).toBeTruthy();
   });
 });

@@ -53,7 +53,7 @@ const ProfilePage = () => {
   const RoleIcon = roleDef.icon;
   // Seuls parents et DG changent leur mot de passe seuls ;
   // personnel / caissier : réinitialisé uniquement par le DG (Paramètres → Comptes).
-  const canChangeOwnPassword = user.role === 'client' || user.role === 'admin' || user.role === 'manager';
+  const canChangeOwnPassword = user.role === 'client' || user.role === 'admin';
 
   return (
     <div className="p-4 lg:p-8 animate-fade-in max-w-md mx-auto">

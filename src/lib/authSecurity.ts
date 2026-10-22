@@ -43,3 +43,25 @@ export function formatCountdown(ms: number): string {
 export function isValidUsername(name: string): boolean {
   return /^[a-z0-9._-]{3,24}$/.test(name);
 }
+
+/**
+ * Normalise un nom saisi par un parent pour qu'il devienne un identifiant :
+ * « Mamadou », « Awa Diallo » ou « Cissé » → mamadou, awa.diallo, cisse.
+ * - accents retirés (é → e) : l'adresse interne reste ASCII ;
+ * - minuscules ;
+ * - espaces remplacés par un point, points répétés fusionnés ;
+ * - tronqué à 24 caractères (adresse interne déraisonnable sinon).
+ * Rien d'autre n'est supprimé : un « @ » ou « # » reste et fait échouer
+ * isValidUsername — erreur explicite plutôt que nom silencieusement modifié.
+ * MÊME ALGORITHME QUE api/_lib/username.ts — garder les deux synchronisés.
+ */
+export function normalizeUsername(input: string): string {
+  return input
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '.')
+    .replace(/\.{2,}/g, '.')
+    .slice(0, 24);
+}

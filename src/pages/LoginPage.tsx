@@ -1,24 +1,22 @@
 import { useEffect, useState } from 'react';
-import { useAuth, UserRole, addLocalUserHashed, getLoginLock } from '@/context/AuthContext';
-import { useResto } from '@/context/RestoContext';
-import { supabase } from '@/lib/supabase';
-import { hashPassword } from '@/lib/password';
-import { getClientQrToken } from '@/lib/clientQr';
+import { useAuth, UserRole, getLoginLock } from '@/context/AuthContext';
 import { isValidSnPhone } from '@/lib/wave';
 import { formatCountdown } from '@/lib/authSecurity';
 import { ROLE_DEFINITIONS } from '@/lib/roleTasks';
 import OrestoLogo from '@/components/brand/OrestoLogo';
 import {
-  LogIn, AlertCircle, UserRound, LockKeyhole, Eye, EyeOff, ScanLine, UtensilsCrossed, Smartphone,
-  ShoppingCart, Users, LayoutDashboard, Settings, ShieldCheck, KeyRound, Loader2, UserPlus,
-  ArrowRight, ArrowLeft, QrCode, Wallet,
+  LogIn, AlertCircle, UserRound, LockKeyhole, Eye, EyeOff, ScanLine, UtensilsCrossed,
+  ShoppingCart, LayoutDashboard, Settings, ShieldCheck, KeyRound, Loader2,
+  ArrowRight, ArrowLeft, QrCode, Wallet, Smartphone,
   type LucideIcon,
 } from 'lucide-react';
 
 const ROLE_ORDER: UserRole[] = ['client', 'personnel', 'gestionnaire', 'admin'];
 
 /** Points forts affichés sur chaque carte profil (100 % icônes Lucide). */
-const ROLE_HIGHLIGHTS: Record<UserRole, { icon: LucideIcon; label: string }[]> = {
+// « caissier » et « manager » sont d anciens rôles : ils ne font plus partie
+// de UserRole, mais leurs libellés doivent rester affichables.
+const ROLE_HIGHLIGHTS: Record<UserRole | 'caissier' | 'manager', { icon: LucideIcon; label: string }[]> = {
   client: [
     { icon: QrCode, label: 'QR personnel' },
     { icon: Wallet, label: 'Paiement Wave' },
@@ -47,24 +45,18 @@ const ROLE_HIGHLIGHTS: Record<UserRole, { icon: LucideIcon; label: string }[]> =
 
 /**
  * Accueil à cartes de profils.
- * - Parent : self-service (connexion + création de compte).
- * - Personnel, caissier, DG : connexion seule, champs vides —
- *   identifiants fournis par le DG via Paramètres → Comptes.
+ * - Parent : connexion par SON NUMÉRO DE TÉLÉPHONE uniquement (identifiant
+  *   enregistré par l'Espace ISM). Aucune création de compte ici, aucun mot de passe.
+ * - Personnel, caissier, DG : connexion par identifiants fournis par l'Espace ISM.
  */
 const LoginPage = () => {
-  const { login } = useAuth();
-  const { saveParentProfile } = useResto();
+  const { login, loginParent } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
-  // Espace parent : onglets connexion / création de compte
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
-  const [suLast, setSuLast] = useState('');
-  const [suFirst, setSuFirst] = useState('');
-  const [suPhone, setSuPhone] = useState('');
   // Verrouillage anti brute-force : compte à rebours live
   const [lockUntil, setLockUntil] = useState(0);
   const [lockLeft, setLockLeft] = useState('');
@@ -86,9 +78,26 @@ const LoginPage = () => {
     return () => window.clearInterval(id);
   }, [lockUntil]);
 
+  const isParent = selectedRole === 'client';
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (isParent) {
+      if (!isValidSnPhone(username)) {
+        setError('Numéro invalide : format Sénégal (ex : 77 123 45 67).');
+        return;
+      }
+      setSubmitting(true);
+      try {
+        const result = await loginParent(username);
+        if (!result.ok) setError(result.error ?? 'Connexion impossible.');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
 
     if (!username || !password) {
       setError('Veuillez remplir tous les champs');
@@ -114,16 +123,12 @@ const LoginPage = () => {
 
   const selectRole = (role: UserRole) => {
     setSelectedRole(role);
-    // Champs toujours vides : parent comme staff saisissent leurs propres identifiants
-    // (staff : fournis par le DG via Paramètres → Comptes).
+    // Champs toujours vides : chacun saisit Son identifiant.
+    // Parent = son numéro (créé par l'Espace ISM) ; staff = identifiants de l'Espace ISM.
     setUsername('');
     setPassword('');
     setError('');
     setLockUntil(0);
-    setAuthMode('login');
-    setSuLast('');
-    setSuFirst('');
-    setSuPhone('');
   };
 
   const backToRoles = () => {
@@ -132,65 +137,9 @@ const LoginPage = () => {
     setPassword('');
     setError('');
     setLockUntil(0);
-    setAuthMode('login');
-  };
-
-  const switchModeAuth = (mode: 'login' | 'signup') => {
-    setAuthMode(mode);
-    setError('');
-    setLockUntil(0);
-    setUsername('');
-    setPassword('');
-    setSuLast('');
-    setSuFirst('');
-    setSuPhone('');
   };
 
   const activeRole = selectedRole ? ROLE_DEFINITIONS[selectedRole] : null;
-  const isParentSignup = selectedRole === 'client' && authMode === 'signup';
-
-  /** Création de compte parent : identifiants + fiche parent, puis entrée directe. */
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    const name = username.trim().toLowerCase();
-    if (!name || password.length < 6) {
-      setError('Choisissez un nom d’utilisateur et un mot de passe de 6 caractères minimum.');
-      return;
-    }
-    if (!suLast.trim() || !suFirst.trim()) {
-      setError('Indiquez votre nom et prénom.');
-      return;
-    }
-    if (!isValidSnPhone(suPhone)) {
-      setError('Numéro invalide : format Sénégal (ex : 77 123 45 67).');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      // 1) Compte local haché (fonctionne même hors-ligne)
-      const local = await addLocalUserHashed({ username: name, role: 'client', password });
-      if (!local.ok) {
-        setError(local.message);
-        return;
-      }
-      // 2) Base distante si joignable (mot de passe haché, jamais en clair)
-      try {
-        const hashed = await hashPassword(password);
-        await supabase.from('users').insert({
-          username: name, password: hashed, role: 'client', qr_token: getClientQrToken(name),
-        });
-      } catch {
-        /* hors-ligne : le compte local suffit */
-      }
-      // 3) Fiche parent + connexion
-      saveParentProfile(name, suFirst, suLast, suPhone);
-      const ok = await login(name, password);
-      if (!ok) setError("Compte créé : reconnectez-vous avec vos identifiants.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   if (!selectedRole) {
     return (
@@ -281,7 +230,7 @@ const LoginPage = () => {
             )}
           </div>
 
-          <form onSubmit={isParentSignup ? handleSignup : handleLogin} className="p-6 md:p-8 space-y-5">
+          <form onSubmit={handleLogin} className="p-6 md:p-8 space-y-5">
             {error && (
               <div role="alert" aria-live="assertive" className="bg-red-50 border-2 border-red-200 rounded-xl p-4 flex items-center gap-3 text-red-700 animate-shake">
                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -289,126 +238,80 @@ const LoginPage = () => {
               </div>
             )}
 
-            {selectedRole === 'client' && (
-              <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-slate-100">
-                <button
-                  type="button"
-                  onClick={() => switchModeAuth('login')}
-                  className={`py-2.5 rounded-xl text-sm font-bold transition ${!isParentSignup ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                  Se connecter
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchModeAuth('signup')}
-                  className={`py-2.5 rounded-xl text-sm font-bold transition ${isParentSignup ? 'bg-green-700 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                  Créer un compte
-                </button>
-              </div>
-            )}
-
-            {selectedRole !== 'client' && (
+            {isParent ? (
+              <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 flex-shrink-0 text-slate-400" />
+                Accès parent : votre numéro enregistré à la cantine. Aucun mot de passe.
+              </p>
+            ) : (
               <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 flex-shrink-0 text-slate-400" />
                 Identifiants fournis par la Direction (Paramètres → Comptes).
               </p>
             )}
 
-            {isParentSignup && (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="relative">
-                    <UserRound className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      type="text" value={suLast} onChange={(e) => setSuLast(e.target.value)}
-                      autoComplete="family-name" maxLength={40} spellCheck={false}
-                      className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 focus:ring-2 focus:ring-green-600/30 focus:border-green-600 outline-none transition-all"
-                      placeholder="Votre nom *" required
-                    />
-                  </div>
-                  <div className="relative">
-                    <UserRound className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      type="text" value={suFirst} onChange={(e) => setSuFirst(e.target.value)}
-                      autoComplete="given-name" maxLength={40} spellCheck={false}
-                      className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 focus:ring-2 focus:ring-green-600/30 focus:border-green-600 outline-none transition-all"
-                      placeholder="Votre prénom *" required
-                    />
-                  </div>
-                </div>
-                <div>
-                  <div className="relative">
-                    <Smartphone className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      type="tel" value={suPhone} onChange={(e) => setSuPhone(e.target.value)}
-                      autoComplete="tel" maxLength={16}
-                      className={`w-full pl-12 pr-4 py-3 rounded-xl border-2 outline-none transition-all ${suPhone === '' || isValidSnPhone(suPhone) ? 'border-slate-200 focus:ring-2 focus:ring-green-600/30 focus:border-green-600' : 'border-red-300 focus:border-red-400'}`}
-                      placeholder="Téléphone (77 123 45 67) *" required
-                    />
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1">La cantine utilisera ce numéro pour vous joindre.</p>
-                </div>
-              </>
-            )}
-
             <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-slate-400">
-              <KeyRound className="w-3.5 h-3.5" /> Identifiants
+              <KeyRound className="w-3.5 h-3.5" /> {isParent ? 'Votre numéro' : 'Identifiants'}
             </p>
 
             <div>
               <label htmlFor="login-username" className="block text-sm font-semibold text-slate-700 mb-2">
-                {isParentSignup ? "Choisissez un nom d'utilisateur" : "Nom d'utilisateur"}
+                {isParent ? 'Numéro de téléphone' : "Nom d'utilisateur"}
               </label>
               <div className="relative">
-                <UserRound className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                {isParent
+                  ? <Smartphone className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  : <UserRound className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />}
                 <input
                   id="login-username"
-                  type="text"
+                  type={isParent ? 'tel' : 'text'}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  autoComplete="username"
-                  maxLength={32}
+                  autoComplete={isParent ? 'tel' : 'username'}
+                  maxLength={isParent ? 16 : 32}
                   spellCheck={false}
+                  inputMode={isParent ? 'tel' : undefined}
                   className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 focus:ring-2 focus:ring-green-600/30 focus:border-green-600 outline-none transition-all"
-                  placeholder={isParentSignup ? 'ex : awa2026' : 'Votre nom d’utilisateur'}
+                  placeholder={isParent ? '77 123 45 67' : 'Votre nom d’utilisateur'}
                   required
                 />
               </div>
-            </div>
-
-            <div>
-              <label htmlFor="login-password" className="block text-sm font-semibold text-slate-700 mb-2">
-                {isParentSignup ? 'Créez un mot de passe (6 caractères min)' : 'Mot de passe'}
-              </label>
-              <div className="relative">
-                <LockKeyhole className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  id="login-password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete={isParentSignup ? 'new-password' : 'current-password'}
-                  maxLength={72}
-                  className="w-full pl-12 pr-12 py-3 rounded-xl border-2 border-slate-200 text-slate-800 focus:ring-2 focus:ring-green-600/30 focus:border-green-600 outline-none transition-all"
-                  placeholder="••••••••"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  title={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-              {isParentSignup && (
-                <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5" /> Votre QR Carte personnel sera généré à la connexion
+              {isParent && (
+                <p className="mt-1 text-xs text-slate-400">
+                  Le numéro que vous avez communiqué à la cantine. Pour le modifier, adressez-vous à l'Espace ISM.
                 </p>
               )}
             </div>
+
+            {!isParent && (
+              <div>
+                <label htmlFor="login-password" className="block text-sm font-semibold text-slate-700 mb-2">
+                  Mot de passe
+                </label>
+                <div className="relative">
+                  <LockKeyhole className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    id="login-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    maxLength={72}
+                    className="w-full pl-12 pr-12 py-3 rounded-xl border-2 border-slate-200 text-slate-800 focus:ring-2 focus:ring-green-600/30 focus:border-green-600 outline-none transition-all"
+                    placeholder="••••••••"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    title={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <button
               type="submit"
@@ -417,9 +320,8 @@ const LoginPage = () => {
             >
               {submitting
                 ? <Loader2 className="w-5 h-5 animate-spin" />
-                : lockUntil ? <LockKeyhole className="w-5 h-5" />
-                : isParentSignup ? <UserPlus className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
-              {submitting ? (isParentSignup ? 'Création…' : 'Connexion…') : lockUntil ? `Réessayez dans ${lockLeft}` : (isParentSignup ? 'Créer mon compte parent' : 'Entrer dans O RESTO')}
+                : lockUntil ? <LockKeyhole className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
+              {submitting ? 'Connexion…' : lockUntil ? `Réessayez dans ${lockLeft}` : 'Entrer dans O RESTO'}
             </button>
 
             <p className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 pt-1">

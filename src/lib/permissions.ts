@@ -1,33 +1,37 @@
 import { PageName } from '@/types/menu';
 import { UserRole } from '@/context/AuthContext';
 
-// Matrice officielle des accès O RESTO (§2 du cahier des charges).
-// Chaque profil a un périmètre différent : le garde dans App.tsx s'en sert,
-// la Sidebar n'affiche que les pages autorisées.
+// Matrice officielle des accès O RESTO — 4 espaces, 4 périmètres.
+//   Parent    → un parcours continu (Accès Abonné) + profil
+//   Superviseur → terrain cantine : menus, validation, réclamations, QR, utilisateurs…
+//   Caissier  → comptoir : vente POS (scan QR carte élève), espace repas, historique
+//   Espace ISM → pilotage : tableau de bord, finance, abonnés, utilisateurs, historique
+// Règle de caisse : le Caissier tient seul la caisse (POS, encaissement,
+// reçu, espace repas) ; le scan du QR élève au POS débite la carte
+// prépayée de l'élève au lieu d'un paiement Wave par l'enfant.
+// Le Superviseur n'a plus accès à la caisse. Menus, Paramètres et Établissements
+// appartiennent au Superviseur (pas à l'Espace ISM).
 // Référentiel des profils : src/lib/roleTasks.ts
-// Personnel de service : terrain cantine — accueil, gestion menu (composition
-// + publication semaine), validation repas, abonnés & encaissements,
-// QR élèves, utilisateurs, établissement (paramètres), historique.
-// Caissier : PAS d'accueil — tableau de bord, caisse POS (+ paiement,
-// reçu, commandes), menus récréation (lecture), historique.
-// Règle de caisse : SEUL le Caissier tient la Caisse (POS) au quotidien.
-const DG_PAGES: PageName[] = [
+const ISM_PAGES: PageName[] = [
   'dashboard', 'finance', 'subscriptions',
-  'users', 'settings', 'establishments', 'history', 'profile',
+  'users', 'history', 'profile',
+  'import-eleves',
+  // L'Espace ISM supervise l'ensemble des sites : il doit pouvoir
+  // consulter et imprimer les QR Cartes, comme le Superviseur.
+  'qrgallery', 'qrcode',
 ];
 export const ROLE_PAGES: Record<UserRole, PageName[]> = {
-  // Parent : UN seul parcours continu (Espace Parent) + profil.
-  // Anciennes pages conservées en redirect invisible vers 'home'.
-  client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'history', 'profile', 'paymentsuccess', 'paymentfailure'],
-  // Personnel : cantine terrain — menus, validation, abonnés, QR, utilisateurs, établissements, paramètres, historique, menu récréation
-  personnel: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'menurecreation', 'dashboard', 'pos', 'payment', 'receipt', 'orders', 'paymentsuccess', 'paymentfailure'],
-  // Caissier : SANS accueil — tableau de bord, caisse POS, menu récréation, historique
-  gestionnaire: ['dashboard', 'pos', 'payment', 'receipt', 'orders', 'menurecreation', 'history', 'profile', 'paymentsuccess', 'paymentfailure'],
-  // DG : pilotage + suivi uniquement
-  admin: [...DG_PAGES, 'paymentsuccess', 'paymentfailure'],
-  // Compatibilité anciens comptes : caissier → superviseur, manager → DG
-  caissier: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'dashboard', 'pos', 'payment', 'receipt', 'orders', 'paymentsuccess', 'paymentfailure'],
-  manager: [...DG_PAGES, 'paymentsuccess', 'paymentfailure'],
+  // Parent : UN seul parcours continu (Accès Abonné) + profil.
+  client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'history', 'profile', 'paymentsuccess', 'paymentfailure', 'reclamations'],
+  // Superviseur cantine : tout le terrain (menus, paramètres, établissements),
+  // y compris les réclamations. La caisse (POS, encaissement, espace repas)
+  // est réservée au Caissier.
+  personnel: ['home', 'menu', 'validation', 'subscriptions', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'dashboard', 'paymentsuccess', 'paymentfailure', 'reclamations'],
+  // Caissier : POS (avec scan QR élève), espace repas et historique.
+  // Les pages payment/receipt/orders sont le tunnel technique de la vente.
+  gestionnaire: ['pos', 'menurecreation', 'history', 'payment', 'receipt', 'orders', 'profile', 'paymentsuccess', 'paymentfailure'],
+  // Espace ISM : pilotage + suivi uniquement (sans menus/paramètres/établissements)
+  admin: [...ISM_PAGES, 'paymentsuccess', 'paymentfailure'],
 };
 
 export function canAccess(role: UserRole | undefined, page: PageName): boolean {
@@ -39,9 +43,7 @@ export const ROLE_LABEL: Record<UserRole, string> = {
   client: 'Parent',
   personnel: 'Superviseur',
   gestionnaire: 'Caissier',
-  admin: 'Directeur Général',
-  caissier: 'Superviseur',
-  manager: 'Directeur Général',
+  admin: 'Espace ISM',
 };
 
 /** Libellés pro des modules pour les écrans "Périmètre d'accès". */
@@ -55,7 +57,7 @@ export const PAGE_LABEL: Record<PageName, string> = {
   users: 'Utilisateurs',
   settings: 'Paramètres',
   establishments: 'Établissements',
-  history: 'Historique',
+  history: 'Historique des commandes',
   dashboard: 'Tableau de bord',
   menu: 'Gestion Menu',
   menus: 'Menus',
@@ -66,7 +68,9 @@ export const PAGE_LABEL: Record<PageName, string> = {
   profile: 'Profil',
   children: 'Mes enfants',
   finance: 'Finance',
-  menurecreation: 'Menu Récréation',
+  menurecreation: 'Espace Repas',
   paymentsuccess: 'Paiement réussi',
   paymentfailure: 'Paiement échoué',
+  reclamations: 'Réclamations',
+  'import-eleves': 'Import',
 };

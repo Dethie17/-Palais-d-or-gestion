@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "fullstack-developer": {
+      "source": "jshsakura/awesome-opencode-skills",
+      "sourceType": "github",
+      "skillPath": "skills/fullstack-developer/SKILL.md",
+      "computedHash": "554aaa0e6f63d4d9a9e3d1eac6f7cb5928060883af4c4b04a81aac2fb33235a5"
+    }
+  }
+}

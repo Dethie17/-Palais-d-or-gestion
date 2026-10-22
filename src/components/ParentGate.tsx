@@ -46,7 +46,7 @@ const ParentGate = ({ username }: { username: string }) => {
             <OrestoLogo variant="mark" imgClassName="w-12 h-12 object-contain" />
             <span className="text-left">
               <span className="block text-xl font-black tracking-tight leading-none"><span className="text-green-700">O</span> <span className="text-slate-900">RESTO</span></span>
-              <span className="block text-[11px] text-slate-500 font-medium">Espace parent</span>
+              <span className="block text-[11px] text-slate-500 font-medium">Accès Abonné</span>
             </span>
           </div>
         </div>

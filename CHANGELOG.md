@@ -7,6 +7,49 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### 🏦 Passerelle SycaPay (Wave · Orange Money · carte)
+
+L'application ne parle plus directement à Wave : elle parle à un
+`PaymentProvider` (`src/lib/payments/`). SycaPay en production, le parcours
+de démonstration d'avant sinon — la bascule est automatique et l'application
+reste utilisable sans compte marchand.
+
+**Règle appliquée : rien n'est payé tant que le webhook ne l'a pas dit.**
+Ni le `201` d'initiation, ni le retour du navigateur sur `url_success`, ni
+l'accusé du client ne concluent un paiement.
+
+- **Serveur** (`api/`, Vercel Functions) — l'API SycaPay exige mTLS, impossible
+  depuis un navigateur :
+  - `initiate` : paiement mobile money (`SN_PM_WAVE`, `SN_PM_OM`), filtre les
+    services, normalise le numéro en format local, exige les adresses de
+    retour en https ;
+  - `card` : session de paiement par carte hébergée (`/checkout/session`) ;
+  - `webhook` : **seule autorité** sur l'issue d'un paiement, v2 et v1 ;
+    signature HMAC vérifiée sur le corps brut, comparaison à temps constant ;
+  - `status` : rattrapage `statusV2`, rend le même objet et règle de la même
+    façon — c'est le filet quand le webhook est perdu ;
+  - `health` : sonde de configuration, sans révéler de secret.
+- **Règlement en SQL** (`supabase-sycapay.sql`) : `oresto_settle_payment` et
+  `oresto_settle_topup` activent l'abonnement, créditent les repas ou le
+  solde — atomiques et **idempotents** via la table `sycapay_events`
+  (`eventId`), donc une notification rejouée ne crédite pas deux fois.
+- **Périmètres branchés** : abonnements, renouvellement, tickets, recharges
+  de carte prépayée.
+- **`WavePaymentModal`** rend désormais le défi selon sa forme réelle — lien
+  (Wave), QR + liens profonds (Orange Money), page carte, ou invite poussée
+  sur le téléphone — puis attend la confirmation au lieu de demander un code.
+- **Nouvelle `SycaPayReturnPage`** (`/paiement/sycapay/ok|echec?ref=…`) :
+  écran d'attente qui interroge le prestataire, rendu **avant** la garde de
+  connexion (un client qui revient sans session valide doit voir où en est son
+  règlement, pas un formulaire de login).
+- `RestoContext` : `openProviderPayment`, `syncPaymentFromProvider`,
+  `refreshRemote` ; `oresto_payments` porte désormais `child_id` et
+  `qr_token`, sans quoi le webhook ne saurait pas à qui créditer un ticket.
+- `EspaceParentPage` : les deux panneaux de paiement dupliqués délèguent au
+  modal partagé (~230 lignes en moins, un seul endroit à maintenir).
+- Config : `SYCAPAY_*` côté serveur uniquement (clé privée mTLS), `VITE_APP_URL`
+  pour les adresses de retour. Guide : `docs/SYCAPAY_INTEGRATION.md`.
+
 ### 🔐 Rôles & caisse
 - Caisse (POS + encaissement + reçus + commandes) retirée du Directeur Général : **seul le Gérant de cantine** la tient (`permissions.ts`, Sidebar, Accueil).
 - Le DG supervise : suivi des encaissements en lecture (Abonnés & paiements), rapports, paramètres.

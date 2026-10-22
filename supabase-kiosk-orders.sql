@@ -21,5 +21,7 @@ create index if not exists kiosk_orders_child_idx on public.kiosk_orders (child_
 create index if not exists kiosk_orders_created_idx on public.kiosk_orders (created_at desc);
 create index if not exists kiosk_orders_status_idx on public.kiosk_orders (status);
 
--- RLS policies (open for now, can be tightened per establishment)
-allow all on public.kiosk_orders;
+-- RLS policies (ouvert pour l'instant, à resserrer par établissement)
+ALTER TABLE public.kiosk_orders ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS open_kiosk_orders ON public.kiosk_orders;
+CREATE POLICY open_kiosk_orders ON public.kiosk_orders FOR ALL USING (true) WITH CHECK (true);

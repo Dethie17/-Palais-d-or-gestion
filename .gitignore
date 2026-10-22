@@ -28,3 +28,19 @@ dist-ssr
 
 .vercel
 .env*
+
+# ── Secrets mTLS SycaPay ─────────────────────────────────
+# La clé privée client ne doit JAMAIS entrer dans un dépôt.
+# Elle est convertie en base64 dans .env.local (déjà ignoré ci-dessus) par
+# scripts/sycapay-env.mjs ; les PEM restent hors du dépôt.
+*.key
+*.pem
+*.crt
+*.csr
+*.pfx
+*.p12
+certifs/
+
+.env
+*.key
+*.crt

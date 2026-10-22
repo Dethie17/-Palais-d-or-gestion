@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { PageName, Order } from '@/types/menu';
+import { PageName, Order, COMPLAINT_STATUS_LABEL } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
 import { ismPeriod, ismLastMonths, monthStart, globalChartData } from '@/lib/ismFinance';
+import { revenueBreakdown } from '@/lib/revenue';
 import {
   TrendingUp,
   ShoppingCart,
@@ -17,12 +18,15 @@ import {
   UtensilsCrossed,
   Landmark,
   Radar,
+  MessageSquareWarning,
+  CalendarDays,
 } from 'lucide-react';
 import { useApp, getOrderStats, getTopProducts } from '@/context/AppContext';
 import { useProducts } from '@/context/ProductContext';
 import { useResto } from '@/context/RestoContext';
 import { useAuth } from '@/context/AuthContext';
 import { canAccess } from '@/lib/permissions';
+import { accountablePayments, useValidatedFinance } from '@/lib/validatedFinance';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar,
@@ -37,12 +41,10 @@ type PeriodFilter = 'realtime' | 'day' | 'week' | 'month';
 
 const DARK_CARD = 'bg-slate-900 border border-slate-800 rounded-2xl shadow-sm';
 
-const getStatCards = (orders: Order[], period: PeriodFilter, activeProductCount: number, previousProductCount: number) => {
+const getStatCards = (orders: Order[], period: PeriodFilter) => {
   const stats = getOrderStats(orders, period === 'realtime' ? 'day' : period);
   const periodLabel = period === 'realtime' ? 'en temps réel' : period === 'day' ? 'du jour' : period === 'week' ? 'de la semaine' : 'du mois';
 
-  const productChange = activeProductCount - previousProductCount;
-  const productChangeStr = productChange > 0 ? `+${productChange}` : productChange < 0 ? `${productChange}` : '0';
 
   return [
     {
@@ -69,14 +71,6 @@ const getStatCards = (orders: Order[], period: PeriodFilter, activeProductCount:
       icon: Users,
       chip: 'bg-slate-500/15 text-slate-300',
     },
-    {
-      label: 'Produits actifs',
-      value: activeProductCount.toString(),
-      change: productChangeStr,
-      positive: productChange >= 0,
-      icon: Package,
-      chip: 'bg-emerald-500/15 text-emerald-400',
-    },
   ];
 };
 
@@ -99,12 +93,22 @@ const statusLabels: Record<string, string> = {
 const Dashboard = ({ onNavigate }: DashboardProps) => {
   const { orders } = useApp();
   const { products } = useProducts();
-  const { subscriptions, payments, validations, stats: restoStats, financeSettings, formulas } = useResto();
+  const {
+    subscriptions, payments, validations, complaints, weeklyMenus, children: kids,
+    stats: restoStats, financeSettings, formulas, kioskOrders, walletTxs,
+  } = useResto();
   const { user } = useAuth();
   const [period, setPeriod] = useState<PeriodFilter>('realtime');
 
+  // Comptabilité : la base fait foi (horodatage de règlement). Sans elle,
+  // on retombe sur les paiements du poste, filtrés par la règle locale.
+  const { data: validatedFinance } = useValidatedFinance();
+  const accounted = useMemo(
+    () => accountablePayments(payments, validatedFinance),
+    [payments, validatedFinance],
+  );
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
+  const isAdmin = user?.role === 'admin';
   const pendingCash = payments.filter((p) => p.status === 'pending');
   const expiringSoon = subscriptions.filter((s) => {
     if (s.status !== 'active') return false;
@@ -117,42 +121,106 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
     return v.status === 'accepted' && d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
   });
 
-  const activeProductCount = products.filter(p => p.available).length;
-  const previousProductCount = products.length;
-
-  // Courbe DG : caisse + abonnements (la caisse seule reste vide en cantine scolaire)
-  const globalData = globalChartData(orders, payments, period);
-  const hasGlobalData = globalData.some((d) => d.total > 0);
-  const topProducts = getTopProducts(orders);
-  const recentOrders = orders.slice(0, 6);
-
-  const statCards = getStatCards(orders, period, activeProductCount, previousProductCount);
-
-  // ---- Chiffre d'affaires : caisse (commandes vendues) + abonnements (paiements encaissés)
+  // ---- Chiffre d'affaires : ventes réelles + abonnements validés.
+  // Jamais les recharges de carte : ce n'est pas une vente.
   const nowRef = new Date();
   const startOfDay = new Date(nowRef.getFullYear(), nowRef.getMonth(), nowRef.getDate(), 0, 0, 0, 0);
   const startOfWeek = new Date(startOfDay);
   startOfWeek.setDate(startOfDay.getDate() - ((startOfDay.getDay() + 6) % 7));
   const startOfMonth = monthStart(nowRef);
 
-  const paidPayments = payments.filter((p) => p.status === 'paid');
-  const sumSubsSince = (d: Date) =>
-    paidPayments.filter((p) => new Date(p.createdAt).getTime() >= d.getTime())
-      .reduce((sum, p) => sum + p.amount, 0);
+  const revenueSource = { payments: accounted, orders, kioskOrders, walletTxs, subscriptions, formulas };
+  const revDay = revenueBreakdown(revenueSource, startOfDay.getTime());
+  const revWeek = revenueBreakdown(revenueSource, startOfWeek.getTime());
+  const revMonth = revenueBreakdown(revenueSource, startOfMonth.getTime());
+  const revAll = revenueBreakdown(revenueSource, 0);
+const caDay = { orders: revDay.sales, subs: 0, total: revDay.sales };
+const caWeek = { orders: revWeek.sales, subs: 0, total: revWeek.sales };
+const caMonth = { orders: revMonth.sales, subs: 0, total: revMonth.sales };
+  const caPeriod = period === 'week' ? caWeek : period === 'month' ? caMonth : caDay;
 
-  const caDay = { orders: getOrderStats(orders, 'day').revenue, subs: sumSubsSince(startOfDay) };
-  const caWeek = { orders: getOrderStats(orders, 'week').revenue, subs: sumSubsSince(startOfWeek) };
-  const caMonth = { orders: getOrderStats(orders, 'month').revenue, subs: sumSubsSince(startOfMonth) };
+  // Courbe DG : ventes (caisse, kiosque, tickets, repas carte) + abonnements validés.
+  const globalData = globalChartData(orders, accounted, period, {
+    sales: revAll.extraSalesEvents,
+    subscriptions,
+    formulas,
+  });
+  const hasGlobalData = globalData.some((d) => d.total > 0);
+  const topProducts = getTopProducts(orders);
+  const recentOrders = orders.slice(0, 6);
+
+const statCards = getStatCards(orders, period).map((card, index) =>
+    index === 0
+      ? {
+          ...card,
+          ...card,
+          label: 'CA ventes',
+          value: formatCurrency(caPeriod.total),
+          change: caPeriod.total > 0 ? '+' + Math.round(caPeriod.total) + ' F' : 'aucune vente',
+          positive: caPeriod.total > 0,
+        }
+      : card,
+  );
+
+  // ---- Volet superviseur : ce qui compte à la cantine, pas la caisse.
+  // Le DAF garde les indicateurs commerciaux ; le superviseur suit le service.
+  const openComplaints = complaints.filter((c) => c.status === 'open' || c.status === 'in_progress');
+  const rejectedToday = validations.filter((v) => {
+    const d = new Date(v.validatedAt); const n = new Date();
+    return v.status !== 'accepted' && d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  });
+  const activeSubs = subscriptions.filter((s) => s.status === 'active');
+  const JOURS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+  const menuDuJour = weeklyMenus.find((m) => m.day === JOURS[new Date().getDay()]);
+  const nomDeLEleve = (childId?: string) => {
+    const c = kids.find((x) => x.id === childId);
+    return c ? `${c.firstName} ${c.lastName}` : 'Élève';
+  };
+
+  const supervisorCards = [
+    {
+      label: 'Repas servis aujourd’hui',
+      value: todayAccepted.length.toString(),
+      change: rejectedToday.length > 0 ? `${rejectedToday.length} refusés` : 'aucun refus',
+      positive: rejectedToday.length === 0,
+      icon: UtensilsCrossed,
+      chip: 'bg-emerald-500/15 text-emerald-400',
+    },
+    {
+      label: 'CA du jour',
+      value: formatCurrency(caDay.orders),
+      change: 'Semaine ' + formatCurrency(caWeek.orders),
+      positive: caDay.orders + caDay.subs > 0,
+      icon: TrendingUp,
+      chip: 'bg-slate-500/15 text-slate-300',
+    },
+    {
+      label: 'Abonnés actifs',
+      value: activeSubs.length.toString(),
+      change: expiringSoon.length > 0 ? `${expiringSoon.length} expirent` : 'aucune échéance',
+      positive: expiringSoon.length === 0,
+      icon: Users,
+      chip: 'bg-slate-500/15 text-slate-300',
+    },
+    {
+      label: 'Réclamations à traiter',
+      value: openComplaints.length.toString(),
+      change: openComplaints.length > 0 ? 'en attente de réponse' : 'File vide',
+      positive: openComplaints.length === 0,
+      icon: MessageSquareWarning,
+      chip: 'bg-amber-500/15 text-amber-300',
+    },
+  ];
 
   // ---- Comptabilité ISM du mois (espace DG) : 2000 F / abonnement + % ventes
   const ismMonth = useMemo(
-    () => ismPeriod(payments, orders, subscriptions, formulas, financeSettings, startOfMonth.getTime()),
+    () => ismPeriod(accounted, orders, subscriptions, formulas, financeSettings, startOfMonth.getTime(), caMonth.orders),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [payments, orders, subscriptions, formulas, financeSettings, startOfMonth.getTime()],
+    [accounted, orders, subscriptions, formulas, financeSettings, startOfMonth.getTime(), caMonth.orders],
   );
   const ismHistory = useMemo(
-    () => ismLastMonths(payments, orders, subscriptions, formulas, financeSettings, 6),
-    [payments, orders, subscriptions, formulas, financeSettings],
+    () => ismLastMonths(accounted, orders, subscriptions, formulas, financeSettings, 6, revAll.extraSalesEvents),
+    [accounted, orders, subscriptions, formulas, financeSettings, revAll.extraSalesEvents],
   );
 
   const handleDownloadReport = async () => {
@@ -186,16 +254,16 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
 
       doc.setFontSize(11);
       const statsY = 60;
-      doc.text(`Total Revenus: ${formatCurrency(stats.revenue)}`, 20, statsY);
+      doc.text(`Total Revenus caisse: ${formatCurrency(stats.revenue)}`, 20, statsY);
       doc.text(`Total Commandes: ${stats.orders}`, 20, statsY + 7);
       doc.text(`Total Clients: ${stats.customers}`, 20, statsY + 14);
 
       doc.setFontSize(14);
-      doc.text("Chiffre d'affaires global (caisse + abonnements)", 20, statsY + 28);
+      doc.text("Chiffre d'affaires global (ventes + abonnements validés)", 20, statsY + 28);
       doc.setFontSize(11);
-      doc.text(`CA du jour: ${formatCurrency(caDay.orders + caDay.subs)} (caisse ${formatCurrency(caDay.orders)} + abos ${formatCurrency(caDay.subs)})`, 20, statsY + 36);
-      doc.text(`CA de la semaine: ${formatCurrency(caWeek.orders + caWeek.subs)} (caisse ${formatCurrency(caWeek.orders)} + abos ${formatCurrency(caWeek.subs)})`, 20, statsY + 43);
-      doc.text(`CA du mois: ${formatCurrency(caMonth.orders + caMonth.subs)} (caisse ${formatCurrency(caMonth.orders)} + abos ${formatCurrency(caMonth.subs)})`, 20, statsY + 50);
+      doc.text(`CA du jour: ${formatCurrency(caDay.orders)} (ventes ${formatCurrency(caDay.orders)})`, 20, statsY + 36);
+      doc.text(`CA de la semaine: ${formatCurrency(caWeek.orders)} (ventes ${formatCurrency(caWeek.orders)})`, 20, statsY + 43);
+      doc.text(`CA du mois: ${formatCurrency(caMonth.orders)} (ventes ${formatCurrency(caMonth.orders)})`, 20, statsY + 50);
       doc.text(`Abonnes actifs: ${restoStats.activeClients} - Repas valides aujourd'hui: ${todayAccepted.length}`, 20, statsY + 57);
 
       // Solde ISM du mois
@@ -248,10 +316,10 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
       rows.push(['O RESTO — Rapport Direction']);
       rows.push([`Généré le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR')}`]);
       rows.push([]);
-      rows.push(['CHIFFRE D\'AFFAIRES', 'Caisse', 'Abonnements', 'Total']);
-      rows.push(['CA du jour', String(caDay.orders), String(caDay.subs), String(caDay.orders + caDay.subs)]);
-      rows.push(['CA de la semaine', String(caWeek.orders), String(caWeek.subs), String(caWeek.orders + caWeek.subs)]);
-      rows.push(['CA du mois', String(caMonth.orders), String(caMonth.subs), String(caMonth.orders + caMonth.subs)]);
+      rows.push(['CHIFFRE D\'AFFAIRES', 'Ventes', 'Abonnements validés', 'Total']);
+      rows.push(['CA du jour', String(caDay.orders), String(caDay.orders)]);
+      rows.push(['CA de la semaine', String(caWeek.orders), String(caWeek.orders)]);
+      rows.push(['CA du mois', String(caMonth.orders), String(caMonth.orders)]);
       rows.push([]);
       rows.push(['SOLDE ISM DU MOIS (à verser)', 'Montant']);
       rows.push([`Abonnements : ${ismMonth.aboCount} x ${financeSettings.ismPerSubscription}`, String(ismMonth.ismAbo)]);
@@ -312,13 +380,13 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                 <span className="w-9 h-9 rounded-xl bg-green-700 flex items-center justify-center">
                   <Radar aria-hidden className="w-5 h-5 text-white" />
                 </span>
-                Tableau de bord DG
+                {isAdmin ? 'Tableau de bord Espace ISM' : 'Tableau de bord superviseur'}
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 text-green-800 text-xs font-bold">
                   <span className="w-1.5 h-1.5 bg-green-700 rounded-full animate-pulse" /> En direct
                 </span>
               </h1>
               <p className="text-xs sm:text-sm text-slate-600 mt-1">
-                {isAdmin ? 'Pilotage global O RESTO — Caisse + Abonnements + Solde ISM' : 'Pilotage de votre site — Repas, abonnés, alertes'}
+                {isAdmin ? 'Pilotage global O RESTO — Ventes + Abonnements validés + Solde ISM' : 'Supervision de votre cantine — Repas servis, menus, abonnés, réclamations'}
               </p>
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -356,9 +424,9 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
           </div>
         </div>
 
-        {/* KPI */}
+        {/* KPI — indicateurs du rôle : commercial pour le DAF, service pour le superviseur */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {statCards.map((stat) => {
+          {(isAdmin ? statCards : supervisorCards).map((stat) => {
             const Icon = stat.icon;
             return (
               <div key={stat.label} className={`${DARK_CARD} p-4 sm:p-5 hover:border-emerald-500/40 transition-colors`}>
@@ -376,6 +444,97 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
             );
           })}
         </div>
+
+        {/* Volet superviseur : l'état du service, pas la caisse */}
+        {!isAdmin && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className={`lg:col-span-2 ${DARK_CARD} p-4 sm:p-6`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                  <UtensilsCrossed className="w-5 h-5 text-emerald-400" /> Service du jour
+                </h2>
+                <button onClick={() => onNavigate('validation')} className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300">
+                  Ouvrir la validation <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+                  <p className="text-2xl font-black text-white">{todayAccepted.length}</p>
+                  <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Repas servis</p>
+                </div>
+                <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+                  <p className="text-2xl font-black text-white">{rejectedToday.length}</p>
+                  <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Refusés</p>
+                </div>
+                <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+                  <p className="text-2xl font-black text-white">{activeSubs.length}</p>
+                  <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Abonnés actifs</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25 p-3 mb-4">
+                <CalendarDays className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-emerald-100">
+                  {menuDuJour ? (
+                    <span>Menu publié pour aujourd’hui : <strong>{menuDuJour.name || `Menu du ${menuDuJour.day}`}</strong>{(menuDuJour.items ?? []).length > 0 ? ` — ${(menuDuJour.items ?? []).map((i) => i.name).join(', ')}` : ''}</span>
+                  ) : (
+                    <span>Aucun menu publié pour aujourd’hui — la validation fonctionne par abonnement / solde carte.</span>
+                  )}
+                </p>
+              </div>
+
+              {todayAccepted.length > 0 ? (
+                <div className="space-y-2">
+                  {todayAccepted.slice(0, 6).map((v) => (
+                    <div key={v.id} className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-white/5 border border-transparent">
+                      <span className="text-sm font-semibold text-slate-200 truncate">{nomDeLEleve(v.childId)}</span>
+                      <span className="flex items-center gap-2 text-xs text-slate-400 flex-shrink-0">
+                        <Clock className="w-3.5 h-3.5" />
+                        {new Date(v.validatedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500 text-center py-6 border border-dashed border-white/15 rounded-2xl">
+                  Aucun repas servi pour l’instant aujourd’hui.
+                </p>
+              )}
+            </div>
+
+            <div className={`${DARK_CARD} p-4 sm:p-6`}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                  <MessageSquareWarning className="w-5 h-5 text-amber-400" /> Réclamations
+                </h2>
+                <button onClick={() => onNavigate('reclamations')} className="flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300">
+                  Tout traiter <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {openComplaints.length > 0 ? (
+                <div className="space-y-3">
+                  {openComplaints.slice(0, 5).map((c) => (
+                    <div key={c.id} className="p-3 rounded-xl bg-white/5 border border-white/10">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs font-bold text-slate-400">{c.reference}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${c.status === 'open' ? 'bg-amber-500/15 text-amber-300' : 'bg-blue-500/15 text-blue-300'}`}>
+                          {COMPLAINT_STATUS_LABEL[c.status]}
+                        </span>
+                      </div>
+                      <p className="text-sm font-semibold text-slate-200 line-clamp-2">{c.subject}</p>
+                      <p className="text-[11px] text-slate-500 mt-1">{new Date(c.createdAt).toLocaleDateString('fr-FR')}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500 text-center py-6 border border-dashed border-white/15 rounded-2xl">
+                  Aucune réclamation en attente. Les parents n’ont rien signalé.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Solde ISM du mois — Direction */}
         {isAdmin && (
@@ -408,7 +567,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
               <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
                 <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Part ventes ({financeSettings.ismSalesPct} %)</p>
                 <p className="text-xl sm:text-2xl font-black text-white mt-1">{formatCurrency(ismMonth.ismSales)}</p>
-                <p className="text-xs text-slate-400 mt-1">Caisse du mois : {formatCurrency(ismMonth.salesGross)}</p>
+                <p className="text-xs text-slate-400 mt-1">Ventes du mois : {formatCurrency(ismMonth.salesGross)}</p>
                 <button onClick={() => onNavigate('finance')} className="mt-2 text-xs font-bold text-amber-400 hover:underline flex items-center gap-1">
                   Détail comptable <ArrowRight className="w-3.5 h-3.5" />
                 </button>
@@ -451,7 +610,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
               Performance {period === 'realtime' ? 'en temps réel' : period === 'day' ? 'journalière' : period === 'week' ? 'hebdomadaire' : 'mensuelle'}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              {period === 'realtime' ? 'Dernières 12 heures — mise à jour instantanée' : 'Caisse + abonnements encaissés'}
+              {period === 'realtime' ? 'Dernières 12 heures — mise à jour instantanée' : 'Ventes + abonnements validés'}
             </p>
             {hasGlobalData ? (
             <div className="h-64 sm:h-80 w-full mt-3">
@@ -472,7 +631,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
                   />
                   <Legend wrapperStyle={{ paddingTop: '16px' }} iconType="circle" formatter={(value) => <span style={{ color: '#94a3b8', fontWeight: '600', fontSize: '13px' }}>{value}</span>} />
                   <Line type="monotone" dataKey="total" name="Total" stroke="#10b981" strokeWidth={3} dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }} activeDot={{ r: 6, fill: '#059669', stroke: '#fff', strokeWidth: 2 }} />
-                  <Line type="monotone" dataKey="caisse" name="Caisse" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 5, fill: '#d97706', stroke: '#fff', strokeWidth: 2 }} />
+                  <Line type="monotone" dataKey="caisse" name="Ventes" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 5, fill: '#d97706', stroke: '#fff', strokeWidth: 2 }} />
                   <Line type="monotone" dataKey="abonnements" name="Abonnements" stroke="#14b8a6" strokeWidth={2} dot={false} activeDot={{ r: 5, fill: '#0d9488', stroke: '#fff', strokeWidth: 2 }} />
                 </LineChart>
               </ResponsiveContainer>
@@ -480,8 +639,8 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
             ) : (
               <div className="h-64 sm:h-80 w-full mt-3 flex flex-col items-center justify-center text-center border border-dashed border-white/15 rounded-2xl">
                 <TrendingUp className="w-10 h-10 text-slate-600" />
-                <p className="mt-2 font-bold text-slate-300 text-sm">Aucune vente ni abonnement sur la période</p>
-                <p className="text-xs text-slate-500 mt-1">Les courbes Caisse + Abonnements apparaîtront ici dès le premier encaissement.</p>
+                <p className="mt-2 font-bold text-slate-300 text-sm">Aucune vente ni abonnement validé sur la période</p>
+                <p className="text-xs text-slate-500 mt-1">Les courbes Ventes + Abonnements apparaîtront ici dès la première vente validée.</p>
               </div>
             )}
           </div>

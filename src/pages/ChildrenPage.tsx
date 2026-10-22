@@ -3,8 +3,12 @@ import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import type { ORestoPaymentMethod, SchoolCycle } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
-import { isMobileMethod, type WavePaymentRequest } from '@/lib/wave';
-import { CYCLES, CYCLE_LABEL, FORMULA_CYCLE } from '@/lib/schoolCycles';
+import { isMobileMethod, isOnlineMobileMethod, isValidSnPhone, type WavePaymentRequest } from '@/lib/wave';
+import { CYCLES, CYCLE_LABEL, FORMULA_CYCLES, formulaCoversCycle } from '@/lib/schoolCycles';
+import {
+  PARENT_PAYMENT_METHODS, PARENT_METHOD_LABEL, PARENT_METHOD_ERROR,
+  isParentPaymentMethod,
+} from '@/lib/parentPayments';
 import { QRCodeSVG } from 'qrcode.react';
 import WavePaymentModal from '@/components/WavePaymentModal';
 import {
@@ -26,7 +30,7 @@ const ChildrenPage = () => {
     myChildren, walletOf, childTxs, updateChild,
     topUpChild, confirmWalletTopUpMobile, formulas, subscriptions,
     subscribe, paySubscription, confirmMobilePayment,
-    parentProfileOf, myValidations,
+    parentProfileOf, myValidations, openProviderPayment, syncPaymentFromProvider,
   } = useResto();
   const username = user?.username ?? '';
   const kids = myChildren(username);
@@ -37,6 +41,13 @@ const ChildrenPage = () => {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [methods, setMethods] = useState<Record<string, ORestoPaymentMethod>>({});
+  /**
+   * Numéro mobile du payeur, par enfant (pré-rempli avec le téléphone du
+   * profil parent). SycaPay l'exige pour pousser la demande vers Wave ou
+   * Max it : sans numéro valide, pas de redirection possible.
+   */
+  const [phones, setPhones] = useState<Record<string, string>>({});
+  const phoneFor = (childId: string) => phones[childId] ?? profile?.phone ?? '';
 
   const [waveModal, setWaveModal] = useState<{ txId: string; wave: WavePaymentRequest } | null>(null);
   const [subWaveModal, setSubWaveModal] = useState<{ paymentId: string; wave: WavePaymentRequest } | null>(null);
@@ -76,24 +87,41 @@ const ChildrenPage = () => {
     return subscriptions.find((s) => s.childId === childId && s.status === 'active' && new Date(s.endDate).getTime() >= now);
   };
 
-  const handleTopUp = (childId: string) => {
+  const handleTopUp = async (childId: string) => {
     const amount = Math.floor(Number(amounts[childId] ?? 0));
     const method = methods[childId] ?? 'wave';
+    // Garde : l'espace parent ne recharge qu'avec Wave / Orange Money.
+    if (!isParentPaymentMethod(method)) {
+      flash(false, PARENT_METHOD_ERROR);
+      return;
+    }
     if (!Number.isFinite(amount) || amount < 100 || amount > 1000000) {
       flash(false, 'Montant invalide : entre 100 et 1 000 000 FCFA.');
       return;
     }
+    // Le numéro du payeur est validé AVANT l'initiation : c'est lui qui
+    // désigne le compte Wave / Max it à qui l'opérateur pousse la demande.
+    const phone = phoneFor(childId);
+    if (isOnlineMobileMethod(method) && !isValidSnPhone(phone)) {
+      flash(false, 'Numéro mobile invalide (9 chiffres, ex : 77 123 45 67).');
+      return;
+    }
     try {
-      const { tx, wave } = topUpChild(childId, amount, method);
+      const { tx } = topUpChild(childId, amount, method);
       setAmounts((p) => ({ ...p, [childId]: '' }));
-      if (wave && isMobileMethod(method)) {
+      if (isOnlineMobileMethod(method)) {
+        // La recharge est enregistrée « en attente » : le webhook la crédite,
+        // pas le client. On ouvre la fenêtre pour obtenir le défi.
+        const session = await openProviderPayment(
+          { reference: tx.reference, amount, method, phone },
+          'topup',
+          tx.id,
+        );
         setConfirmError(null);
-        setWaveModal({ txId: tx.id, wave });
+        setWaveModal({ txId: tx.id, wave: session });
         return;
       }
-      flash(true, method === 'cash'
-        ? `Carte rechargée : +${formatCurrency(amount)}.`
-        : `Recharge ${tx.reference} enregistrée : le caissier la confirmera après votre envoi ${method === 'wave' ? 'Wave' : method === 'mobile_money' ? 'Orange Money' : 'par carte'}.`);
+      flash(true, `Recharge ${tx.reference} enregistrée : en attente de confirmation.`);
     } catch (err) {
       flash(false, err instanceof Error ? err.message : 'Recharge impossible.');
     }
@@ -116,39 +144,48 @@ const ChildrenPage = () => {
   /** Formules mensuelles autorisées pour un enfant : son cycle + la découverte hebdo (transverse). */
   const formulasForChild = (childCycle: SchoolCycle | undefined) => {
     const cycle = childCycle ?? 'primaire';
-    return aboFormulas.filter((f) => {
-      const required = FORMULA_CYCLE[f.id];
-      return !required || required === cycle;
-    });
+    return aboFormulas.filter((f) => formulaCoversCycle(f.id, cycle));
   };
 
-  const handleSubscribeChild = (childId: string) => {
+  const handleSubscribeChild = async (childId: string) => {
     const formulaId = subFormula[childId];
     const method = subMethod[childId] ?? 'wave';
+    // Garde : l'espace parent n'abonne qu'avec Wave / Orange Money.
+    if (!isParentPaymentMethod(method)) {
+      flash(false, PARENT_METHOD_ERROR);
+      return;
+    }
     if (!formulaId) {
       flash(false, 'Choisissez une formule pour cet enfant.');
       return;
     }
     const child = kids.find((k) => k.id === childId);
     const childCycle = child?.cycle ?? 'primaire';
-    const required = FORMULA_CYCLE[formulaId];
-    if (required && required !== childCycle) {
-      flash(false, `Cette formule est réservée au cycle ${CYCLE_LABEL[required]}.`);
+    if (!formulaCoversCycle(formulaId, childCycle)) {
+      flash(false, `Cette formule est réservée aux cycles ${FORMULA_CYCLES[formulaId]?.map((c) => CYCLE_LABEL[c]).join(', ')}.`);
       return;
     }
     try {
       const sub = subscribe(username, formulaId, childId);
       // Objet frais passé en 3e arg : évite le lookup en state stale (même handler).
-      const { payment, wave } = paySubscription(sub.id, method, sub);
-      if (wave && isMobileMethod(method)) {
+      const { payment } = paySubscription(sub.id, method, sub);
+      if (isOnlineMobileMethod(method)) {
+        const phone = phoneFor(childId);
+        if (!isValidSnPhone(phone)) {
+          flash(false, 'Numéro mobile invalide (9 chiffres, ex : 77 123 45 67).');
+          return;
+        }
+        const session = await openProviderPayment(
+          { reference: payment.reference, amount: payment.amount, method, phone },
+          'sub',
+          payment.id,
+        );
         setSubConfirmError(null);
-        setSubWaveModal({ paymentId: payment.id, wave });
-        flash(true, `Abonnement réservé. Confirmez le paiement ${payment.reference} avec votre code Wave.`);
+        setSubWaveModal({ paymentId: payment.id, wave: session });
+        flash(true, `Abonnement réservé (${payment.reference}). Finalisez le paiement pour activer la carte.`);
         return;
       }
-      flash(true, method === 'cash'
-        ? `Abonnement réservé (${payment.reference}) : payez au comptoir, le caissier activera la carte.`
-        : `Abonnement réservé (${payment.reference}) : en attente de confirmation du caissier.`);
+      flash(true, `Abonnement réservé (${payment.reference}) : finalisez le paiement pour activer la carte.`);
     } catch (err) {
       flash(false, err instanceof Error ? err.message : 'Souscription impossible.');
     }
@@ -369,15 +406,26 @@ const ChildrenPage = () => {
                         type="number" min={100} max={1000000} step={100} inputMode="numeric" value={amounts[k.id] ?? ''} onChange={(e) => setAmounts((p) => ({ ...p, [k.id]: e.target.value }))}
                         placeholder="Montant FCFA (100 – 1 000 000)" aria-label={`Montant à recharger pour ${k.firstName} ${k.lastName}`} className="flex-1 px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-green-600"
                       />
-                      <select value={methods[k.id] ?? 'wave'} onChange={(e) => setMethods((p) => ({ ...p, [k.id]: e.target.value as ORestoPaymentMethod }))} className="px-3 py-2 rounded-xl border-2 border-slate-200 text-sm bg-white">
-                        <option value="wave">Wave</option>
-                        <option value="cash">Espèces</option>
-                        <option value="mobile_money">Orange Money</option>
-                        <option value="card">Carte</option>
+                      <select value={methods[k.id] ?? 'wave'} onChange={(e) => setMethods((p) => ({ ...p, [k.id]: e.target.value as ORestoPaymentMethod }))} className="px-3 py-2 rounded-xl border-2 border-slate-200 text-sm bg-white" aria-label={`Moyen de recharge pour ${k.firstName} ${k.lastName}`}>
+                        {PARENT_PAYMENT_METHODS.map((m) => (
+                          <option key={m} value={m}>{PARENT_METHOD_LABEL[m]}</option>
+                        ))}
                       </select>
                       <button onClick={() => handleTopUp(k.id)} className="px-4 py-2 rounded-xl bg-green-700 text-white text-sm font-bold hover:bg-green-800">Recharger</button>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">Wave = code à confirmer · Espèces / OM / Carte = confirmation du caissier.</p>
+                    {(isOnlineMobileMethod(methods[k.id] ?? 'wave')) && (
+                      <div className="mt-2">
+                        <input
+                          inputMode="tel"
+                          value={phoneFor(k.id)}
+                          onChange={(e) => setPhones((p) => ({ ...p, [k.id]: e.target.value.replace(/\D/g, '').slice(0, 12) }))}
+                          placeholder="Numéro Wave / Orange Money (ex : 77 123 45 67)"
+                          aria-label={`Numéro mobile pour recharger la carte de ${k.firstName}`}
+                          className="w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-green-600"
+                        />
+                      </div>
+                    )}
+                    <p className="text-[11px] text-slate-400 mt-1">Wave / Orange Money : vous êtes envoyé dans l’application pour valider — la carte est créditée après confirmation du paiement.</p>
                   </div>
 
                   {/* Étape 2 — Abonnement du cycle de l'enfant (repas crédités sur la carte) */}
@@ -388,17 +436,28 @@ const ChildrenPage = () => {
                         <option value="">— Formule {CYCLE_LABEL[k.cycle ?? 'primaire']} —</option>
                         {formulasForChild(k.cycle).map((f) => <option key={f.id} value={f.id}>{f.name} — {formatCurrency(f.price)}</option>)}
                       </select>
-                      <select value={subMethod[k.id] ?? 'wave'} onChange={(e) => setSubMethod((p) => ({ ...p, [k.id]: e.target.value as ORestoPaymentMethod }))} className="px-3 py-2 rounded-xl border-2 border-slate-200 text-sm bg-white">
-                        <option value="wave">Wave</option>
-                        <option value="cash">Espèces</option>
-                        <option value="mobile_money">OM</option>
-                        <option value="card">Carte</option>
+                      <select value={subMethod[k.id] ?? 'wave'} onChange={(e) => setSubMethod((p) => ({ ...p, [k.id]: e.target.value as ORestoPaymentMethod }))} className="px-3 py-2 rounded-xl border-2 border-slate-200 text-sm bg-white" aria-label={`Moyen de paiement de l'abonnement de ${k.firstName} ${k.lastName}`}>
+                        {PARENT_PAYMENT_METHODS.map((m) => (
+                          <option key={m} value={m}>{PARENT_METHOD_LABEL[m]}</option>
+                        ))}
                       </select>
                       <button onClick={() => handleSubscribeChild(k.id)} className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold">Payer</button>
                     </div>
+                    {isOnlineMobileMethod(subMethod[k.id] ?? 'wave') && (
+                      <div className="mt-2">
+                        <input
+                          inputMode="tel"
+                          value={phoneFor(k.id)}
+                          onChange={(e) => setPhones((p) => ({ ...p, [k.id]: e.target.value.replace(/\D/g, '').slice(0, 12) }))}
+                          placeholder="Numéro Wave / Orange Money (ex : 77 123 45 67)"
+                          aria-label={`Numéro mobile pour abonner ${k.firstName}`}
+                          className="w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-green-600"
+                        />
+                      </div>
+                    )}
                     <div className="mt-2">
                       <p className="text-[11px] text-slate-500 bg-white border border-slate-200 rounded-xl px-3 py-2">
-                        Abonnement : InTouch ou espèces — la carte prépayée sert aux tickets repas.
+                        Wave / Orange Money : vous êtes envoyé dans l’application pour valider, la carte s’active après confirmation du paiement.
                       </p>
                     </div>
                   </div>
@@ -451,6 +510,12 @@ const ChildrenPage = () => {
           error={confirmError}
           confirming={confirming}
           onConfirm={handleConfirmWave}
+          onPaid={() => {
+            setWaveModal(null);
+            setConfirmError(null);
+            flash(true, 'Recharge confirmée : le solde de la carte a été crédité.');
+          }}
+          onSync={syncPaymentFromProvider}
           onClose={() => setWaveModal(null)}
         />
       )}
@@ -461,6 +526,12 @@ const ChildrenPage = () => {
           error={subConfirmError}
           confirming={confirming}
           onConfirm={handleConfirmSubWave}
+          onPaid={() => {
+            setSubWaveModal(null);
+            setSubConfirmError(null);
+            flash(true, 'Paiement confirmé : la carte de l’enfant est ACTIVE.');
+          }}
+          onSync={syncPaymentFromProvider}
           onClose={() => setSubWaveModal(null)}
         />
       )}

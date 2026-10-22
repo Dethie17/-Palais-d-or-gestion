@@ -32,7 +32,7 @@ const PaymentSuccessPage = ({ onNavigate }: PaymentSuccessPageProps) => {
       
       setTimeout(() => {
         if (loading) {
-          setMessage('Paiement en cours de traitement. Vérifiez vos notifications InTouch.');
+          setMessage('Paiement en cours de traitement. Vérifiez vos notifications Wave.');
           setLoading(false);
         }
         clearInterval(checkPayment);

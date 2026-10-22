@@ -2,14 +2,37 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useResto } from '@/context/RestoContext';
 import { useAuth } from '@/context/AuthContext';
-import type { ExpenseCategory } from '@/types/menu';
+import type { ExpenseCategory, KioskOrder, ORestoPayment, Order } from '@/types/menu';
+import writeXlsxFile from 'write-excel-file';
 import { formatCurrency } from '@/lib/utils';
-import { ismPeriod } from '@/lib/ismFinance';
+import { toSheetData } from '@/lib/excelImport';
+import { ismPeriod, isAboPayment } from '@/lib/ismFinance';
+import { revenueBreakdown } from '@/lib/revenue';
+import { accountablePayments, useValidatedFinance } from '@/lib/validatedFinance';
 import {
   Banknote, Wallet, ShoppingCart, Percent, Settings2, Download, FileSpreadsheet, CheckCircle, ReceiptText, Plus,
 } from 'lucide-react';
 
 type Period = 'day' | 'week' | 'month' | 'all';
+
+const METHOD_LABEL: Record<string, string> = {
+  cash: 'Espèces',
+  wave: 'Wave',
+  mobile_money: 'Monnaie mobile',
+  card: 'Carte',
+  balance: 'Solde carte',
+};
+
+interface TxRow {
+  id: string;
+  ts: number;
+  op: string;
+  owner: string;
+  method: string;
+  amount: number;
+  credit: boolean;
+  status: 'paid' | 'pending';
+}
 
 function startOf(period: Period): number {
   const now = new Date();
@@ -24,20 +47,27 @@ function startOf(period: Period): number {
 }
 
 /**
- * Finance DG : comptabilité complète — ventes caisse, abonnements,
- * recharges cartes, solde à verser à l'ISM et InTouch.
- * Taux éditables par le DG.
+ * Finance DG : comptabilité — ventes réelles et abonnements validés,
+ * solde à verser à l'ISM et Wave. Les recharges de carte ne sont pas
+ * un chiffre d'affaires (l'argent était déjà encaissé).
  */
 const FinancePage = () => {
   const { orders } = useApp();
   const {
-    payments, walletTxs, financeSettings, setFinanceSettings, children: kids,
+    payments, walletTxs, kioskOrders, financeSettings, setFinanceSettings, children: kids,
     financeExpenses, addExpense, subscriptions, formulas,
   } = useResto();
   const { user } = useAuth();
   // Espace admin = supervision uniquement : pas d'édition des taux ni des dépenses.
   const canEdit = false;
   const [period, setPeriod] = useState<Period>('month');
+
+  // Comptabilité : seule la base fait foi pour ce qui est « encaissé/validé ».
+  const { data: validatedFinance } = useValidatedFinance();
+  const accounted = useMemo(
+    () => accountablePayments(payments, validatedFinance),
+    [payments, validatedFinance],
+  );
   const [saved, setSaved] = useState(false);
   const [rates, setRates] = useState({
     ismPerSubscription: financeSettings.ismPerSubscription,
@@ -45,52 +75,119 @@ const FinancePage = () => {
     schoolPerSubscription: financeSettings.schoolPerSubscription,
     otherSalesPct: financeSettings.otherSalesPct,
     touchpointPct: financeSettings.touchpointPct,
+    sycapayPct: financeSettings.sycapayPct,
   });
 
   const since = startOf(period);
-  const paidAbo = useMemo(
-    () => payments.filter((p) => p.status === 'paid' && new Date(p.createdAt).getTime() >= since),
-    [payments, since],
-  );
-  const caisse = useMemo(
-    () => orders.filter((o) => o.status === 'completed' && o.createdAt.getTime() >= since),
-    [orders, since],
-  );
   const topups = useMemo(
     () => walletTxs.filter((t) => t.kind === 'topup' && t.status === 'paid' && new Date(t.createdAt).getTime() >= since),
     [walletTxs, since],
   );
-  const debits = useMemo(
-    () => walletTxs.filter((t) => t.kind === 'debit' && t.status === 'paid' && new Date(t.createdAt).getTime() >= since),
-    [walletTxs, since],
-  );
 
-  const salesGross = caisse.reduce((s, o) => s + o.total, 0);
-  const aboGross = paidAbo.reduce((s, p) => s + p.amount, 0);
+  // CA = ventes réelles (caisse, kiosque, tickets, repas carte) + abonnements validés.
+  const revenue = useMemo(
+    () => revenueBreakdown({ payments: accounted, orders, kioskOrders, walletTxs, subscriptions, formulas }, since),
+    [accounted, orders, kioskOrders, walletTxs, subscriptions, formulas, since],
+  );
+  const salesGross = revenue.sales;
+  const aboGross = revenue.subscriptions;
   const rechargeGross = topups.reduce((s, t) => s + t.amount, 0);
-  const walletMeals = debits.reduce((s, t) => s + t.amount, 0);
+  const walletMeals = revenue.salesMeals;
   // Comptabilité ISM 2026 : 2000 FCFA par abonnement payé (lycée comme
-  // préscolaire-élémentaire) + ismSalesPct % des ventes caisse.
-  // École : 2000 / abo ; 0,5% InTouch (base électronique = abos + recharges).
-  const ism = ismPeriod(payments, caisse, subscriptions, formulas, financeSettings, since);
+  // préscolaire-élémentaire) + ismSalesPct % des ventes.
+  // École : 2000 / abo ; 0,5% Wave (base électronique = abos + recharges).
+  const ism = useMemo(
+    () => ismPeriod(accounted, orders, subscriptions, formulas, financeSettings, since, salesGross),
+    [accounted, orders, subscriptions, formulas, financeSettings, since, salesGross],
+  );
   const ismAbo = ism.ismAbo;
   const ismSalesDue = ism.ismSales;
   const ismTotal = ism.total;
-  const schoolDue = paidAbo.length * financeSettings.schoolPerSubscription;
+  const schoolDue = revenue.subscriptionCount * financeSettings.schoolPerSubscription;
   const otherSalesDue = Math.round(salesGross * financeSettings.otherSalesPct / 100);
   const electronicBase = aboGross + rechargeGross;
   const touchpointFees = Math.round(electronicBase * financeSettings.touchpointPct / 100);
+  // SycaPay prend sa part sur chaque operation passee par la passerelle :
+  // abonnements et recharges payes en Wave / Orange Money.
+  const sycapayFees = Math.round(electronicBase * financeSettings.sycapayPct / 100);
   const periodExpenses = useMemo(
     () => financeExpenses.filter((e) => new Date(e.spentAt).getTime() >= since),
     [financeExpenses, since],
   );
   const expensesTotal = periodExpenses.reduce((s, e) => s + e.amount, 0);
-  const net = salesGross + aboGross - ismTotal - schoolDue - otherSalesDue - touchpointFees - expensesTotal;
+  const net = revenue.total - ismTotal - schoolDue - otherSalesDue - touchpointFees - sycapayFees - expensesTotal;
 
-  const childName = (id: string) => {
-    const k = kids.find((c) => c.id === id);
-    return k ? `${k.firstName} ${k.lastName} (${k.className})` : id;
-  };
+  // Historique complet des transactions : date, heure, opération, propriétaire,
+  // mode de paiement et montant. Tout mouvement réel de la période — y compris
+  // les recharges (traçabilité), même si elles ne comptent pas dans le CA.
+  const transactions = useMemo(() => {
+    const inP = (v: string | Date) => new Date(v).getTime() >= since;
+    const subOwner = (p: ORestoPayment): string => {
+      const sub = subscriptions.find((s) => s.id === p.subscriptionId);
+      const child = sub?.childId ? kids.find((c) => c.id === sub.childId) : undefined;
+      const parent = sub?.clientUsername ?? p.clientUsername ?? '—';
+      return child ? `${child.firstName} ${child.lastName} · ${parent}` : parent;
+    };
+    const childOwner = (childId: string): string => {
+      const child = kids.find((c) => c.id === childId);
+      return child ? `${child.firstName} ${child.lastName} · ${child.parentUsername}` : childId;
+    };
+    const rows: TxRow[] = [];
+    payments.forEach((p) => {
+      if (p.status !== 'paid' || !inP(p.createdAt) || p.amount <= 0) return;
+      rows.push({
+        id: `pay-${p.id}`,
+        ts: new Date(p.createdAt).getTime(),
+        op: (p.reference ?? '').startsWith('TICKET') ? 'Ticket repas' : isAboPayment(p, subscriptions, formulas) ? 'Abonnement' : 'Paiement O RESTO',
+        owner: subOwner(p),
+        method: METHOD_LABEL[p.method] ?? p.method,
+        amount: p.amount,
+        credit: true,
+        status: 'paid',
+      });
+    });
+    walletTxs.forEach((t) => {
+      if (t.status !== 'paid' || !inP(t.createdAt) || t.amount <= 0) return;
+      rows.push({
+        id: `tx-${t.id}`,
+        ts: new Date(t.createdAt).getTime(),
+        op: t.kind === 'topup' ? 'Recharge carte' : (t.reference ?? '').startsWith('DEB-') ? 'Repas carte' : 'Ticket carte',
+        owner: childOwner(t.childId),
+        method: METHOD_LABEL[t.method] ?? t.method,
+        amount: t.amount,
+        credit: t.kind === 'topup',
+        status: 'paid',
+      });
+    });
+    orders.forEach((o: Order) => {
+      if (o.status !== 'completed' || !inP(o.createdAt) || o.total <= 0) return;
+      const rawMethod = o.paymentMethod ?? '';
+      rows.push({
+        id: `ord-${o.id}`,
+        ts: new Date(o.createdAt).getTime(),
+        op: 'Vente caisse',
+        owner: (o.customerName ?? '').trim() || 'Client comptoir',
+        method: METHOD_LABEL[rawMethod.toLowerCase()] ?? (rawMethod || 'Espèces'),
+        amount: o.total,
+        credit: true,
+        status: 'paid',
+      });
+    });
+    (kioskOrders as KioskOrder[]).forEach((o) => {
+      if (o.status === 'cancelled' || !inP(o.createdAt) || o.total <= 0) return;
+      rows.push({
+        id: `kio-${o.id}`,
+        ts: new Date(o.createdAt).getTime(),
+        op: o.status === 'served' ? 'Vente kiosque' : 'Kiosque (à servir)',
+        owner: childOwner(o.childId),
+        method: 'Solde carte',
+        amount: o.total,
+        credit: true,
+        status: o.status === 'served' ? 'paid' : 'pending',
+      });
+    });
+    return rows.sort((a, b) => b.ts - a.ts);
+  }, [payments, walletTxs, orders, kioskOrders, subscriptions, formulas, kids, since]);
 
   const saveRates = () => {
     setFinanceSettings({
@@ -99,6 +196,7 @@ const FinancePage = () => {
       schoolPerSubscription: Number(rates.schoolPerSubscription) || 0,
       otherSalesPct: Number(rates.otherSalesPct) || 0,
       touchpointPct: Number(rates.touchpointPct) || 0,
+      sycapayPct: Number(rates.sycapayPct) || 0,
     });
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2500);
@@ -110,16 +208,20 @@ const FinancePage = () => {
     rows.push([`Période,${period}`]);
     rows.push([]);
     rows.push(['Rubrique', 'Montant FCFA']);
-    rows.push(['Ventes caisse', String(salesGross)]);
-    rows.push(['Abonnements', String(aboGross)]);
-    rows.push(['Recharges cartes', String(rechargeGross)]);
-    rows.push(['Repas débités wallet', String(walletMeals)]);
+    rows.push(['Ventes (caisse, kiosque, tickets, repas carte)', String(salesGross)]);
+    rows.push(['  dont caisse', String(revenue.salesCaisse)]);
+    rows.push(['  dont kiosque', String(revenue.salesKiosk)]);
+    rows.push(['  dont tickets repas', String(revenue.salesTickets)]);
+    rows.push(['  dont repas débités carte', String(walletMeals)]);
+    rows.push(['Abonnements validés', String(aboGross)]);
+    rows.push(['CA total (ventes + abonnements)', String(revenue.total)]);
     rows.push([`Part ISM abonnements (${financeSettings.ismPerSubscription} x ${ism.aboCount} abos)`, String(ismAbo)]);
     rows.push([`Part ISM ventes (${financeSettings.ismSalesPct}%)`, String(ismSalesDue)]);
     rows.push(['Solde ISM à verser', String(ismTotal)]);
-    rows.push([`Reversement école (${financeSettings.schoolPerSubscription} x ${paidAbo.length} abos)`, String(schoolDue)]);
+    rows.push([`Reversement école (${financeSettings.schoolPerSubscription} x ${revenue.subscriptionCount} abos)`, String(schoolDue)]);
     rows.push([`Autres ventes (${financeSettings.otherSalesPct}%)`, String(otherSalesDue)]);
-    rows.push([`InTouch (${financeSettings.touchpointPct}%)`, String(touchpointFees)]);
+    rows.push([`Wave (${financeSettings.touchpointPct}%)`, String(touchpointFees)]);
+    rows.push([`Commission SycaPay (${financeSettings.sycapayPct}%)`, String(sycapayFees)]);
     rows.push(['Dépenses', String(expensesTotal)]);
     rows.push(['Net (après parts et dépenses)', String(net)]);
     const csv = '﻿' + rows.map((r) => r.join(';')).join('\n');
@@ -131,6 +233,37 @@ const FinancePage = () => {
     URL.revokeObjectURL(a.href);
   };
 
+  const exportExcel = async () => {
+    const sheet = toSheetData([
+      ['O RESTO — Finance'],
+      ['Période, ' + period],
+      [],
+      ['Rubrique', 'Montant FCFA'],
+      ['Ventes (caisse, kiosque, tickets, repas carte)', salesGross],
+      ['Abonnements validés', aboGross],
+      ['CA total', revenue.total],
+      ['ISM abonnements', ismAbo],
+      ['ISM ventes', ismSalesDue],
+      ['Solde ISM à verser', ismTotal],
+      ['École', schoolDue],
+      ['Autres ventes', otherSalesDue],
+      ['Wave / touchpoint', touchpointFees],
+      ['Commission SycaPay', sycapayFees],
+      ['Dépenses', expensesTotal],
+      ['Net (après parts et dépenses)', net],
+    ]);
+    const blob = await writeXlsxFile(sheet, {
+      sheet: 'Finance',
+      columns: [{ width: 46 }, { width: 18 }],
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `finance-${period}.xlsx`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+
   const exportPDF = async () => {
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF();
@@ -140,15 +273,19 @@ const FinancePage = () => {
     y += 8;
     doc.setFontSize(11);
     const lines = [
-      `Ventes caisse : ${salesGross} FCFA`,
-      `Abonnements : ${aboGross} FCFA`,
-      `Recharges cartes : ${rechargeGross} FCFA`,
+      `Ventes (caisse, kiosque, tickets, repas carte) : ${salesGross} FCFA`,
+      `  dont caisse : ${revenue.salesCaisse} FCFA`,
+      `  dont kiosque : ${revenue.salesKiosk} FCFA`,
+      `  dont tickets : ${revenue.salesTickets} FCFA`,
+      `  dont repas carte : ${walletMeals} FCFA`,
+      `Abonnements valides : ${aboGross} FCFA`,
+      `CA total : ${revenue.total} FCFA`,
       `Part ISM abonnements (${financeSettings.ismPerSubscription} x ${ism.aboCount}) : ${ismAbo} FCFA`,
       `Part ISM ventes (${financeSettings.ismSalesPct}%) : ${ismSalesDue} FCFA`,
       `Solde ISM à verser : ${ismTotal} FCFA`,
-      `Reversement ecole (${financeSettings.schoolPerSubscription} x ${paidAbo.length}) : ${schoolDue} FCFA`,
+      `Reversement ecole (${financeSettings.schoolPerSubscription} x ${revenue.subscriptionCount}) : ${schoolDue} FCFA`,
       `Autres ventes (${financeSettings.otherSalesPct}%) : ${otherSalesDue} FCFA`,
-      `InTouch (${financeSettings.touchpointPct}%) : ${touchpointFees} FCFA`,
+      `Wave (${financeSettings.touchpointPct}%) : ${touchpointFees} FCFA`,
       `Dépenses : ${expensesTotal} FCFA`,
       `Net (après parts et dépenses) : ${net} FCFA`,
     ];
@@ -168,7 +305,7 @@ const FinancePage = () => {
               <Banknote className="w-4 h-4" /> Direction · Comptabilité
             </p>
             <h1 className="mt-1 text-3xl md:text-4xl font-black tracking-tight">Finance</h1>
-            <p className="text-sm text-slate-300 mt-1">Ventes, abonnements, solde ISM, école et InTouch.</p>
+            <p className="text-sm text-slate-300 mt-1">Ventes réelles, abonnements validés, solde ISM, école et Wave.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex gap-1 bg-white/10 border border-white/15 rounded-full p-1 backdrop-blur">
@@ -179,11 +316,12 @@ const FinancePage = () => {
               ))}
             </div>
             <button onClick={exportCSV} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 border border-white/15 text-xs font-bold hover:bg-white/20"><FileSpreadsheet className="w-4 h-4" /> CSV</button>
+            <button onClick={exportExcel} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 border border-white/15 text-xs font-bold hover:bg-white/20"><FileSpreadsheet className="w-4 h-4" /> Excel</button>
             <button onClick={exportPDF} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-amber-400 text-slate-900 text-xs font-extrabold hover:bg-amber-300 shadow"><Download className="w-4 h-4" /> PDF</button>
           </div>
         </div>
         <div className="relative mt-5 flex flex-wrap gap-x-8 gap-y-1 text-sm">
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400" />Encaissé : <strong>{formatCurrency(salesGross + aboGross + rechargeGross)}</strong></span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400" />CA ventes + abos : <strong>{formatCurrency(revenue.total)}</strong></span>
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400" />Solde ISM : <strong>{formatCurrency(ismTotal)}</strong></span>
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-sky-400" />Net : <strong>{formatCurrency(net)}</strong></span>
         </div>
@@ -192,9 +330,9 @@ const FinancePage = () => {
       <FinSection kicker="Vue d'ensemble" title="Chiffres clés de la période">
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: 'Ventes caisse', value: salesGross, icon: <ShoppingCart className="w-5 h-5" />, chip: 'from-green-600 to-emerald-600' },
-          { label: 'Abonnements', value: aboGross, icon: <Wallet className="w-5 h-5" />, chip: 'from-emerald-500 to-teal-600' },
-          { label: 'Recharges cartes', value: rechargeGross, icon: <Banknote className="w-5 h-5" />, chip: 'from-slate-500 to-amber-500' },
+          { label: 'Ventes réelles', value: salesGross, icon: <ShoppingCart className="w-5 h-5" />, chip: 'from-green-600 to-emerald-600' },
+          { label: 'Abonnements validés', value: aboGross, icon: <Wallet className="w-5 h-5" />, chip: 'from-emerald-500 to-teal-600' },
+          { label: 'CA total', value: revenue.total, icon: <Banknote className="w-5 h-5" />, chip: 'from-slate-500 to-amber-500' },
           { label: 'Net (après parts)', value: net, icon: <CheckCircle className="w-5 h-5" />, chip: 'from-amber-500 to-slate-600' },
         ].map((c) => (
           <div key={c.label} className="bg-white rounded-3xl border p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -220,7 +358,8 @@ const FinancePage = () => {
           </div>
           <div className="ml-auto flex flex-col gap-1.5 text-xs font-bold">
             <span className="px-3 py-1.5 rounded-full bg-white/10 border border-white/15">{ism.aboCount} abo(s) × {formatCurrency(financeSettings.ismPerSubscription)} = {formatCurrency(ismAbo)}</span>
-            <span className="px-3 py-1.5 rounded-full bg-white/10 border border-white/15">Ventes × {financeSettings.ismSalesPct}% = {formatCurrency(ismSalesDue)}</span>
+            <span className="px-3 py-1.5 rounded-full bg-white/10 border border-white/15">Ventes à {financeSettings.ismSalesPct}% = {formatCurrency(ismSalesDue)}</span>
+            <span className="px-3 py-1.5 rounded-full bg-white/10 border border-white/15">SycaPay {financeSettings.sycapayPct}% = {formatCurrency(sycapayFees)}</span>
           </div>
         </div>
         <div className="bg-white p-4 md:p-5">
@@ -233,33 +372,39 @@ const FinancePage = () => {
           <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-50 to-slate-50 border border-amber-200 shadow-sm">
             <p className="text-[11px] font-bold uppercase tracking-widest text-amber-700">ISM · ventes</p>
             <p className="text-xl font-black mt-0.5">{formatCurrency(ismSalesDue)}</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">{financeSettings.ismSalesPct}% de la caisse</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">{financeSettings.ismSalesPct}% des ventes</p>
           </div>
           <div className="p-4 rounded-2xl bg-slate-50 border shadow-sm">
             <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">École</p>
             <p className="text-xl font-black mt-0.5">{formatCurrency(schoolDue)}</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">{financeSettings.schoolPerSubscription} × {paidAbo.length} abo(s)</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">{financeSettings.schoolPerSubscription} × {revenue.subscriptionCount} abo(s)</p>
           </div>
           <div className="p-4 rounded-2xl bg-slate-50 border shadow-sm">
             <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Autres ventes</p>
             <p className="text-xl font-black mt-0.5">{formatCurrency(otherSalesDue)}</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">{financeSettings.otherSalesPct}% de la caisse</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">{financeSettings.otherSalesPct}% des ventes</p>
           </div>
           <div className="p-4 rounded-2xl bg-slate-50 border shadow-sm">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">InTouch</p>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Wave</p>
             <p className="text-xl font-black mt-0.5">{formatCurrency(touchpointFees)}</p>
             <p className="text-[11px] text-slate-500 mt-0.5">{financeSettings.touchpointPct}% électronique</p>
+          </div>
+          <div className="p-4 rounded-2xl bg-gradient-to-b from-orange-50 to-amber-50 border border-orange-200 shadow-sm">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-orange-700">SycaPay</p>
+            <p className="text-xl font-black mt-0.5">{formatCurrency(sycapayFees)}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">{financeSettings.sycapayPct}% des opérations</p>
           </div>
         </div>
         {canEdit ? (
           <div className="mt-4 p-4 rounded-xl bg-slate-50 border">
-            <p className="text-xs font-bold text-slate-600 flex items-center gap-1"><Settings2 className="w-3.5 h-3.5" /> Taux (DG uniquement)</p>
+            <p className="text-xs font-bold text-slate-600 flex items-center gap-1"><Settings2 className="w-3.5 h-3.5" /> Taux de répartition (Espace ISM uniquement)</p>
             <div className="mt-2 grid sm:grid-cols-3 lg:grid-cols-6 gap-2">
               <label className="text-xs">ISM / abo (FCFA)<input type="number" min={0} value={rates.ismPerSubscription} onChange={(e) => setRates({ ...rates, ismPerSubscription: Number(e.target.value) })} className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm" /></label>
               <label className="text-xs">ISM ventes %<input type="number" min={0} max={100} step="0.1" value={rates.ismSalesPct} onChange={(e) => setRates({ ...rates, ismSalesPct: Number(e.target.value) })} className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm" /></label>
               <label className="text-xs">École / abo<input type="number" min={0} value={rates.schoolPerSubscription} onChange={(e) => setRates({ ...rates, schoolPerSubscription: Number(e.target.value) })} className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm" /></label>
               <label className="text-xs">Autres ventes %<input type="number" min={0} max={100} step="0.1" value={rates.otherSalesPct} onChange={(e) => setRates({ ...rates, otherSalesPct: Number(e.target.value) })} className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm" /></label>
-              <label className="text-xs">InTouch %<input type="number" min={0} max={100} step="0.1" value={rates.touchpointPct} onChange={(e) => setRates({ ...rates, touchpointPct: Number(e.target.value) })} className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm" /></label>
+              <label className="text-xs">Wave %<input type="number" min={0} max={100} step="0.1" value={rates.touchpointPct} onChange={(e) => setRates({ ...rates, touchpointPct: Number(e.target.value) })} className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm" /></label>
+              <label className="text-xs">SycaPay %<input type="number" min={0} max={100} step="0.1" value={rates.sycapayPct} onChange={(e) => setRates({ ...rates, sycapayPct: Number(e.target.value) })} className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm" /></label>
               <div className="flex items-end">
                 <button onClick={saveRates} className="w-full py-2 rounded-xl bg-slate-900 text-white text-sm font-bold">Enregistrer</button>
               </div>
@@ -267,7 +412,7 @@ const FinancePage = () => {
             {saved && <p className="text-xs text-green-700 font-bold mt-2">Taux enregistrés.</p>}
           </div>
         ) : (
-          <p className="text-xs text-slate-400 mt-3">Lecture seule : seuls le DG et son adjoint modifient les taux.</p>
+          <p className="text-xs text-slate-400 mt-3">Lecture seule : seule l'Espace ISM modifie les taux.</p>
         )}
         </div>
       </div>
@@ -282,30 +427,55 @@ const FinancePage = () => {
       />
       </FinSection>
 
-      <FinSection kicker="Traçabilité" title="Mouvements cartes">
-      <div className="bg-white rounded-2xl border overflow-hidden shadow-sm">
-        <p className="p-4 font-bold text-slate-800">Mouvements cartes (recharges + débits)</p>
+      <FinSection kicker="Traçabilité" title="Historique des transactions">
+      <div className="bg-white rounded-3xl border border-amber-300/50 shadow-lg overflow-hidden">
+        <div className="bg-gradient-to-r from-slate-900 via-amber-950 to-slate-900 text-white p-4 flex flex-wrap items-center gap-3">
+          <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-slate-600 flex items-center justify-center shadow flex-shrink-0">
+            <ReceiptText className="w-5 h-5 text-white" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-black">Chaque opération de la période</p>
+            <p className="text-[11px] text-slate-300">{transactions.length} transaction{transactions.length > 1 ? 's' : ''} — date, heure, opération, propriétaire, mode de paiement et montant.</p>
+          </div>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr><th className="text-left p-3">Date</th><th className="text-left p-3">Enfant</th><th className="text-left p-3">Opération</th><th className="text-left p-3">Montant</th><th className="text-left p-3">Statut</th></tr>
+          <table className="w-full text-sm" data-testid="transactions-table">
+            <thead className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wider">
+              <tr>
+                <th className="text-left p-3 font-black">Date</th>
+                <th className="text-left p-3 font-black">Heure</th>
+                <th className="text-left p-3 font-black">Opération</th>
+                <th className="text-left p-3 font-black">Propriétaire</th>
+                <th className="text-left p-3 font-black">Mode de paiement</th>
+                <th className="text-right p-3 font-black">Montant</th>
+                <th className="text-left p-3 font-black">Statut</th>
+              </tr>
             </thead>
             <tbody>
-              {[...topups, ...debits].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 50).map((t) => (
-                <tr key={t.id} className="border-t">
-                  <td className="p-3 text-xs">{new Date(t.createdAt).toLocaleString('fr-FR')}</td>
-                  <td className="p-3 font-semibold">{childName(t.childId)}</td>
-                  <td className="p-3">{t.kind === 'topup' ? 'Recharge' : 'Débit repas'} • {t.method}</td>
-                  <td className={`p-3 font-bold ${t.kind === 'topup' ? 'text-green-700' : ''}`}>{t.kind === 'topup' ? '+' : '−'}{formatCurrency(t.amount)}</td>
-                  <td className="p-3"><span className="px-2 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">{t.status}</span></td>
+              {transactions.slice(0, 250).map((t) => (
+                <tr key={t.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                  <td className="p-3 text-xs text-slate-600 whitespace-nowrap tabular-nums">{new Date(t.ts).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                  <td className="p-3 text-xs text-slate-600 whitespace-nowrap tabular-nums">{new Date(t.ts).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</td>
+                  <td className="p-3 font-semibold text-slate-800 whitespace-nowrap">{t.op}</td>
+                  <td className="p-3 text-xs text-slate-700 max-w-[220px] truncate" title={t.owner}>{t.owner}</td>
+                  <td className="p-3 text-xs whitespace-nowrap">{t.method}</td>
+                  <td className={`p-3 font-bold whitespace-nowrap text-right tabular-nums ${t.credit ? 'text-emerald-700' : 'text-slate-700'}`}>{t.credit ? '+' : '−'}{formatCurrency(t.amount)}</td>
+                  <td className="p-3">
+                    <span className={`px-2 py-1 rounded-full text-[11px] font-black whitespace-nowrap ${t.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {t.status === 'paid' ? 'Payé' : 'En attente'}
+                    </span>
+                  </td>
                 </tr>
               ))}
-              {topups.length + debits.length === 0 && (
-                <tr><td colSpan={5} className="p-4 text-center text-slate-400">Aucun mouvement sur la période.</td></tr>
+              {transactions.length === 0 && (
+                <tr><td colSpan={7} className="p-6 text-center text-slate-400">Aucune transaction sur la période.</td></tr>
               )}
             </tbody>
           </table>
         </div>
+        {transactions.length > 250 && (
+          <p className="px-4 py-2.5 text-xs text-slate-400 border-t border-slate-100">Affichage limité aux 250 transactions les plus récentes sur {transactions.length}.</p>
+        )}
       </div>
       </FinSection>
     </div>
