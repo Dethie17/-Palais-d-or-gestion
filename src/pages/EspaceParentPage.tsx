@@ -1,33 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
-import { useProducts } from '@/context/ProductContext';
 import { formatCurrency } from '@/lib/utils';
-import { initiateWavePayment, isMobileMethod, isValidSnPhone, isValidWaveCode, type WavePaymentRequest } from '@/lib/wave';
+import { isMobileMethod, isValidSnPhone, isValidWaveCode, type WavePaymentRequest } from '@/lib/wave';
 import { QRCodeSVG } from 'qrcode.react';
-import { CYCLES, CYCLE_LABEL, cycleOfClass, pricePerMeal } from '@/lib/schoolCycles';
-import { isOfficialFormula } from '@/lib/formulas';
-import type { Child, KioskOrder, Product, ORestoPayment, ORestoPaymentMethod, ORestoPaymentStatus, PageName, SchoolCycle, Subscription, WalletTx, WeeklyMenu } from '@/types/menu';
-import { mockProducts } from '@/data/mockData';
+import { CYCLES, CYCLE_LABEL, cycleOfClass } from '@/lib/schoolCycles';
+import { dayPhoto } from '@/data/cantineWeek';
+import type { Child, ORestoPayment, ORestoPaymentMethod, ORestoPaymentStatus, PageName, SchoolCycle, Subscription, WalletTx } from '@/types/menu';
 import WavePaymentModal from '@/components/WavePaymentModal';
 import PaymentReceiptModal from '@/components/PaymentReceiptModal';
-import TicketCard from '@/components/TicketCard';
 import QrCartesEnfants from '@/components/QrCartesEnfants';
 import PayerAbonnementSection from '@/components/PayerAbonnementSection';
-import { dayPhoto } from '@/data/cantineWeek';
-import { menuTicketTotal } from '@/lib/menus';
-import { categories } from '@/data/mockData';
 import {
-  CheckCircle, AlertCircle, Smartphone, Timer, Ticket,
-  Pencil, Trash2, X, Check, LogOut, Layers, CalendarClock,
-  ShoppingCart, Plus, Minus, CreditCard, Utensils,
-  Pizza, Coffee, IceCream, Salad, Sandwich, Cookie, ChefHat, Croissant,
-  Megaphone, MessageSquareWarning,
+  CheckCircle, AlertCircle, Smartphone,
+  Pencil, Trash2, X, Check, LogOut, CalendarClock,
+  CreditCard, Megaphone, MessageSquareWarning,
 } from 'lucide-react';
 
 const METHOD_LABEL: Record<string, string> = {
   wave: 'Wave', cash: 'Espèces',
-  mobile_money: 'Orange Money', card: 'Carte bancaire',
+  mobile_money: 'Max it (Orange Money)', card: 'Carte bancaire',
   balance: 'Solde carte',
 };
 
@@ -46,22 +38,11 @@ const STATUS_LABEL: Record<ORestoPaymentStatus, string> = {
   pending: 'En attente', paid: 'Payé', failed: 'Échoué', cancelled: 'Annulé', refunded: 'Remboursé',
 };
 
-const KIOSK_CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  'Tous': <Utensils className="w-5 h-5" />,
-  'recreation': <ChefHat className="w-5 h-5" />,
-  'pause': <Coffee className="w-5 h-5" />,
-  'recréation': <ChefHat className="w-5 h-5" />,
-  'récréation': <ChefHat className="w-5 h-5" />,
-};
-
-const KIOSK_CATEGORIES = ['Tous', 'recreation', 'pause'] as const;
-
-/** Les 3 formules fixes de la section Abonnement. */
-const ABO_IDS = ['F1', 'F2', 'F3'] as const;
+/** Les 2 formules fixes de la section Abonnement (l'essai hebdomadaire F1 n'est plus proposé). */
+const ABO_IDS = ['F2', 'F3'] as const;
 const ABO_AUDIENCE: Record<string, string> = {
-  F1: 'Tous niveaux · essai 1 semaine',
   F2: 'Préscolaire & Élémentaire',
-  F3: 'Lycée · 6ème → Terminale',
+  F3: 'Collège & Lycée · 6ème → Terminale',
 };
 
 const DAY_ORDER = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'];
@@ -115,658 +96,33 @@ function SectionTitle({ step, title, sub }: { step: string; title: string; sub?:
     </div>
   );
 }
-
-/**
- * Kiosque POS pour l'Espace Parent - version adaptée du POS caissier
- * Affiche les produits récréation/pause avec panier par enfant, paiement par carte prépayée
- */
-function KioskPOS({ 
-  kids, 
-  kioskProducts, 
-  walletOf, 
-  buyKiosk, 
-  kioskCart, 
-  setKioskCart, 
-  flash, 
-  formatCurrency,
-  username,
-}: {
-  kids: Child[];
-  kioskProducts: Product[];
-  walletOf: (id: string) => number;
-  username: string;
-  buyKiosk: (username: string, childId: string, items: { productId: string; productName: string; price: number; qty: number }[]) => { order: KioskOrder; balance: number };
-  kioskCart: Record<string, { productId: string; productName: string; price: number; qty: number }[]>;
-  setKioskCart: React.Dispatch<React.SetStateAction<Record<string, { productId: string; productName: string; price: number; qty: number }[]>>>;
-  flash: (ok: boolean, text: string) => void;
-  formatCurrency: (amount: number) => string;
-}) {
-  const [activeCategory, setActiveCategory] = useState<'Tous' | 'recreation' | 'pause'>('Tous');
-  const [selectedChildId, setSelectedChildId] = useState<string | null>(kids[0]?.id ?? null);
-  const [animatingId, setAnimatingId] = useState<string | null>(null);
-  const [showCart, setShowCart] = useState(false);
-
-  const filteredProducts = activeCategory === 'Tous' 
-    ? kioskProducts 
-    : kioskProducts.filter((p) => p.category === activeCategory);
-
-  const cart = selectedChildId ? (kioskCart[selectedChildId] || []) : [];
-  const balance = selectedChildId ? walletOf(selectedChildId) : 0;
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
-
-  const addToCart = (product: Product) => {
-    if (!selectedChildId) {
-      flash(false, 'Sélectionnez un enfant d\'abord.');
-      return;
-    }
-    const currentBalance = walletOf(selectedChildId);
-    const inCart = cart.find((it) => it.productId === product.id);
-    const currentQty = inCart?.qty || 0;
-    if (currentBalance < product.price * (currentQty + 1)) {
-      flash(false, `Solde insuffisant pour ${product.name}.`);
-      return;
-    }
-    setAnimatingId(product.id);
-    setTimeout(() => setAnimatingId(null), 300);
-
-    setKioskCart((prev) => {
-      const childCart = prev[selectedChildId!] || [];
-      const existing = childCart.find((item) => item.productId === product.id);
-      if (existing) {
-        return {
-          ...prev,
-          [selectedChildId!]: childCart.map((item) =>
-            item.productId === product.id ? { ...item, qty: item.qty + 1 } : item
-          ),
-        };
-      }
-      return {
-        ...prev,
-        [selectedChildId!]: [...childCart, { productId: product.id, productName: product.name, price: product.price, qty: 1 }],
-      };
-    });
-  };
-
-  const updateQuantity = (productId: string, delta: number) => {
-    if (!selectedChildId) return;
-    setKioskCart((prev) => {
-      const childCart = prev[selectedChildId] || [];
-      return {
-        ...prev,
-        [selectedChildId]: childCart
-          .map((item) => {
-            if (item.productId === productId) {
-              const newQty = item.qty + delta;
-              if (newQty <= 0) return null;
-              // Vérifier le solde
-              if (delta > 0 && balance < item.price * newQty) {
-                flash(false, `Solde insuffisant pour ${item.productName}.`);
-                return item;
-              }
-              return { ...item, qty: newQty };
-            }
-            return item;
-          })
-          .filter((item): item is { productId: string; productName: string; price: number; qty: number } => item !== null),
-      };
-    });
-  };
-
-  const removeFromCart = (productId: string) => {
-    if (!selectedChildId) return;
-    setKioskCart((prev) => {
-      const childCart = prev[selectedChildId] || [];
-      return {
-        ...prev,
-        [selectedChildId]: childCart.filter((item) => item.productId !== productId),
-      };
-    });
-  };
-
-  const handlePay = () => {
-    if (!selectedChildId) {
-      flash(false, 'Sélectionnez un enfant.');
-      return;
-    }
-    if (!cart.length) {
-      flash(false, 'Panier vide.');
-      return;
-    }
-    try {
-      const { order, balance: newBalance } = buyKiosk(username, selectedChildId, cart);
-      setKioskCart((prev) => ({ ...prev, [selectedChildId]: [] }));
-      const k = kids.find((x) => x.id === selectedChildId);
-      flash(true, `Commande kiosque passée pour ${k?.firstName ?? 'l\'enfant'} — ${order.items.length} article(s). Nouveau solde : ${formatCurrency(newBalance)}.`);
-      setShowCart(false);
-    } catch (err) {
-      flash(false, err instanceof Error ? err.message : 'Commande impossible.');
-    }
-  };
-
-  const selectedChild = kids.find((k) => k.id === selectedChildId);
-
-  if (!kids.length) {
-    return (
-      <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
-        <p className="text-lg font-black text-slate-800">Aucun enfant inscrit</p>
-        <p className="mt-1.5 text-sm text-slate-500 max-w-md mx-auto">
-          Inscrivez un enfant à l\'étape 1 pour utiliser le kiosque.
-        </p>
-      </div>
-    );
-  }
-
-  if (kioskProducts.length === 0) {
-    return (
-      <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
-        <p className="text-lg font-black text-slate-800">Kiosque en préparation</p>
-        <p className="mt-1.5 text-sm text-slate-500 max-w-md mx-auto">
-          Le Personnel ajoute les articles de récréation (snacks, boissons) dans Gestion Menu.
-          Rien n\'est affiché tant qu\'aucun article n\'est disponible. Revenez bientôt.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col lg:flex-row h-[600px] lg:h-[700px] animate-fade-in gap-4">
-      {/* Product catalog - Left side */}
-      <div className="flex-1 flex flex-col min-w-0 lg:border-r border-slate-200 bg-white rounded-2xl overflow-hidden shadow-sm">
-        <div className="p-4 lg:p-6 border-b border-slate-200">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-xl lg:text-2xl font-bold text-slate-800">Kiosque Récréation & Pause</h1>
-              <p className="text-sm text-slate-600 mt-0.5">{filteredProducts.length} article(s) disponible(s)</p>
-            </div>
-            {selectedChild && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
-                <span className="text-xs font-bold text-emerald-700">{selectedChild.firstName} {selectedChild.lastName}</span>
-                <span className="text-sm font-black text-emerald-800 tabular-nums">{formatCurrency(balance)}</span>
-              </div>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2 overflow-x-auto tiny-scrollbar pb-1" role="tablist" aria-label="Catégories kiosque">
-            {KIOSK_CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat as 'Tous' | 'recreation' | 'pause')}
-                aria-pressed={activeCategory === cat}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
-                  activeCategory === cat
-                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                {KIOSK_CATEGORY_ICONS[cat]}
-                {cat === 'recreation' ? 'Récréation' : cat === 'pause' ? 'Pause' : 'Tous'}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar bg-gradient-to-br from-slate-50 to-slate-50/20">
-          {filteredProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <p className="text-lg font-bold text-slate-800">Aucun article dans cette catégorie</p>
-              <p className="mt-1 text-sm text-slate-600">Sélectionnez une autre catégorie.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4">
-              {filteredProducts.map((product) => (
-                <button
-                  key={product.id}
-                  onClick={() => addToCart(product)}
-                  aria-label={`Ajouter ${product.name} au panier, ${formatCurrency(product.price)}`}
-                  className={`bg-white rounded-2xl border-2 border-slate-200 overflow-hidden text-left hover:shadow-xl hover:border-emerald-600 transition-all group ${
-                    animatingId === product.id ? 'animate-cart-pop' : ''
-                  }`}
-                  disabled={selectedChildId && walletOf(selectedChildId) < product.price}
-                >
-                  <div className="h-28 lg:h-32 overflow-hidden relative">
-                    <img 
-                      src={product.image} 
-                      alt={product.name} 
-                      loading="lazy" 
-                      width={300} 
-                      height={200} 
-                      onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }} 
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                    {selectedChildId && walletOf(selectedChildId) < product.price && (
-                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
-                        <span className="text-white text-sm font-bold bg-red-600 px-3 py-1 rounded-full">Solde insuffisant</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-3 lg:p-4">
-                    <h3 className="text-sm lg:text-base font-bold text-slate-800 truncate mb-1">{product.name}</h3>
-                    <p className="text-base lg:text-lg font-bold text-emerald-700">
-                      {formatCurrency(product.price)}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Cart - Right side */}
-      <div className={`lg:w-[420px] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden ${kids.length === 1 ? 'lg:hidden' : ''}`}>
-        <div className="p-5 lg:p-6 border-b border-slate-200 bg-gradient-to-r from-emerald-50 to-teal-50">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-slate-800">Panier</h2>
-              <span className="text-sm text-slate-600">{cart.length} article(s) · {cartCount} pièce(s)</span>
-            </div>
-            {kids.length > 1 && (
-              <select
-                value={selectedChildId || ''}
-                onChange={(e) => setSelectedChildId(e.target.value || null)}
-                className="px-3 py-2 rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-emerald-600 min-w-[180px]"
-              >
-                {kids.map((k) => (
-                  <option key={k.id} value={k.id}>{k.firstName} {k.lastName} · {formatCurrency(walletOf(k.id))}</option>
-                ))}
-              </select>
-            )}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto order-scrollbar p-4 lg:p-5 space-y-3">
-          {cart.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12">
-              <ShoppingCart className="w-16 h-16 mb-4 opacity-20" />
-              <p className="text-sm font-medium">Panier vide</p>
-              <p className="text-xs mt-1 text-center">Choisissez des articles à gauche</p>
-            </div>
-          ) : (
-            cart.map((item) => (
-              <div key={item.productId} className="flex gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200 hover:border-emerald-300 transition-colors">
-                <img src={item.productName && kioskProducts.find(p => p.name === item.productName)?.image || '/placeholder.svg'} alt={item.productName} className="w-16 h-16 rounded-xl object-cover flex-shrink-0 shadow-md" onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <h3 className="text-sm font-bold text-slate-800 truncate">{item.productName}</h3>
-                    <button onClick={() => removeFromCart(item.productId)} className="text-slate-400 hover:text-red-600 transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <p className="text-xs text-slate-500 mb-2">{formatCurrency(item.price)} / unité</p>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => updateQuantity(item.productId, -1)} className="w-8 h-8 rounded-lg bg-white border-2 border-slate-200 flex items-center justify-center text-slate-700 hover:border-emerald-400 hover:text-emerald-600 transition-colors">
-                        <Minus className="w-4 h-4" />
-                      </button>
-                      <span className="text-sm font-bold text-slate-800 w-8 text-center">{item.qty}</span>
-                      <button onClick={() => updateQuantity(item.productId, 1)} className="w-8 h-8 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white flex items-center justify-center hover:shadow-lg hover:shadow-emerald-500/30 transition-all">
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <span className="text-base font-bold text-slate-800">{formatCurrency(item.price * item.qty)}</span>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {cart.length > 0 && (
-          <div className="p-5 lg:p-6 border-t border-slate-200 space-y-4 bg-gradient-to-r from-emerald-50 to-teal-50">
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between text-slate-600">
-                <span>Sous-total</span><span className="font-semibold">{formatCurrency(subtotal)}</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Solde carte</span><span className="font-semibold text-emerald-700">{formatCurrency(balance)}</span>
-              </div>
-              <div className="flex justify-between text-xl font-bold text-slate-800 pt-3 border-t-2 border-slate-200">
-                <span>Total</span>
-                <span className="bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">{formatCurrency(subtotal)}</span>
-              </div>
-              {subtotal > balance && (
-                <p className="text-xs font-semibold text-red-600 flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5" /> Solde insuffisant de {formatCurrency(subtotal - balance)}
-                </p>
-              )}
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setKioskCart((prev) => ({ ...prev, [selectedChildId!]: [] }))} className="flex-1 py-3.5 rounded-xl border-2 border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-100 transition-colors">
-                Vider
-              </button>
-              <button
-                onClick={handlePay}
-                disabled={subtotal > balance || !selectedChildId}
-                className="flex-[2] py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-semibold text-sm hover:shadow-xl hover:shadow-emerald-500/50 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
-              >
-                <CreditCard className="w-5 h-5" />
-                Payer avec la carte
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Grille produits Kiosque (style MenusPage) : catégories + grille produits avec ajout au panier par enfant.
- * Affiche produits catégories 'recreation' et 'pause', paiement par carte prépayée.
- */
-function KioskProductGrid({ 
-  kids, 
-  kioskProducts, 
-  walletOf, 
-  buyKiosk, 
-  flash, 
-  formatCurrency,
-  username
-}: {
-  kids: Child[];
-  kioskProducts: Product[];
-  walletOf: (id: string) => number;
-  buyKiosk: (username: string, childId: string, items: { productId: string; productName: string; price: number; qty: number }[]) => { order: KioskOrder; balance: number };
-  flash: (ok: boolean, text: string) => void;
-  formatCurrency: (amount: number) => string;
-  username: string;
-}) {
-  const [activeCategory, setActiveCategory] = useState<'Tous' | 'recreation' | 'pause'>('Tous');
-  const [selectedChildId, setSelectedChildId] = useState<string | null>(kids[0]?.id ?? null);
-  const [cart, setCart] = useState<Record<string, { productId: string; productName: string; price: number; qty: number }[]>>({});
-  const [animatingId, setAnimatingId] = useState<string | null>(null);
-
-  const filteredProducts = activeCategory === 'Tous' 
-    ? kioskProducts 
-    : kioskProducts.filter((p) => p.category === activeCategory || p.category === 'récréation' || p.category === 'recréation');
-
-  const childCart = selectedChildId ? (cart[selectedChildId] || []) : [];
-  const balance = selectedChildId ? walletOf(selectedChildId) : 0;
-  const subtotal = childCart.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const cartCount = childCart.reduce((sum, item) => sum + item.qty, 0);
-
-  const addToCart = (product: Product) => {
-    if (!selectedChildId) {
-      flash(false, 'Sélectionnez un enfant d\'abord.');
-      return;
-    }
-    setAnimatingId(product.id);
-    setTimeout(() => setAnimatingId(null), 300);
-
-    setCart((prev) => {
-      const cCart = prev[selectedChildId!] || [];
-      const existing = cCart.find((item) => item.productId === product.id);
-      if (existing) {
-        return {
-          ...prev,
-          [selectedChildId!]: cCart.map((item) =>
-            item.productId === product.id ? { ...item, qty: item.qty + 1 } : item
-          ),
-        };
-      }
-      return {
-        ...prev,
-        [selectedChildId!]: [...cCart, { productId: product.id, productName: product.name, price: product.price, qty: 1 }],
-      };
-    });
-  };
-
-  const updateQuantity = (productId: string, delta: number) => {
-    if (!selectedChildId) return;
-    setCart((prev) => {
-      const cCart = prev[selectedChildId] || [];
-      return {
-        ...prev,
-        [selectedChildId]: cCart
-          .map((item) => {
-            if (item.productId === productId) {
-              const newQty = item.qty + delta;
-              if (newQty <= 0) return null;
-              return { ...item, qty: newQty };
-            }
-            return item;
-          })
-          .filter((item): item is { productId: string; productName: string; price: number; qty: number } => item !== null),
-      };
-    });
-  };
-
-  const removeFromCart = (productId: string) => {
-    if (!selectedChildId) return;
-    setCart((prev) => {
-      const cCart = prev[selectedChildId] || [];
-      return {
-        ...prev,
-        [selectedChildId]: cCart.filter((item) => item.productId !== productId),
-      };
-    });
-  };
-
-  const handlePay = () => {
-    if (!selectedChildId) {
-      flash(false, 'Sélectionnez un enfant.');
-      return;
-    }
-    if (!childCart.length) {
-      flash(false, 'Panier vide.');
-      return;
-    }
-    try {
-      const { order, balance: newBalance } = buyKiosk(username, selectedChildId, childCart);
-      setCart((prev) => ({ ...prev, [selectedChildId]: [] }));
-      const k = kids.find((x) => x.id === selectedChildId);
-      flash(true, `Commande kiosque passée pour ${k?.firstName ?? 'l\'enfant'} — ${order.items.length} article(s). Nouveau solde : ${formatCurrency(newBalance)}.`);
-      // Scroll vers le haut pour voir le toast de confirmation
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (err) {
-      flash(false, err instanceof Error ? err.message : 'Commande impossible.');
-    }
-  };
-
-  const selectedChild = kids.find((k) => k.id === selectedChildId);
-
-  if (!kids.length) {
-    return (
-      <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
-        <p className="text-lg font-black text-slate-800">Aucun enfant inscrit</p>
-        <p className="mt-1.5 text-sm text-slate-500 max-w-md mx-auto">
-          Inscrivez un enfant à l\'étape 1 pour utiliser le kiosque.
-        </p>
-      </div>
-    );
-  }
-
-  if (kioskProducts.length === 0) {
-    return (
-      <div className="bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
-        <p className="text-lg font-black text-slate-800">Kiosque en préparation</p>
-        <p className="mt-1.5 text-sm text-slate-500 max-w-md mx-auto">
-          Le Personnel ajoute les articles de récréation (snacks, boissons) dans Gestion Menu.
-          Rien n\'est affiché tant qu\'aucun article n\'est disponible. Revenez bientôt.
-        </p>
-      </div>
-    );
-  }
-
-  const KIOSK_CATEGORY_ICONS: Record<string, React.ReactNode> = {
-    'Tous': <Utensils className="w-5 h-5" />,
-    'recreation': <ChefHat className="w-5 h-5" />,
-    'pause': <Coffee className="w-5 h-5" />,
-    'récréation': <ChefHat className="w-5 h-5" />,
-    'recréation': <ChefHat className="w-5 h-5" />,
-  };
-  const KIOSK_CATEGORIES = ['Tous', 'recreation', 'pause'] as const;
-
-  return (
-    <div className="space-y-4">
-      {/* Category tabs */}
-      <div className="flex flex-wrap gap-2 overflow-x-auto tiny-scrollbar pb-1" role="tablist" aria-label="Catégories kiosque">
-        {KIOSK_CATEGORIES.map((cat) => (
-          <button
-            key={cat}
-            onClick={() => setActiveCategory(cat as 'Tous' | 'recreation' | 'pause')}
-            aria-pressed={activeCategory === cat}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
-              activeCategory === cat
-                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            {KIOSK_CATEGORY_ICONS[cat]}
-            {cat === 'recreation' ? 'Récréation' : cat === 'pause' ? 'Pause' : 'Tous'}
-          </button>
-        ))}
-      </div>
-
-      {/* Product grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4">
-        {filteredProducts.length === 0 ? (
-          <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-lg font-bold text-slate-800">Aucun article dans cette catégorie</p>
-            <p className="mt-1 text-sm text-slate-600">Sélectionnez une autre catégorie.</p>
-          </div>
-        ) : (
-          filteredProducts.map((product) => (
-            <button
-              key={product.id}
-              onClick={() => addToCart(product)}
-              aria-label={`Ajouter ${product.name} au panier, ${formatCurrency(product.price)}`}
-              className={`bg-white rounded-2xl border-2 border-slate-200 overflow-hidden text-left hover:shadow-xl hover:border-emerald-600 transition-all group ${
-                animatingId === product.id ? 'animate-cart-pop' : ''
-              }`}
-            >
-              <div className="h-28 lg:h-32 overflow-hidden relative">
-                <img 
-                  src={product.image} 
-                  alt={product.name} 
-                  loading="lazy" 
-                  width={300} 
-                  height={200} 
-                  onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }} 
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              </div>
-              <div className="p-3 lg:p-4">
-                <h3 className="text-sm lg:text-base font-bold text-slate-800 truncate mb-1">{product.name}</h3>
-                <p className="text-base lg:text-lg font-bold text-emerald-700">
-                  {formatCurrency(product.price)}
-                </p>
-              </div>
-            </button>
-          ))
-        )}
-      </div>
-
-      {/* Cart summary - fixed at bottom on mobile, side on desktop */}
-      {childCart.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 lg:relative lg:sticky lg:top-24 lg:bottom-auto z-40 bg-white border-t border-slate-200 shadow-xl p-4 lg:p-6 rounded-t-2xl lg:rounded-2xl animate-slide-up">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="text-lg font-bold text-slate-800">Panier ({cartCount} pièce(s))</h3>
-              <p className="text-sm text-slate-600">{selectedChild?.firstName} {selectedChild?.lastName} · Solde: {formatCurrency(balance)}</p>
-            </div>
-            {kids.length > 1 && (
-              <select
-                value={selectedChildId || ''}
-                onChange={(e) => setSelectedChildId(e.target.value || null)}
-                className="px-3 py-2 rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-emerald-600 min-w-[180px]"
-              >
-                {kids.map((k) => (
-                  <option key={k.id} value={k.id}>{k.firstName} {k.lastName} · {formatCurrency(walletOf(k.id))}</option>
-                ))}
-              </select>
-            )}
-          </div>
-          <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
-            {childCart.map((item) => (
-              <div key={item.productId} className="flex gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <img src={item.productName && kioskProducts.find(p => p.name === item.productName)?.image || '/placeholder.svg'} alt={item.productName} className="w-12 h-12 rounded-xl object-cover flex-shrink-0 shadow-md" onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <h4 className="text-sm font-bold text-slate-800 truncate">{item.productName}</h4>
-                    <button onClick={() => removeFromCart(item.productId)} className="text-slate-400 hover:text-red-600 transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <p className="text-xs text-slate-500 mb-2">{formatCurrency(item.price)} / unité</p>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => updateQuantity(item.productId, -1)} className="w-7 h-7 rounded-lg bg-white border-2 border-slate-200 flex items-center justify-center text-slate-700 hover:border-emerald-400 hover:text-emerald-600 transition-colors">
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="text-sm font-bold text-slate-800 w-7 text-center">{item.qty}</span>
-                      <button onClick={() => updateQuantity(item.productId, 1)} className="w-7 h-7 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white flex items-center justify-center hover:shadow-lg hover:shadow-emerald-500/30 transition-all">
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <span className="text-sm font-bold text-slate-800">{formatCurrency(item.price * item.qty)}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 space-y-2 text-sm border-t border-slate-200 pt-3">
-            <div className="flex justify-between text-slate-600">
-              <span>Sous-total</span><span className="font-semibold">{formatCurrency(subtotal)}</span>
-            </div>
-            <div className="flex justify-between text-slate-600">
-              <span>Solde carte</span><span className="font-semibold text-emerald-700">{formatCurrency(balance)}</span>
-            </div>
-            <div className="flex justify-between text-lg font-bold text-slate-800 pt-2 border-t-2 border-slate-200">
-              <span>Total</span>
-              <span className="bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">{formatCurrency(subtotal)}</span>
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setCart((prev) => ({ ...prev, [selectedChildId!]: [] }))} className="flex-1 py-3 rounded-xl border-2 border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-100 transition-colors">
-                Vider
-              </button>
-              <button
-                onClick={handlePay}
-                className="flex-[2] py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-semibold text-sm hover:shadow-xl hover:shadow-emerald-500/50 transition-all flex items-center justify-center gap-2"
-              >
-                <CreditCard className="w-5 h-5" />
-                Payer avec la carte
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /**
  * Espace Parent — parcours fluide :
- * 1 inscription (carte crédit + QR créés seuls) → 2 abonnement
- * (paiement InTouch intégré au pavé formule) → 3 menu du jour payé
- * par la carte + tickets → 4 Kiosque Récréation & Pause → 5 cartes (recharge + QR) → 6 historique.
+ * 1 inscription (carte + QR créés seuls) → 2 abonnement (paiement Wave / Max it
+ * via SycaPay, envoi automatique chez l'opérateur) → 3 menu du jour (consultation)
+ * → 4 Kiosque (indisponible) → 5 cartes (recharge + QR) → 6 historique.
  */
 const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => void }) => {
   const { user, logout } = useAuth();
   const {
     formulas, mySubscriptions, myPayments, myValidations,
-    subscribe, paySubscription, confirmMobilePayment, resumeMobilePayment,
-    renewSubscription, buyTicket, buyDayMenu, buyKiosk, myChildren, addChild,
+    subscribe, subscribeBundle, paySubscription, confirmMobilePayment,
+    renewSubscription, myChildren, addChild,
     updateChild, deleteChild, weeklyMenus, confirmWalletTopUpMobile,
-    confirmWalletTopUpGroup, topUpMulti,
+    topUpChild,
     parentProfileOf, walletOf, childTxs,
     complaints, messagesOf,
+    openProviderPayment, syncPaymentFromProvider,
   } = useResto();
 
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [receipt, setReceipt] = useState<ORestoPayment | null>(null);
-  const [waveModal, setWaveModal] = useState<{ kind: 'sub' | 'topup' | 'multi'; paymentId?: string; txId?: string; wave: WavePaymentRequest } | null>(null);
+  const [waveModal, setWaveModal] = useState<{ kind: 'sub' | 'topup'; paymentId?: string; txId?: string; wave: WavePaymentRequest } | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [histChild, setHistChild] = useState('all');
   /** Formule dont le panneau de paiement intégré est ouvert. */
   const [payFor, setPayFor] = useState<string | null>(null);
-  const [ticketAlt, setTicketAlt] = useState<{ formulaId: string; name: string } | null>(null);
-  const [dayBuyer, setDayBuyer] = useState<Record<string, string>>({});
-  const [kioskCart, setKioskCart] = useState<Record<string, { productId: string; productName: string; price: number; qty: number }[]>>({});
-  const [multiOpen, setMultiOpen] = useState(false);
-  const [multiAmounts, setMultiAmounts] = useState<Record<string, string>>({});
   const [loggingOut, setLoggingOut] = useState(false);
 
   /** Annonces déjà lues par ce parent (clé par parent) : badge « nouveautés ». */
@@ -794,14 +150,6 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
   const aboFormulas = ABO_IDS
     .map((id) => formulas.find((f) => f.id === id))
     .filter((f): f is NonNullable<typeof f> => !!f && f.kind === 'subscription');
-  const customTickets = formulas
-    .filter((f) => f.kind === 'ticket')
-    // Seuls les tickets PUBLIÉS par le Personnel (Gestion Menu) sont vendus ici :
-    // les formules officielles internes (T1/C10) ne sont jamais proposées.
-    .filter((f) => !isOfficialFormula(f.id))
-    // Billets de test du personnel (ex : « Ticket QA Parent ») : masqués aux parents.
-    .filter((f) => !/qa|test/i.test(f.name))
-    .sort((a, b) => a.price - b.price);
 
   const nowTs = Date.now();
 
@@ -862,9 +210,6 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
   const kidsPrimaire = kidsOfCycle('primaire');
   const kidsLycee = kidsOfCycle('lycee');
 
-  const daysLeft = (s: Subscription) =>
-    Math.max(0, Math.ceil((new Date(s.endDate).getTime() - Date.now()) / 86400000));
-
   const childNameOf = useCallback((sub: Subscription | null | undefined) => {
     if (!sub?.childId) return null;
     const k = kids.find((x) => x.id === sub.childId);
@@ -891,79 +236,129 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     return !!s && renewDueSoon(s.endDate, nowTs);
   });
 
-  /** Total de la recharge groupée en cours de saisie. */
-  const multiTotal = kids.reduce(
-    (sum, k) => sum + Math.max(0, Math.floor(Number(multiAmounts[k.id]) || 0)),
-    0,
-  );
-
   const todayName = DAY_INDEX[new Date().getDay()];
 
-  // Produits kiosque (catégorie pause/récréation) — fusion mock + Supabase/localStorage pour garantir l'affichage
-  const { products: allProducts } = useProducts();
-  const kioskMockProducts = mockProducts.filter((p) => p.available && (p.category === 'recreation' || p.category === 'pause'));
-  const kioskProducts = [...new Map([...allProducts, ...kioskMockProducts].map(p => [p.id, p])).values()]
-    .filter((p) => p.available && (p.category === 'pause' || p.category === 'recreation' || p.category === 'récréation' || p.category === 'recréation'));
+  // ---------- Paiement : Wave / Max it via SycaPay ----------
+  // Toutes les sommes partent par openProviderPayment : SycaPay initie la
+  // commande côté serveur, la fenêtre montre le défi et envoie le client
+  // automatiquement dans son application (Wave, Max it). Rien ne se règle
+  // ici : c'est le webhook qui active.
 
-  // ---------- Paiement formule depuis le panneau intégré ----------
-  const startFormulaPayment = (formulaId: string, childId: string) => {
+  /** Numéro mobile du parent, pré-remplissage des panneaux de paiement. */
+  const defaultPhone = profile?.phone ?? '';
+
+  /** Ouvre chez le fournisseur une commande d'abonnement déjà enregistrée. */
+  const openSubPayment = async (
+    payment: ORestoPayment,
+    method: 'wave' | 'mobile_money',
+    phone?: string,
+  ) => {
+    setConfirmError(null);
+    const session = await openProviderPayment(
+      { reference: payment.reference, amount: payment.amount, method, phone },
+      'sub',
+      payment.id,
+    );
+    setWaveModal({ kind: 'sub', paymentId: payment.id, wave: session });
+  };
+
+  /**
+   * Commence le paiement d'une formule (pavé étape 2) : la souscription est
+   * créée en attente, puis la session opérateur s'ouvre — rien manuel.
+   */
+  const startFormulaPayment = async (
+    formulaId: string,
+    childId: string,
+    method: 'wave' | 'mobile_money',
+    phone?: string,
+  ) => {
     const sub = subscribe(username, formulaId, childId);
-    const { payment, wave } = paySubscription(sub.id, 'wave', sub);
-    if (!wave) throw new Error('Paiement InTouch indisponible pour le moment — réessayez.');
-    return { payment, wave };
+    const { payment } = paySubscription(sub.id, method, sub);
+    try {
+      await openSubPayment(payment, method, phone);
+    } catch (e) {
+      flash(false, e instanceof Error ? e.message : 'Paiement impossible pour le moment.');
+    } finally {
+      setPayFor(null);
+    }
   };
 
-  const handlePaidFormula = (paymentId: string) => {
-    const paid = myPayments(username).find((p) => p.id === paymentId)
-      ?? payments.find((p) => p.id === paymentId)
-      ?? null;
-    setPayFor(null);
-    if (paid) setReceipt({ ...paid, status: 'paid' });
-    flash(true, 'Abonnement activé — la carte est prête.');
-    setTimeout(() => scrollTo('cartes'), 400);
+  /**
+   * Paiement multi-mois (PayerAbonnementSection) : formule × mois en un seul
+   * paiement SycaPay, débit recalculé ici (jamais une saisie du parent).
+   */
+  const startBundlePayment = async (
+    childId: string,
+    formulaId: string,
+    count: number,
+    firstMonthIso: string,
+    method: 'wave' | 'mobile_money',
+    phone?: string,
+  ) => {
+    const formula = formulas.find((f) => f.id === formulaId);
+    if (!formula) throw new Error('Formule introuvable — choisissez un enfant dont la classe est couverte.');
+    const sub = subscribeBundle(username, formulaId, childId, count, firstMonthIso);
+    const montant = formula.price * count;
+    const { payment } = paySubscription(sub.id, method, sub, montant);
+    await openSubPayment(payment, method, phone);
   };
 
-  // ---------- Recharge carte : panneau InTouch intégré (comme les abonnements) ----------
+  /** Recharge d'une carte : tx « en attente », puis session opérateur. */
+  const startRecharge = async (
+    childId: string,
+    amount: number,
+    method: 'wave' | 'mobile_money',
+    phone?: string,
+  ) => {
+    const { tx } = topUpChild(childId, amount, method);
+    const session = await openProviderPayment(
+      { reference: tx.reference, amount, method, phone },
+      'topup',
+      tx.id,
+    );
+    setWaveModal({ kind: 'topup', txId: tx.id, wave: session });
+  };
+
+  // ---------- Recharge carte ----------
   const handleRecharged = (childId: string, amount: number) => {
     const k = kids.find((x) => x.id === childId);
     flash(true, `Carte de ${k?.firstName ?? 'l’enfant'} rechargée de ${formatCurrency(amount)} — nouveau solde : ${formatCurrency(walletOf(childId) + amount)}.`);
   };
 
-  const handleResumeTopup = (tx: WalletTx) => {
-    if (!isMobileMethod(tx.method)) return;
-    const wave = initiateWavePayment(tx.amount, tx.method, tx.reference);
+  /** Reprendre une recharge en attente : nouvelle session chez l'opérateur. */
+  const handleResumeTopup = async (tx: WalletTx) => {
+    const method = tx.method;
+    if (!method || !isMobileMethod(method)) return;
     setConfirmError(null);
-    setWaveModal({ kind: 'topup', txId: tx.id, wave });
+    const session = await openProviderPayment(
+      { reference: tx.reference, amount: tx.amount, method },
+      'topup',
+      tx.id,
+    );
+    setWaveModal({ kind: 'topup', txId: tx.id, wave: session });
   };
 
-  const handleResumePayment = (paymentId: string) => {
-    const wave = resumeMobilePayment(paymentId);
-    if (!wave) {
+  /** Reprendre un paiement d'abonnement en attente. */
+  const handleResumePayment = async (paymentId: string) => {
+    const payment = myPayments(username).find((p) => p.id === paymentId)
+      ?? payments.find((p) => p.id === paymentId);
+    const method = payment?.method;
+    if (!payment || !method || !isMobileMethod(method)) {
       flash(false, 'Ce paiement ne peut plus être repris.');
       return;
     }
     setConfirmError(null);
-    setWaveModal({ kind: 'sub', paymentId, wave });
+    const session = await openProviderPayment(
+      { reference: payment.reference, amount: payment.amount, method },
+      'sub',
+      paymentId,
+    );
+    setWaveModal({ kind: 'sub', paymentId, wave: session });
   };
 
   const handleConfirmWave = (code: string) => {
     if (!waveModal) return;
     setConfirming(true);
-    // Recharge GROUPÉE : un paiement, plusieurs cartes à créditer.
-    if (waveModal.kind === 'multi' && waveModal.paymentId) {
-      const { ok, message: text } = confirmWalletTopUpGroup(waveModal.paymentId, code);
-      setConfirming(false);
-      if (!ok) {
-        setConfirmError(text);
-        return;
-      }
-      setWaveModal(null);
-      setConfirmError(null);
-      setMultiOpen(false);
-      setMultiAmounts({});
-      flash(true, text);
-      return;
-    }
     if (waveModal.kind === 'topup' && waveModal.txId) {
       const { ok, message: text } = confirmWalletTopUpMobile(waveModal.txId, code);
       setConfirming(false);
@@ -995,18 +390,18 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     flash(true, text);
   };
 
-  const handleRenew = (subId: string, method: ORestoPaymentMethod = 'wave') => {
-    const result = renewSubscription(subId, method);
-    if (!result) {
-      flash(false, 'Renouvellement impossible.');
-      return;
+  /** Renouvellement : la période suivante s'ajoute, le paiement passe par SycaPay. */
+  const handleRenew = async (subId: string, method: 'wave' | 'mobile_money' = 'wave') => {
+    try {
+      const result = renewSubscription(subId, method);
+      if (!result) {
+        flash(false, 'Renouvellement impossible.');
+        return;
+      }
+      await openSubPayment(result.payment, method);
+    } catch (e) {
+      flash(false, e instanceof Error ? e.message : 'Renouvellement impossible pour le moment.');
     }
-    if (result.wave && isMobileMethod(method)) {
-      setConfirmError(null);
-      setWaveModal({ kind: 'sub', paymentId: result.payment.id, wave: result.wave });
-      return;
-    }
-    flash(true, `Renouvellement réservé (${result.payment.reference}), en attente de confirmation.`);
   };
 
   // ---------- Déconnexion ----------
@@ -1017,87 +412,6 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
       onNavigate?.('home');
     } finally {
       setLoggingOut(false);
-    }
-  };
-
-  // ---------- Recharge groupée : plusieurs cartes, un seul paiement ----------
-  const handleMultiTopUp = (method: ORestoPaymentMethod) => {
-    const items = kids
-      .map((k) => ({ childId: k.id, amount: Math.floor(Number(multiAmounts[k.id]) || 0) }))
-      .filter((i) => i.amount > 0);
-    if (items.length === 0) {
-      flash(false, 'Saisissez un montant pour au moins un enfant.');
-      return;
-    }
-    try {
-      const { payment, wave } = topUpMulti(username, items, method);
-      if (wave) {
-        setConfirmError(null);
-        setWaveModal({ kind: 'multi', paymentId: payment.id, wave });
-        return;
-      }
-      const total = items.reduce((sum, i) => sum + i.amount, 0);
-      flash(true, `Recharge groupée de ${formatCurrency(total)} enregistrée (${payment.reference}) — en attente de confirmation.`);
-      setMultiOpen(false);
-      setMultiAmounts({});
-    } catch (e) {
-      flash(false, e instanceof Error ? e.message : 'Recharge groupée impossible.');
-    }
-  };
-
-  // ---------- Menu du jour payé par la carte ----------
-  const handleBuyDayMenu = (day: string, total: number) => {
-    const childId = dayBuyer[day] || kids[0]?.id;
-    if (!childId) {
-      flash(false, 'Inscrivez d’abord un enfant à l’étape 1.');
-      setTimeout(() => scrollTo('inscription'), 150);
-      return;
-    }
-    try {
-      buyDayMenu(username, childId, day, total);
-      const k = kids.find((x) => x.id === childId);
-      flash(true, `Menu ${day} payé avec la carte de ${k?.firstName ?? 'l’enfant'} : +1 repas crédité. Nouveau solde : ${formatCurrency(walletOf(childId) - total)}.`);
-    } catch (err) {
-      flash(false, err instanceof Error ? err.message : 'Achat impossible.');
-    }
-  };
-
-  // ---------- Tickets ----------
-  const handleBuyTicket = (formulaId: string, menuName: string) => {
-    try {
-      const { payment, wave } = buyTicket(username, formulaId, 'wave');
-      if (wave) {
-        setConfirmError(null);
-        setWaveModal({ kind: 'sub', paymentId: payment.id, wave });
-        return;
-      }
-      flash(true, `« ${menuName} » : paiement ${payment.reference} (${formatCurrency(payment.amount)} via InTouch).`);
-    } catch (err) {
-      flash(false, err instanceof Error ? err.message : 'Achat impossible.');
-    }
-  };
-
-  const openTicketAlt = (formulaId: string, name: string) => {
-    if (kids.length === 0) {
-      flash(false, 'Inscrivez d’abord un enfant à l’étape 1.');
-      setTimeout(() => scrollTo('inscription'), 150);
-      return;
-    }
-    setTicketAlt({ formulaId, name });
-    setTimeout(() => scrollTo('ticket-choix-carte'), 150);
-  };
-
-  const handleBuyTicketBalance = (formulaId: string, childId: string) => {
-    try {
-      const price = formulas.find((x) => x.id === formulaId)?.price ?? 0;
-      const before = walletOf(childId);
-      const { addedMeals } = buyTicket(username, formulaId, 'balance', childId);
-      setTicketAlt(null);
-      const k = kids.find((x) => x.id === childId);
-      flash(true, `Ticket crédité : +${addedMeals} repas sur la carte de ${k?.firstName ?? 'l’enfant'}. Nouveau solde : ${formatCurrency(before - price)}.`);
-      setTimeout(() => scrollTo('cartes'), 400);
-    } catch (err) {
-      flash(false, err instanceof Error ? err.message : 'Achat impossible.');
     }
   };
 
@@ -1232,7 +546,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
           <div className="mt-4">
             <PayerAbonnementSection
               kids={kids}
-              onPaid={handlePaidFormula}
+              start={startBundlePayment}
               onError={(t) => flash(false, t)}
             />
           </div>
@@ -1335,10 +649,10 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
           )}
         </section>
 
-        {/* ===== 2. ABONNEMENT : les 3 formules ===== */}
+        {/* ===== 2. ABONNEMENT : les 2 formules ===== */}
         <section id="abonnement" className="scroll-mt-24">
-          <SectionTitle step="2" title="Je choisis l’abonnement" />
-          <div className="grid md:grid-cols-3 gap-4 mt-4 items-start">
+          <SectionTitle step="2" title="Je choisis l’abonnement" sub="Paiement par Wave ou Max it (Orange Money) via la passerelle SycaPay" />
+          <div className="grid md:grid-cols-2 gap-4 mt-4 items-start max-w-4xl">
             {aboFormulas.map((f) => (
               <FormulaCard
                 key={f.id}
@@ -1370,9 +684,8 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
                     formulaName={f.name}
                     price={f.price}
                     kids={eligibleKids}
+                    defaultPhone={defaultPhone}
                     onStart={startFormulaPayment}
-                    onPaid={handlePaidFormula}
-                    onError={(t) => flash(false, t)}
                   />
                 }
               />
@@ -1380,22 +693,30 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
           </div>
         </section>
 
-        {/* ===== 3. MENU : jour + semaine + tickets ===== */}
+        {/* ===== 3. MENU : consultation seule (aucun achat) ===== */}
         <section id="menu" className="scroll-mt-24">
-          <SectionTitle step="3" title="Menu du jour" />
+          <SectionTitle step="3" title="Menu du jour" sub="Consultation — le menu du jour est servi à la cantine, sans achat en ligne" />
 
           {menuDuJour && (menuDuJour.items ?? []).length > 0 ? (
             <div className="mt-4 max-w-md">
               <p className="font-bold text-slate-800 mb-2">Menu du jour — {menuDuJour.day} : {menuDuJour.name || `Menu du ${menuDuJour.day}`}</p>
-              <MenuTicketCard
-                menu={menuDuJour}
-                highlight
-                kids={kids}
-                walletOf={walletOf}
-                buyer={dayBuyer[menuDuJour.day] ?? kids[0]?.id ?? ''}
-                onBuyer={(id) => setDayBuyer((p) => ({ ...p, [menuDuJour.day]: id }))}
-                onBuy={() => handleBuyDayMenu(menuDuJour.day, menuTicketTotal(menuDuJour))}
-              />
+              <div className="bg-white rounded-2xl border-2 border-green-500 ring-2 ring-green-200 shadow-sm overflow-hidden">
+                <div className="relative h-36 overflow-hidden">
+                  <img src={dayPhoto(menuDuJour.day)} alt={`${menuDuJour.day} — ${menuDuJour.name}`} loading="lazy" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
+                  <span className="absolute bottom-2 left-3 text-sm font-black uppercase tracking-widest text-white drop-shadow">{menuDuJour.day}</span>
+                  <span className="absolute top-2 right-2 text-[11px] font-bold px-2.5 py-1 rounded-full bg-white text-green-700 shadow">MENU DU JOUR</span>
+                </div>
+                <div className="p-4">
+                  <p className="font-extrabold text-slate-900">{menuDuJour.name || `Menu du ${menuDuJour.day}`}</p>
+                  {menuDuJour.description && <p className="text-xs text-slate-500 mt-0.5">{menuDuJour.description}</p>}
+                  <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
+                    {menuDuJour.items.map((it, i) => (
+                      <li key={`${it.name}-${i}`} className="truncate">{it.name}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="mt-4 bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
@@ -1406,179 +727,28 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
               </p>
             </div>
           )}
-
-          <h3 className="mt-8 font-bold text-slate-800">
-            La semaine
-            {publishedMenus.length > 0 && (
-              <span className="ml-2 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 align-middle">
-                {publishedMenus.length}/5 jours publiés
-              </span>
-            )}
-          </h3>
-          {publishedMenus.filter((m) => m.day !== menuDuJour?.day).length === 0 ? (
-            <p className="mt-3 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-6 text-center">
-              {publishedMenus.length === 0
-                ? 'Semaine pas encore publiée par le Personnel.'
-                : 'Un seul jour publié pour l’instant.'}
-            </p>
-          ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
-              {publishedMenus.filter((m) => m.day !== menuDuJour?.day).map((m) => (
-                <MenuTicketCard
-                  key={m.day}
-                  menu={m}
-                  highlight={false}
-                  kids={kids}
-                  walletOf={walletOf}
-                  buyer={dayBuyer[m.day] ?? kids[0]?.id ?? ''}
-                  onBuyer={(id) => setDayBuyer((p) => ({ ...p, [m.day]: id }))}
-                  onBuy={() => handleBuyDayMenu(m.day, menuTicketTotal(m))}
-                />
-              ))}
-            </div>
-          )}
-
-          <h3 className="mt-8 font-bold text-slate-800">Tickets repas <span className="font-normal text-sm text-slate-400">· prix fixe, payés par la carte</span></h3>
-          {customTickets.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-6 text-center">
-              Aucun ticket publié pour le moment — le Personnel les crée dans Gestion Menu.
-            </p>
-          ) : (
-            <>
-              {ticketAlt && (
-                <div id="ticket-choix-carte" className="mt-3 rounded-xl border-2 border-slate-300 bg-slate-50 p-4 scroll-mt-24">
-                  <p className="text-sm font-bold text-slate-900">« {ticketAlt.name} » — quelle carte ?</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {kids.map((k) => (
-                      <button
-                        key={k.id}
-                        onClick={() => handleBuyTicketBalance(ticketAlt.formulaId, k.id)}
-                        className="px-4 py-2.5 min-h-[44px] rounded-xl bg-slate-500 text-white text-sm font-bold hover:bg-slate-600"
-                      >
-                        {k.firstName} {k.lastName} · {formatCurrency(walletOf(k.id))}
-                      </button>
-                    ))}
-                    <button onClick={() => setTicketAlt(null)} className="px-4 py-2.5 min-h-[44px] rounded-xl bg-white border text-sm hover:bg-slate-50">
-                      Annuler
-                    </button>
-                  </div>
-                </div>
-              )}
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
-                {customTickets.map((t) => (
-                  <article key={t.id} className="bg-white rounded-2xl border-2 border-slate-100 p-5 md:p-6 flex flex-col shadow-sm hover:shadow-lg hover:border-slate-200 transition-all">
-                    <h4 className="font-bold text-slate-900 leading-snug">{t.name}</h4>
-                    <p className="text-sm text-slate-500 mt-1">{t.description}</p>
-                    <p className="mt-3 text-2xl font-black tracking-tight text-slate-900">{formatCurrency(t.price)}</p>
-                    <p className="text-[13px] text-slate-500 mt-0.5">{t.mealsIncluded} repas · {t.durationDays} jours · ≈ {formatCurrency(pricePerMeal(t.price, t.mealsIncluded))} / repas</p>
-                    <button onClick={() => openTicketAlt(t.id, t.name)} className="mt-4 w-full py-3 min-h-[48px] rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 active:scale-[0.99] transition-all">
-                      Payer avec la carte · {formatCurrency(t.price)}
-                    </button>
-                    <button onClick={() => handleBuyTicket(t.id, t.name)} className="mt-2 text-sm font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-800">
-                      Ou payer via InTouch
-                    </button>
-                  </article>
-                ))}
-              </div>
-            </>
-          )}
         </section>
 
-        {/* ===== 4. KIOSQUE RÉCRÉATION & PAUSE ===== */}
+        {/* ===== 4. KIOSQUE : indisponible pour le moment ===== */}
         <section id="kiosque" className="scroll-mt-24">
-          <SectionTitle step="4" title="Kiosque Récréation & Pause" sub="Snacks & boissons payés par la carte prépayée — prêts à récupérer à la cantine" />
-          <KioskProductGrid
-            kids={kids}
-            kioskProducts={kioskProducts}
-            walletOf={walletOf}
-            buyKiosk={buyKiosk}
-            flash={flash}
-            formatCurrency={formatCurrency}
-            username={username}
-          />
+          <SectionTitle step="4" title="Kiosque Récréation & Pause" />
+          <div className="mt-4 bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
+            <p className="text-lg font-black text-slate-800">Kiosque indisponible pour le moment</p>
+            <p className="mt-1.5 text-sm text-slate-500 max-w-md mx-auto">
+              Les snacks et boissons ne sont plus en vente en ligne. Passez par le comptoir de la cantine pendant la pause.
+            </p>
+          </div>
         </section>
 
         {/* ===== 5. CARTES : une carte dark par enfant ===== */}
         <section id="cartes" className="scroll-mt-24">
           <SectionTitle step="5" title="Mes cartes" />
 
-          {kids.length > 1 && (
-            <div className="mt-4 rounded-2xl border-2 border-emerald-200 bg-emerald-50/70 p-4" data-testid="multi-recharge">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-extrabold text-emerald-900 flex items-center gap-2">
-                    <Layers className="w-5 h-5" /> Recharger plusieurs cartes
-                  </p>
-                  <p className="text-xs text-emerald-800 mt-0.5">
-                    Un seul paiement Wave pour tous vos enfants — le montant est crédité carte par carte.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setMultiOpen((v) => !v)}
-                  aria-expanded={multiOpen}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-500"
-                >
-                  {multiOpen ? 'Fermer' : `Recharger ${kids.length} cartes`}
-                </button>
-              </div>
-
-              {multiOpen && (
-                <div className="mt-4 space-y-2">
-                  {kids.map((k) => (
-                    <div key={k.id} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 border border-emerald-100">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-slate-800 truncate">{k.firstName} {k.lastName}</p>
-                        <p className="text-[11px] text-slate-500">{k.className} · solde {formatCurrency(walletOf(k.id))}</p>
-                      </div>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        step={500}
-                        value={multiAmounts[k.id] ?? ''}
-                        onChange={(e) => setMultiAmounts((prev) => ({ ...prev, [k.id]: e.target.value }))}
-                        placeholder="0"
-                        aria-label={`Montant pour ${k.firstName} ${k.lastName}`}
-                        className="w-28 px-3 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm text-right tabular-nums outline-none focus:border-emerald-600"
-                      />
-                      <span className="text-xs font-bold text-slate-400">FCFA</span>
-                    </div>
-                  ))}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                    <p className="text-sm font-extrabold text-slate-800 tabular-nums">Total : {formatCurrency(multiTotal)}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {[1000, 2000, 5000].map((v) => (
-                        <button
-                          key={v}
-                          type="button"
-                          onClick={() => setMultiAmounts(Object.fromEntries(kids.map((k) => [k.id, String(v)])))}
-                          className="px-3 py-2 min-h-[44px] rounded-xl bg-white border border-emerald-200 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
-                        >
-                          Tout {formatCurrency(v, false)}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => handleMultiTopUp('wave')}
-                        disabled={multiTotal <= 0}
-                        className="inline-flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 disabled:opacity-50"
-                      >
-                        <Smartphone className="w-4 h-4" /> Payer {formatCurrency(multiTotal)}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           {kids.length > 0 ? (
             <ul className="mt-4 grid gap-4 lg:grid-cols-2">
               {kids.map((k) => {
                 const s = activeByChild(k.id);
                 const f = s ? formulas.find((x) => x.id === s.formulaId) : undefined;
-                const total = f?.mealsIncluded && f.mealsIncluded > 0 ? f.mealsIncluded : (s?.mealsRemaining ?? 0);
                 return (
                   <KidCard
                     key={k.id}
@@ -1588,14 +758,11 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
                     balance={walletOf(k.id)}
                     walletOf={walletOf}
                     formulaName={f?.name ?? 'Abonnement'}
-                    formulaRules={f?.rules}
-                    totalMeals={total}
-                    days={s ? daysLeft(s) : 0}
+                    defaultPhone={defaultPhone}
                     nextPeriod={nextPeriodOf(k.id)}
-                    renewable={!!s && renewDueSoon(s.endDate, nowTs)}
-                    onRenew={s ? () => handleRenew(s.id, 'wave') : undefined}
+                    onRenew={s ? (method) => handleRenew(s.id, method) : undefined}
                     onRecharged={handleRecharged}
-                    onError={(t) => flash(false, t)}
+                    onRecharge={(childId, amount, method, phone) => startRecharge(childId, amount, method, phone)}
                     updateChild={updateChild}
                     deleteChild={deleteChild}
                     flash={flash}
@@ -1684,9 +851,28 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
       {waveModal && (
         <WavePaymentModal
           wave={waveModal.wave}
+          initialPhone={defaultPhone}
           error={confirmError}
           confirming={confirming}
           onConfirm={handleConfirmWave}
+          onPaid={() => {
+            const kind = waveModal.kind;
+            const pid = waveModal.paymentId;
+            setWaveModal(null);
+            setConfirmError(null);
+            if (kind === 'topup') {
+              flash(true, 'Recharge confirmée : le solde de la carte a été crédité.');
+              return;
+            }
+            setPayFor(null);
+            const paid = pid
+              ? (myPayments(username).find((p) => p.id === pid) ?? payments.find((p) => p.id === pid) ?? null)
+              : null;
+            if (paid) setReceipt({ ...paid, status: 'paid' });
+            flash(true, 'Paiement confirmé — la carte est ACTIVE.');
+            setTimeout(() => scrollTo('cartes'), 400);
+          }}
+          onSync={syncPaymentFromProvider}
           onClose={() => {
             setWaveModal(null);
             setConfirmError(null);
@@ -1707,7 +893,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
   );
 };
 
-/** Carte formule premium : badge cycle, prix fort, CTA émeraude, panneau InTouch intégré. */
+/** Carte formule premium : badge cycle, prix fort, CTA émeraude, panneau Wave / Max it intégré. */
 function FormulaCard({ formulaId, name, audience, description, price, meals, days, open, onOpen, onClose, panel }: {
   formulaId: string; name: string; audience: string; description: string; price: number;
   meals: number; days: number; open: boolean; onOpen: () => void; onClose: () => void; panel: React.ReactNode;
@@ -1740,181 +926,134 @@ function FormulaCard({ formulaId, name, audience, description, price, meals, day
   );
 }
 
-/** Panneau InTouch intégré au pavé formule : enfant → téléphone → code, tout ici. */
-function FormulaPaymentPanel({ formulaId, formulaName, price, kids, onStart, onPaid, onError }: {
+/** Panneau intégré au pavé formule : enfant, Wave ou Max it, téléphone.
+ * La session part chez SycaPay : la fenêtre de paiement de la page envoie
+ * ensuite le parent automatiquement dans l'application de son opérateur.
+ */
+function FormulaPaymentPanel({ formulaId, formulaName, price, kids, defaultPhone, onStart }: {
   formulaId: string; formulaName: string; price: number; kids: Child[];
-  onStart: (formulaId: string, childId: string) => { payment: ORestoPayment; wave: WavePaymentRequest };
-  onPaid: (paymentId: string) => void;
-  onError: (text: string) => void;
+  defaultPhone: string;
+  onStart: (formulaId: string, childId: string, method: 'wave' | 'mobile_money', phone: string) => Promise<void>;
 }) {
-  const { confirmMobilePayment } = useResto();
   const [childId, setChildId] = useState(kids[0]?.id ?? '');
-  const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [wave, setWave] = useState<WavePaymentRequest | null>(null);
-  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [method, setMethod] = useState<'wave' | 'mobile_money'>('wave');
+  const [phone, setPhone] = useState(defaultPhone.replace(/\D/g, '').slice(0, 9));
   const [error, setError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (!wave) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [wave]);
+  const methodLabel = method === 'wave' ? 'Wave' : 'Max it (Orange Money)';
 
-  const left = wave ? Math.max(0, new Date(wave.expiresAt).getTime() - now) : 0;
-  const countdown = `${String(Math.floor(left / 60000)).padStart(2, '0')}:${String(Math.floor((left % 60000) / 1000)).padStart(2, '0')}`;
-
-  const handleValidate = () => {
+  const handleValidate = async () => {
     setError(null);
     if (!childId) {
       setError('Choisissez l’enfant à abonner.');
       return;
     }
     if (!isValidSnPhone(phone)) {
-      setError('Numéro InTouch invalide (9 chiffres, ex : 77 123 45 67).');
+      setError('Numéro mobile invalide (9 chiffres, ex : 77 123 45 67).');
       return;
     }
+    setBusy(true);
     try {
-      const { payment, wave: w } = onStart(formulaId, childId);
-      setPaymentId(payment.id);
-      setWave(w);
+      await onStart(formulaId, childId, method, phone);
     } catch (err) {
       const text = err instanceof Error ? err.message : 'Paiement impossible.';
       setError(text);
-      onError(text);
+      setBusy(false);
     }
   };
-
-  const handleConfirm = () => {
-    setError(null);
-    if (!paymentId) return;
-    if (!isValidWaveCode(code)) {
-      setError('Code à 6 chiffres requis.');
-      return;
-    }
-    setConfirming(true);
-    const { ok, message: text } = confirmMobilePayment(paymentId, code);
-    setConfirming(false);
-    if (!ok) {
-      setError(text);
-      return;
-    }
-    onPaid(paymentId);
-  };
-
-  if (!wave || !paymentId) {
-    return (
-      <div className="space-y-3">
-        <p className="text-sm font-bold text-slate-800">« {formulaName} » · {formatCurrency(price)}</p>
-        <div>
-          <label htmlFor={`pay-enfant-${formulaId}`} className="text-xs font-bold text-slate-600">Enfant à abonner</label>
-          <select
-            id={`pay-enfant-${formulaId}`}
-            value={childId}
-            onChange={(e) => setChildId(e.target.value)}
-            className="mt-1 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-emerald-600"
-          >
-            <option value="">Choisir…</option>
-            {kids.map((k) => (
-              <option key={k.id} value={k.id}>{k.firstName} {k.lastName} · {k.className}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor={`pay-tel-${formulaId}`} className="text-xs font-bold text-slate-600">Numéro InTouch</label>
-          <input
-            id={`pay-tel-${formulaId}`}
-            inputMode="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
-            placeholder="77 123 45 67"
-            className="mt-1 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-emerald-600"
-          />
-        </div>
-        {error && <p className="text-xs font-semibold text-red-600">{error}</p>}
-        <button onClick={handleValidate} className="w-full py-3 min-h-[48px] rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 inline-flex items-center justify-center gap-2">
-          <Smartphone className="w-4 h-4" /> Valider · {formatCurrency(price)}
-        </button>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl bg-slate-900 text-white p-4 flex items-center justify-between gap-2">
-        <div>
-          <p className="text-xs text-slate-400">Montant envoyé · {wave.merchantName}</p>
-          <p className="text-xl font-bold">{wave.amountLabel}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-slate-400 flex items-center gap-1 justify-end"><Timer className="w-3.5 h-3.5" /> Expire</p>
-          <p className={`text-lg font-bold font-mono ${left === 0 ? 'text-red-400' : ''}`}>{countdown}</p>
+      <p className="text-sm font-bold text-slate-800">« {formulaName} » · {formatCurrency(price)}</p>
+      <div>
+        <label htmlFor={`pay-enfant-${formulaId}`} className="text-xs font-bold text-slate-600">Enfant à abonner</label>
+        <select
+          id={`pay-enfant-${formulaId}`}
+          value={childId}
+          onChange={(e) => setChildId(e.target.value)}
+          className="mt-1 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-emerald-600"
+        >
+          <option value="">Choisir…</option>
+          {kids.map((k) => (
+            <option key={k.id} value={k.id}>{k.firstName} {k.lastName} · {k.className}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <span id={`pay-methode-${formulaId}`} className="text-xs font-bold text-slate-600">Moyen de paiement</span>
+        <div className="mt-1.5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setMethod('wave')}
+            aria-pressed={method === 'wave'}
+            className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all ${method === 'wave' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+          >
+            Wave
+          </button>
+          <button
+            type="button"
+            onClick={() => setMethod('mobile_money')}
+            aria-pressed={method === 'mobile_money'}
+            className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all ${method === 'mobile_money' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+          >
+            Max it (Orange Money)
+          </button>
         </div>
       </div>
       <div>
-        <label htmlFor={`pay-code-${formulaId}`} className="text-xs font-bold text-slate-600">Code InTouch à 6 chiffres</label>
+        <label htmlFor={`pay-tel-${formulaId}`} className="text-xs font-bold text-slate-600">Numéro mobile ({methodLabel})</label>
         <input
-          id={`pay-code-${formulaId}`}
-          inputMode="numeric"
-          value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-          placeholder="••••••"
-          className="mt-1 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm text-center font-mono tracking-[0.3em] outline-none focus:border-emerald-600"
+          id={`pay-tel-${formulaId}`}
+          inputMode="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
+          placeholder="77 123 45 67"
+          className="mt-1 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-emerald-600"
         />
       </div>
       {error && <p className="text-xs font-semibold text-red-600">{error}</p>}
       <button
-        onClick={handleConfirm}
-        disabled={confirming || left === 0}
-        className="w-full py-3 min-h-[48px] rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-40"
+        onClick={handleValidate}
+        disabled={busy}
+        className="w-full py-3 min-h-[48px] rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 disabled:opacity-50 inline-flex items-center justify-center gap-2"
       >
-        {confirming ? 'Confirmation…' : 'Confirmer le paiement'}
+        <Smartphone className="w-4 h-4" /> {busy ? 'Ouverture du paiement…' : 'Payer'} · {formatCurrency(price)}
       </button>
+      <p className="text-[11px] text-slate-400">
+        Vous partez automatiquement dans l’application {methodLabel} pour valider avec votre code secret. Rien n’est débité avant votre confirmation chez l’opérateur.
+      </p>
     </div>
   );
 }
 
-/** Recharge carte : même finalisation InTouch que les abonnements.
- * 1) carte + montant + téléphone → Valider (demande InTouch)
- * 2) code à 6 chiffres → Confirmer (crédit immédiat + solde suivi).
+/** Recharge carte : carte + montant + Wave ou Max it + téléphone.
+ * La recharge est enregistrée « en attente », créancier SycaPay : le solde
+ * est crédité dès la confirmation de l'opérateur (webhook).
  */
-function RechargePanel({ kids, walletOf, onDone, onError }: {
-  kids: Child[]; walletOf: (id: string) => number;
+function RechargePanel({ kids, walletOf, defaultPhone, onLaunch, onDone, onCredited }: {
+  kids: Child[]; walletOf: (id: string) => number; defaultPhone: string;
+  onLaunch: (childId: string, amount: number, method: 'wave' | 'mobile_money', phone: string) => Promise<void>;
   onDone: (childId: string, amount: number) => void;
-  onError: (text: string) => void;
+  onCredited?: (childId: string, amount: number) => void;
 }) {
-  const { topUpChild, confirmWalletTopUpMobile } = useResto();
   const [childId, setChildId] = useState(kids[0]?.id ?? '');
   const [preset, setPreset] = useState<number | null>(2000);
   const [custom, setCustom] = useState('');
-  const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [wave, setWave] = useState<WavePaymentRequest | null>(null);
-  const [txId, setTxId] = useState<string | null>(null);
+  const [method, setMethod] = useState<'wave' | 'mobile_money'>('wave');
+  const [phone, setPhone] = useState(defaultPhone.replace(/\D/g, '').slice(0, 9));
   const [error, setError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (kids.length > 0 && !kids.some((k) => k.id === childId)) setChildId(kids[0].id);
   }, [kids, childId]);
 
-  useEffect(() => {
-    if (!wave) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [wave]);
-
   const parsedCustom = parseInt(custom.replace(/\D/g, ''), 10);
   const amount = Number.isFinite(parsedCustom) && parsedCustom > 0 ? parsedCustom : (preset ?? 0);
-  const selKid = kids.find((k) => k.id === childId);
-  const ready = !!childId && amount > 0 && isValidSnPhone(phone);
-  const left = wave ? Math.max(0, new Date(wave.expiresAt).getTime() - now) : 0;
-  const countdown = `${String(Math.floor(left / 60000)).padStart(2, '0')}:${String(Math.floor((left % 60000) / 1000)).padStart(2, '0')}`;
+  const methodLabel = method === 'wave' ? 'Wave' : 'Max it (Orange Money)';
 
-  const handleValidate = () => {
+  const handleValidate = async () => {
     setError(null);
     if (!childId) {
       setError('Choisissez la carte à recharger.');
@@ -1925,205 +1064,113 @@ function RechargePanel({ kids, walletOf, onDone, onError }: {
       return;
     }
     if (!isValidSnPhone(phone)) {
-      setError('Numéro InTouch invalide (9 chiffres, ex : 77 123 45 67).');
+      setError('Numéro mobile invalide (9 chiffres, ex : 77 123 45 67).');
       return;
     }
+    setBusy(true);
     try {
-      const res = topUpChild(childId, amount, 'wave');
-      const w = 'wave' in res ? res.wave : undefined;
-      if (!w) {
-        onDone(childId, amount);
-        return;
-      }
-      setTxId(res.tx.id);
-      setWave(w);
+      await onLaunch(childId, amount, method, phone);
+      onDone(childId, amount);
+      onCredited?.(childId, amount);
     } catch (err) {
       const text = err instanceof Error ? err.message : 'Recharge impossible.';
       setError(text);
-      onError(text);
+      setBusy(false);
     }
   };
-
-  const handleConfirm = () => {
-    setError(null);
-    if (!txId) return;
-    if (!isValidWaveCode(code)) {
-      setError('Code à 6 chiffres requis.');
-      return;
-    }
-    setConfirming(true);
-    const { ok, message: text } = confirmWalletTopUpMobile(txId, code);
-    setConfirming(false);
-    if (!ok) {
-      setError(text);
-      return;
-    }
-    const doneChild = childId;
-    const doneAmount = amount;
-    setWave(null);
-    setTxId(null);
-    setCode('');
-    setCustom('');
-    onDone(doneChild, doneAmount);
-  };
-
-  if (!wave || !txId) {
-    return (
-      <div className="space-y-4">
-        <div>
-          <p className="text-xs font-black uppercase tracking-widest text-slate-400">1 · Carte à recharger</p>
-          <div className="mt-1.5 flex flex-wrap gap-2">
-            {kids.map((k) => {
-              const sel = childId === k.id;
-              return (
-                <button
-                  key={k.id}
-                  onClick={() => setChildId(k.id)}
-                  aria-pressed={sel}
-                  className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all ${sel ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:shadow-sm'}`}
-                >
-                  {k.firstName} {k.lastName} · <span className="tabular-nums">{formatCurrency(walletOf(k.id))}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div>
-          <p className="text-xs font-black uppercase tracking-widest text-slate-400">2 · Montant</p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            {[1000, 2000, 5000, 10000].map((a) => (
-              <button
-                key={a}
-                onClick={() => { setPreset(a); setCustom(''); }}
-                aria-pressed={preset === a && !custom}
-                className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all tabular-nums ${preset === a && !custom ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/25' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400 hover:shadow-sm'}`}
-              >
-                {formatCurrency(a)}
-              </button>
-            ))}
-            <input
-              inputMode="numeric"
-              value={custom}
-              onChange={(e) => setCustom(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="Autre montant"
-              aria-label="Montant libre en FCFA"
-              className={`px-3.5 py-2 min-h-[44px] rounded-xl border-2 text-xs font-bold w-36 outline-none transition-all tabular-nums ${custom ? 'border-emerald-600 bg-emerald-50/50' : 'border-slate-200 focus:border-emerald-600'}`}
-            />
-          </div>
-        </div>
-        <div>
-          <label htmlFor="recharge-tel" className="text-xs font-black uppercase tracking-widest text-slate-400">3 · Numéro InTouch</label>
-          <input
-            id="recharge-tel"
-            inputMode="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
-            placeholder="77 123 45 67"
-            className="mt-1.5 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm tabular-nums outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10 transition-all"
-          />
-        </div>
-        {error && <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</p>}
-        <div>
-          <button
-            onClick={handleValidate}
-            disabled={!ready}
-            className="w-full py-3 min-h-[48px] rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-500 text-white text-sm font-bold hover:from-emerald-800 hover:to-emerald-600 active:scale-[0.99] transition-all inline-flex items-center justify-center gap-2 shadow-md shadow-emerald-600/25 disabled:opacity-40 disabled:shadow-none disabled:active:scale-100"
-          >
-            <Smartphone className="w-4 h-4" />             Recharger{amount > 0 ? ` · ${formatCurrency(amount)}` : ''}
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-slate-600">
-        Recharge <strong className="text-slate-900 tabular-nums">{formatCurrency(amount)}</strong>
-        {selKid ? <> → carte de <strong className="text-slate-900">{selKid.firstName} {selKid.lastName}</strong></> : null} ·
-        validez avec le code reçu par InTouch.
-      </p>
-      <div className="rounded-xl bg-slate-900 text-white p-4 flex items-center justify-between gap-2">
-        <div>
-          <p className="text-xs text-slate-400">Montant envoyé · {wave.merchantName}</p>
-          <p className="text-xl font-bold tabular-nums">{wave.amountLabel}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-slate-400 flex items-center gap-1 justify-end"><Timer className="w-3.5 h-3.5" /> Expire</p>
-          <p className={`text-lg font-bold font-mono ${left === 0 ? 'text-red-400' : ''}`}>{countdown}</p>
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs font-black uppercase tracking-widest text-slate-400">1 · Carte à recharger</p>
+        <div className="mt-1.5 flex flex-wrap gap-2">
+          {kids.map((k) => {
+            const sel = childId === k.id;
+            return (
+              <button
+                key={k.id}
+                onClick={() => setChildId(k.id)}
+                aria-pressed={sel}
+                className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all ${sel ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:shadow-sm'}`}
+              >
+                {k.firstName} {k.lastName} · <span className="tabular-nums">{formatCurrency(walletOf(k.id))}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
       <div>
-        <label htmlFor="recharge-code" className="text-xs font-bold text-slate-600">Code InTouch à 6 chiffres</label>
+        <p className="text-xs font-black uppercase tracking-widest text-slate-400">2 · Montant</p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          {[1000, 2000, 5000, 10000].map((a) => (
+            <button
+              key={a}
+              onClick={() => { setPreset(a); setCustom(''); }}
+              aria-pressed={preset === a && !custom}
+              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all tabular-nums ${preset === a && !custom ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/25' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400 hover:shadow-sm'}`}
+            >
+              {formatCurrency(a)}
+            </button>
+          ))}
+          <input
+            inputMode="numeric"
+            value={custom}
+            onChange={(e) => setCustom(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="Autre montant"
+            aria-label="Montant libre en FCFA"
+            className={`px-3.5 py-2 min-h-[44px] rounded-xl border-2 text-xs font-bold w-36 outline-none transition-all tabular-nums ${custom ? 'border-emerald-600 bg-emerald-50/50' : 'border-slate-200 focus:border-emerald-600'}`}
+          />
+        </div>
+      </div>
+      <div>
+        <p className="text-xs font-black uppercase tracking-widest text-slate-400">3 · Moyen de paiement</p>
+        <div className="mt-1.5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setMethod('wave')}
+            aria-pressed={method === 'wave'}
+            className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all ${method === 'wave' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+          >
+            Wave
+          </button>
+          <button
+            type="button"
+            onClick={() => setMethod('mobile_money')}
+            aria-pressed={method === 'mobile_money'}
+            className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all ${method === 'mobile_money' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+          >
+            Max it (Orange Money)
+          </button>
+        </div>
+      </div>
+      <div>
+        <label htmlFor="recharge-tel" className="text-xs font-black uppercase tracking-widest text-slate-400">4 · Numéro mobile ({methodLabel})</label>
         <input
-          id="recharge-code"
-          inputMode="numeric"
-          value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-          placeholder="••••••"
-          className="mt-1 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm text-center font-mono tracking-[0.3em] outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10 transition-all"
+          id="recharge-tel"
+          inputMode="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
+          placeholder="77 123 45 67"
+          className="mt-1.5 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm tabular-nums outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-600/10 transition-all"
         />
       </div>
-      {error && <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</p>}
+      {error && (
+        <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2" role="alert">{error}</p>
+      )}
       <button
-        onClick={handleConfirm}
-        disabled={confirming || left === 0 || code.length !== 6}
-        className="w-full py-3 min-h-[48px] rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-500 text-white text-sm font-bold hover:from-emerald-800 hover:to-emerald-600 active:scale-[0.99] transition-all disabled:opacity-40 shadow-md shadow-emerald-600/25 disabled:shadow-none"
+        onClick={handleValidate}
+        disabled={busy || !childId || !(amount > 0) || !isValidSnPhone(phone)}
+        className="w-full py-3 min-h-[48px] rounded-xl bg-gradient-to-r from-emerald-700 to-emerald-500 text-white text-sm font-bold hover:from-emerald-800 hover:to-emerald-600 active:scale-[0.99] transition-all inline-flex items-center justify-center gap-2 shadow-md shadow-emerald-600/25 disabled:opacity-40 disabled:shadow-none disabled:active:scale-100"
       >
-        {confirming ? 'Confirmation…' : 'Confirmer la recharge'}
+        <Smartphone className="w-4 h-4" /> {busy ? 'Ouverture du paiement…' : 'Recharger'}{amount > 0 ? ' · ' : ''}{formatCurrency(amount)}
       </button>
-      <button
-        onClick={() => { setWave(null); setTxId(null); setCode(''); setError(null); }}
-        className="w-full text-sm font-semibold text-slate-500 hover:text-slate-700"
-      >
-        ← Modifier la carte ou le montant
-      </button>
+      <p className="text-[11px] text-slate-400">
+        Vous partez automatiquement dans l’application {methodLabel} pour valider. La carte est créditée dès la confirmation de l’opérateur.
+      </p>
     </div>
   );
 }
 
-/** Carte ticket du jour : photo, plats (sans prix), prix unique, paiement par carte. */
-function MenuTicketCard({ menu, highlight, kids, walletOf, buyer, onBuyer, onBuy }: {
-  menu: WeeklyMenu; highlight: boolean; kids: Child[]; walletOf: (id: string) => number;
-  buyer: string; onBuyer: (id: string) => void; onBuy: () => void;
-}) {
-  const total = menuTicketTotal(menu);
-  const sel = kids.find((k) => k.id === (buyer || kids[0]?.id));
-  return (
-    <TicketCard
-      day={menu.day}
-      name={menu.name || `Menu du ${menu.day}`}
-      description={menu.description}
-      image={dayPhoto(menu.day)}
-      items={menu.items}
-      total={total}
-      highlight={highlight}
-      highlightLabel={highlight ? 'MENU DU JOUR' : undefined}
-      action={
-        kids.length > 0 && total > 0 ? (
-          <>
-            <select
-              value={(buyer || kids[0]?.id) ?? ''}
-              onChange={(e) => onBuyer(e.target.value)}
-              aria-label={`Carte pour le menu ${menu.day}`}
-              className="w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-emerald-600"
-            >
-              {kids.map((k) => (
-                <option key={k.id} value={k.id}>{k.firstName} {k.lastName} · {formatCurrency(walletOf(k.id))}</option>
-              ))}
-            </select>
-            <button onClick={onBuy} className="mt-2 w-full py-3 min-h-[48px] rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 active:scale-[0.99] transition-all inline-flex items-center justify-center gap-2">
-              <Ticket className="w-4 h-4" /> Ticket · {formatCurrency(total)}
-            </button>
-            {sel && walletOf(sel.id) < total && (
-              <p className="mt-1.5 text-xs font-semibold text-red-600">Solde insuffisant — rechargez la carte à l’étape 4.</p>
-            )}
-          </>
-        ) : undefined
-      }
-    />
-  );
-}
 
 /**
  * Inscription rapide par cycle : la carte et le QR suivent seuls.
@@ -2235,26 +1282,22 @@ function QuickEnrollCycle({ cycleId, username, hasProfile, addChild, kidsCount, 
 }
 
 /** Carte enfant dark (style CARTE ACTIVE) : une carte par enfant inscrit.
- * Abonné : repas restants + J- + Mon QR + Renouveler + progression.
- * Sans abonnement : solde + recharge InTouch intégrée. Gestion intégrée.
+ * Abonné : période + QR + Renouveler (Wave / Max it via SycaPay).
+ * Sans abonnement : solde + recharge SycaPay intégrée. Gestion intégrée.
  */
-function KidCard({ k, sub, pending, balance, walletOf, formulaName, formulaRules, totalMeals, days, nextPeriod, renewable, onRenew, onRecharged, onError, updateChild, deleteChild, flash }: {
+function KidCard({ k, sub, pending, balance, walletOf, formulaName, defaultPhone, nextPeriod, onRenew, onRecharged, onRecharge, updateChild, deleteChild, flash }: {
   k: Child;
   sub: Subscription | undefined;
   pending: boolean;
   balance: number;
   walletOf: (id: string) => number;
   formulaName: string;
-  formulaRules?: string;
-  totalMeals: number;
-  days: number;
+  defaultPhone: string;
   /** Période suivante déjà réglée (réabonnement de fin de mois). */
   nextPeriod?: Subscription;
-  /** La période en cours se termine : on propose le réabonnement. */
-  renewable?: boolean;
-  onRenew?: () => void;
+  onRenew?: (method: 'wave' | 'mobile_money') => void;
   onRecharged: (childId: string, amount: number) => void;
-  onError: (text: string) => void;
+  onRecharge: (childId: string, amount: number, method: 'wave' | 'mobile_money', phone: string) => Promise<void>;
   updateChild: (id: string, updates: Partial<Pick<Child, 'firstName' | 'lastName' | 'className' | 'cycle'>>) => void;
   deleteChild: (id: string) => void;
   flash: (ok: boolean, text: string) => void;
@@ -2265,7 +1308,7 @@ function KidCard({ k, sub, pending, balance, walletOf, formulaName, formulaRules
   const [fFirst, setFFirst] = useState('');
   const [fLast, setFLast] = useState('');
   const [fClass, setFClass] = useState('');
-  const pct = totalMeals > 0 && sub ? Math.min(100, Math.round((sub.mealsRemaining / totalMeals) * 100)) : 0;
+  const [renewMethod, setRenewMethod] = useState<'wave' | 'mobile_money'>('wave');
 
   const startEdit = () => {
     setEditing(true);
@@ -2305,20 +1348,11 @@ function KidCard({ k, sub, pending, balance, walletOf, formulaName, formulaRules
         <p className="text-xs font-bold uppercase tracking-widest text-emerald-300 truncate">
           • {sub ? `Carte active – ${formulaName}` : pending ? 'Carte – En attente' : 'Carte – Sans abonnement'}
         </p>
-        <span className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full bg-white/15 text-emerald-200 whitespace-nowrap tabular-nums">
-          {sub ? (days > 0 ? `J-${days} restants` : 'Dernier jour') : formatCurrency(balance)}
-        </span>
       </div>
       {sub ? (
-        <>
-          <p className="relative mt-3 text-4xl font-black tracking-tight tabular-nums">{sub.mealsRemaining} <span className="text-lg font-bold text-slate-300">repas restants</span></p>
-          <p className="relative mt-1 text-xs text-slate-400">
-            {k.firstName} {k.lastName} · {k.className} · {periodLabel(sub.startDate)} — jusqu’au {shortDate(sub.endDate)}
-          </p>
-          <p className="relative mt-1.5 text-[11px] font-semibold text-amber-300/90">
-            Fin de période : les repas non consommés ne sont pas reportés.
-          </p>
-        </>
+        <p className="relative mt-3 text-xs text-slate-400">
+          {k.firstName} {k.lastName} · {k.className} · {periodLabel(sub.startDate)} — jusqu’au {shortDate(sub.endDate)}
+        </p>
       ) : (
         <>
           <p className="relative mt-3 text-4xl font-black tracking-tight tabular-nums">{formatCurrency(balance)}</p>
@@ -2334,12 +1368,32 @@ function KidCard({ k, sub, pending, balance, walletOf, formulaName, formulaRules
       )}
       <div className="relative mt-4 flex flex-wrap gap-2">
         {sub && onRenew && !nextPeriod && (
-          <button onClick={onRenew} className="inline-flex items-center gap-1.5 px-5 py-2.5 min-h-[44px] rounded-xl bg-emerald-500 text-white text-sm font-bold hover:bg-emerald-400 active:scale-[0.99] transition-all">
-            <CalendarClock className="w-4 h-4" /> {renewable ? `Renouveler pour ${nextMonthLabel(sub.endDate)}` : 'Renouveler'}
-          </button>
+          <>
+            <select
+              value={renewMethod}
+              onChange={(e) => setRenewMethod(e.target.value as 'wave' | 'mobile_money')}
+              aria-label="Moyen de paiement du renouvellement"
+              className="px-3 py-2.5 min-h-[44px] rounded-xl bg-slate-800 border border-slate-700 text-sm text-white outline-none focus:border-emerald-400"
+            >
+              <option value="wave">Wave</option>
+              <option value="mobile_money">Max it (Orange Money)</option>
+            </select>
+            <button
+              onClick={() => {
+                if (!isValidSnPhone(defaultPhone)) {
+                  flash(false, 'Renseignez votre numéro de téléphone dans votre profil pour recevoir la demande de paiement.');
+                  return;
+                }
+                onRenew(renewMethod);
+              }}
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 min-h-[44px] rounded-xl bg-emerald-500 text-white text-sm font-bold hover:bg-emerald-400 active:scale-[0.99] transition-all"
+            >
+              <CalendarClock className="w-4 h-4" /> Renouveler pour {nextMonthLabel(sub.endDate)}
+            </button>
+          </>
         )}
         <button onClick={() => setShowRecharge((v) => !v)} aria-expanded={showRecharge} className="inline-flex items-center gap-1.5 px-5 py-2.5 min-h-[44px] rounded-xl bg-emerald-500 text-white text-sm font-bold hover:bg-emerald-400 active:scale-[0.99] transition-all">
-          <Smartphone className="w-4 h-4" /> {sub ? 'Recharger ma carte' : 'Recharger ma carte'}
+          <Smartphone className="w-4 h-4" /> Recharger ma carte
         </button>
       </div>
       {showRecharge && (
@@ -2347,18 +1401,10 @@ function KidCard({ k, sub, pending, balance, walletOf, formulaName, formulaRules
           <RechargePanel
             kids={[k]}
             walletOf={walletOf}
+            defaultPhone={defaultPhone}
+            onLaunch={onRecharge}
             onDone={(id, amt) => { setShowRecharge(false); onRecharged(id, amt); }}
-            onError={onError}
           />
-        </div>
-      )}
-      {sub && (
-        <div className="relative mt-4">
-          <p className="text-xs font-bold text-slate-300 tabular-nums">Solde repas {sub.mealsRemaining}/{totalMeals}</p>
-          <div className="mt-1.5 h-2 rounded-full bg-white/15 overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-            <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${pct}%` }} />
-          </div>
-          {formulaRules && <p className="mt-2 text-[11px] text-slate-400">{formulaRules}</p>}
         </div>
       )}
       {/*

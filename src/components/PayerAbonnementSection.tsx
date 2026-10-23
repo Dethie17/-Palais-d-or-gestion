@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useResto } from '@/context/RestoContext';
-import type { Child, ORestoPayment, Subscription } from '@/types/menu';
-import { isValidSnPhone, isValidWaveCode, type WavePaymentRequest } from '@/lib/wave';
+import type { Child } from '@/types/menu';
+import { isValidSnPhone } from '@/lib/wave';
 import {
   prochainsMois, moisCouverts, labelMois, debutDeMoisIso, selectionConsecutive, type MoisCle,
 } from '@/lib/aboMois';
 import { cycleOfClass, formulaCoversCycle, CYCLE_LABEL } from '@/lib/schoolCycles';
 import { formatCurrency } from '@/lib/utils';
-import { Smartphone, Timer, Check, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Smartphone, Check, ChevronRight, AlertTriangle } from 'lucide-react';
 
 /**
  * Espace Parent — « Payer l'abonnement ».
@@ -16,31 +16,29 @@ import { Smartphone, Timer, Check, ChevronRight, AlertTriangle } from 'lucide-re
  * abonnement sont verrouillés (« Payé »), et il peut régler plusieurs mois
  * consécutifs en UNE seule opération : un seul abonnement élargi couvert
  * par un seul paiement. Le total est recalculé ici formule × mois ; le
- * débit réel est confirmé par le code InTouch à 6 chiffres.
+ * paiement part chez SycaPay (Wave ou Max it) qui envoie le client
+ * automatiquement dans son application.
  */
-const PayerAbonnementSection = ({ kids, onPaid, onError }: {
+const PayerAbonnementSection = ({ kids, start, onError }: {
   kids: Child[];
-  onPaid: (paymentId: string, sub?: Subscription) => void;
+  /** Ouvre la souscription multi-mois puis la session opérateur (page). */
+  start: (
+    childId: string,
+    formulaId: string,
+    count: number,
+    firstMonthIso: string,
+    method: 'wave' | 'mobile_money',
+    phone: string,
+  ) => Promise<void>;
   onError: (text: string) => void;
 }) => {
-  const {
-    formulas, subscriptions, confirmMobilePayment, subscribeBundle, paySubscription,
-  } = useResto();
+  const { formulas, subscriptions } = useResto();
   const [childId, setChildId] = useState(kids[0]?.id ?? '');
   const [selected, setSelected] = useState<MoisCle[]>([]);
   const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [wave, setWave] = useState<WavePaymentRequest | null>(null);
-  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [method, setMethod] = useState<'wave' | 'mobile_money'>('wave');
   const [error, setError] = useState('');
-  const [confirming, setConfirming] = useState(false);
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    if (!wave) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [wave]);
+  const [busy, setBusy] = useState(false);
 
   const child = kids.find((k) => k.id === childId);
 
@@ -65,7 +63,7 @@ const PayerAbonnementSection = ({ kids, onPaid, onError }: {
     return prochainsMois(8).map((m) => ({ ...m, paid: couverts.has(m.cle) }));
   }, [child, subscriptions]);
 
-  // Changement d'enfant / nouvel abonnement payé : on erreur les mois couverts.
+  // Changement d'enfant / nouvel abonnement payé : on retire les mois couverts.
   useEffect(() => {
     setSelected((prev) => prev.filter((k) => months.some((m) => m.cle === k && !m.paid)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,7 +76,7 @@ const PayerAbonnementSection = ({ kids, onPaid, onError }: {
     setSelected((prev) => (prev.includes(cle) ? prev.filter((k) => k !== cle) : [...prev, cle]));
   };
 
-  const lancerPaiement = () => {
+  const lancerPaiement = async () => {
     setError('');
     if (!child || !formula) {
       setError('Choisissez d’abord un enfant.');
@@ -93,49 +91,29 @@ const PayerAbonnementSection = ({ kids, onPaid, onError }: {
       return;
     }
     if (!isValidSnPhone(phone)) {
-      setError('Numéro InTouch invalide (9 chiffres, ex : 77 123 45 67).');
+      setError('Numéro mobile invalide (9 chiffres, ex : 77 123 45 67).');
       return;
     }
     const tries = [...selected].sort();
+    setBusy(true);
     try {
-      const sub = subscribeBundle(
-        child.parentUsername,
-        formula.id,
+      await start(
         child.id,
+        formula.id,
         selected.length,
         debutDeMoisIso(tries[0]),
+        method,
+        phone,
       );
-      const montant = formula.price * selected.length;
-      const r = paySubscription(sub.id, 'wave', sub, montant);
-      if (!r.wave) throw new Error('Paiement mobile indisponible pour le moment — réessayez.');
-      setPaymentId(r.payment.id);
-      setWave(r.wave);
     } catch (e) {
       const t = e instanceof Error ? e.message : 'Paiement impossible pour le moment.';
       setError(t);
       onError(t);
+      setBusy(false);
     }
   };
 
-  const confirmeCode = () => {
-    setError('');
-    if (!paymentId) return;
-    if (!isValidWaveCode(code)) {
-      setError('Code InTouch à 6 chiffres requis.');
-      return;
-    }
-    setConfirming(true);
-    const { ok, message } = confirmMobilePayment(paymentId, code);
-    setConfirming(false);
-    if (!ok) {
-      setError(message);
-      return;
-    }
-    onPaid(paymentId);
-  };
-
-  const left = wave ? Math.max(0, new Date(wave.expiresAt).getTime() - now) : 0;
-  const countdown = `${String(Math.floor(left / 60000)).padStart(2, '0')}:${String(Math.floor((left % 60000) / 1000)).padStart(2, '0')}`;
+  const methodLabel = method === 'wave' ? 'Wave' : 'Max it (Orange Money)';
 
   if (kids.length === 0) {
     return (
@@ -205,7 +183,7 @@ const PayerAbonnementSection = ({ kids, onPaid, onError }: {
         </div>
       </div>
 
-      {/* Étape 2 : récap + paiement InTouch */}
+      {/* Étape 2 : récap + moyen de paiement SycaPay */}
       <div className="bg-white rounded-2xl border p-4 md:p-5 space-y-3">
         <p className="text-xs font-black uppercase tracking-widest text-slate-400">Récapitulatif avant validation</p>
         <div className="rounded-xl bg-slate-50 border p-3 text-sm space-y-1" data-testid="abo-recap">
@@ -218,10 +196,33 @@ const PayerAbonnementSection = ({ kids, onPaid, onError }: {
           </p>
         </div>
 
-        {!paymentId ? (
+        {!busy ? (
           <>
             <div>
-              <label htmlFor="abo-tel" className="text-xs font-bold text-slate-600">Numéro InTouch (Wave)</label>
+              <p className="text-xs font-bold text-slate-600">Moyen de paiement</p>
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMethod('wave')}
+                  aria-pressed={method === 'wave'}
+                  data-testid="abo-methode-wave"
+                  className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all ${method === 'wave' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+                >
+                  Wave
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMethod('mobile_money')}
+                  aria-pressed={method === 'mobile_money'}
+                  data-testid="abo-methode-maxit"
+                  className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold border-2 transition-all ${method === 'mobile_money' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+                >
+                  Max it (Orange Money)
+                </button>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="abo-tel" className="text-xs font-bold text-slate-600">Numéro mobile ({methodLabel})</label>
               <input
                 id="abo-tel"
                 data-testid="abo-tel"
@@ -237,46 +238,18 @@ const PayerAbonnementSection = ({ kids, onPaid, onError }: {
               type="button"
               data-testid="abo-payer"
               onClick={lancerPaiement}
-              disabled={!formula || total <= 0}
+              disabled={busy || !formula || total <= 0 || !isValidSnPhone(phone)}
               className="w-full py-3 min-h-[48px] rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 disabled:opacity-50 inline-flex items-center justify-center gap-2"
             >
-              <Smartphone className="w-4 h-4" /> Payer {formatCurrency(total)} pour {selected.length} mois
+              <Smartphone className="w-4 h-4" /> Payer via {methodLabel} · {formatCurrency(total)} pour {selected.length} mois
             </button>
+            <p className="text-[11px] text-slate-400">
+              Vous partez automatiquement dans l’application {methodLabel} pour valider avec votre code secret. Le débit réel est confirmé par SycaPay.
+            </p>
           </>
         ) : (
-          <div className="space-y-3">
-            <div className="rounded-xl bg-slate-900 text-white p-4 flex items-center justify-between gap-2">
-              <div>
-                <p className="text-xs text-slate-400">Montant envoyé · {wave?.merchantName ?? 'Wave'}</p>
-                <p className="text-xl font-bold" data-testid="abo-montant-envoye">{wave?.amountLabel}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-slate-400 flex items-center gap-1 justify-end"><Timer className="w-3.5 h-3.5" /> Expire</p>
-                <p className={`text-lg font-bold font-mono ${left === 0 ? 'text-red-400' : ''}`}>{countdown}</p>
-              </div>
-            </div>
-            <div>
-              <label htmlFor="abo-code" className="text-xs font-bold text-slate-600">Code InTouch à 6 chiffres</label>
-              <input
-                id="abo-code"
-                data-testid="abo-code"
-                inputMode="numeric"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="••••••"
-                className="mt-1 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm tracking-[0.4em] text-center outline-none focus:border-emerald-600"
-              />
-            </div>
-            {error && <p data-testid="abo-error" className="text-xs font-bold text-red-600">{error}</p>}
-            <button
-              type="button"
-              data-testid="abo-confirmer"
-              onClick={confirmeCode}
-              disabled={confirming}
-              className="w-full py-3 min-h-[48px] rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-500 disabled:opacity-60"
-            >
-              {confirming ? 'Vérification…' : 'Confirmer le paiement'}
-            </button>
+          <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-900" role="status">
+            Ouverture du paiement {methodLabel} — vous partez chez l’opérateur…
           </div>
         )}
         <p className="text-[11px] text-slate-400">

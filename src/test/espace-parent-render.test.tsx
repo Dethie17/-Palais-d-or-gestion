@@ -78,12 +78,16 @@ describe('EspaceParentPage render (repro crash childId)', () => {
     expect(screen.getByText(/Recharger ma carte/)).toBeTruthy();
   });
 
-  it('semaine de référence affichée par défaut (menus validés + photos)', async () => {
+  it('menu du jour de la semaine de référence affiché par défaut (consultation seule)', async () => {
     seedChild();
     renderPage();
-    await screen.findByText('Menu Élève');
-    expect(screen.getByText('Menu Burger')).toBeTruthy();
-    expect(screen.getAllByText(/900 FCFA/).length).toBeGreaterThanOrEqual(1);
+    // La nouvelle UX ne montre que le menu du jour (jour courant, sinon
+    // le premier jour publié de la semaine de référence).
+    await screen.findByText(/Menu du jour — /);
+    expect(screen.getByText(/Menu du jour — (Lundi|Mardi|Mercredi|Jeudi|Vendredi)/)).toBeTruthy();
+    expect(screen.getAllByText(
+      /Menu Élève|Menu Gourmand|Menu Petit Budget|Menu Goûter|Menu Burger/,
+    ).length).toBeGreaterThanOrEqual(1);
   });
 
   it('semaine explicitement vidée par le Personnel (bel état vide)', async () => {
@@ -105,7 +109,7 @@ describe('EspaceParentPage render (repro crash childId)', () => {
     ]));
     renderPage();
     await screen.findByText(/Menus en préparation/);
-    expect(screen.getByText(/Semaine pas encore publiée/)).toBeTruthy();
+    expect(screen.getByText(/semaine n’est pas publiée/)).toBeTruthy();
   });
 
   it('supporte un paiement distant sans abonnement lié (pas de crash childId)', async () => {
