@@ -118,6 +118,10 @@ function baseQueryOr(
   orConstraint: string | null,
 ) {
   let q = supabase.from('oresto_payments').select(colonnes, { count: 'exact' });
+  // L'historique est un registre d'ENCAISSEMENTS : seuls les règlements
+  // réussis y figurent. Tentatives échouées / annulées / en attente restent
+  // visibles dans les pages opérationnelles (Abonnés, Validation, Finance).
+  q = q.eq('status', 'paid');
   if (filtres.du) q = q.gte('created_at', `${filtres.du}T00:00:00Z`);
   if (filtres.au) q = q.lte('created_at', `${filtres.au}T23:59:59Z`);
   if (orConstraint) q = q.or(orConstraint);

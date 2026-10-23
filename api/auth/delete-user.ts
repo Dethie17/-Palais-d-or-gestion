@@ -22,11 +22,17 @@
  *
  * Le service key contourne le RLS : les règles d'accès de Supabase ne
  * freinent pas cette suppression administrative.
+ *
+ * NB schéma : la fiche est lue sans `auth_id` — la migration qui pose la
+ * colonne n'est pas exécutée partout. Quand elle manque, le compte Auth est
+ * retrouvé par son adresse interne `<username>@oresto-sn.com`, comme pour la
+ * session (resolveCaller) et la connexion du personnel.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { adminClient, SupabaseAdminConfigError } from '../_lib/supabaseAdmin.js';
 import { requireRole, STAFF_OR_ADMIN } from '../_lib/session.js';
+import { authEmailForUser, findAuthUserByEmail } from '../_lib/parentAuth.js';
 import {
   handlePreflight,
   methodNotAllowed,
@@ -108,9 +114,13 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     throw e;
   }
 
-  const { data: profile, error: lookupError } = await db
+  // La fiche métier est lue SANS `auth_id` : sur le schéma d'avant migration
+  // (colonne absente), la demander ferait échouer TOUTE suppression avec un
+  // 42703 de PostgREST. Le lien vers le compte Auth est retrouvé ensuite,
+  // à part, selon le schéma réellement présent.
+  const { data: profileRow, error: lookupError } = await db
     .from('users')
-    .select('role, auth_id')
+    .select('username, role')
     .eq('username', username)
     .maybeSingle();
 
@@ -118,11 +128,25 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return sendError(res, 500, 'Suppression impossible.');
   }
   // Déjà absent : sortir en 200 évite qu'un double-clic n'apparaisse en erreur.
-  if (!profile) {
+  if (!profileRow) {
     return sendJson(res, 200, { ok: true, username, alreadyAbsent: true });
   }
 
-  const target = profile as { role?: string | null; auth_id?: string | null };
+  const target = profileRow as { role?: string | null };
+
+  // Lien identité ↔ Auth : tolère l'absence de la colonne (schéma historique).
+  let authId: string | null = null;
+  const link = await db.from('users').select('auth_id').eq('username', username).maybeSingle();
+  if (!link.error && link.data) {
+    authId = (link.data as { auth_id?: string | null }).auth_id ?? null;
+  }
+  // Sans colonne (ou sans lien) : pont par l'adresse Auth interne — c'est le
+  // même mécanisme que la session (resolveCaller) et que la connexion du
+  // personnel. L'email `<username>@oresto-sn.com` est réservé à cette table.
+  if (!authId) {
+    const bridge = await findAuthUserByEmail(db, authEmailForUser(username));
+    authId = bridge?.id ?? null;
+  }
 
   // Un compte DAF ne se supprime pas depuis l'application — trop facile de
   // verrouiller la cantine par mégarde. La DAF se gère dans Supabase.
@@ -199,20 +223,19 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const kids = await deleteCounted(db, 'children', { column: 'id', values: childIds });
     if (kids.error) return sendError(res, 500, `Suppression impossible (enfants) : ${kids.error}`);
     counters.children = kids.count ?? undefined;
-
-    const profiles = await deleteCounted(db, 'parent_profiles', {
-      column: 'parent_username',
-      values: username,
-    });
-    counters.parentProfiles = profiles.count ?? undefined; // best effort
   }
+
+  // La fiche parent (identité nominative) suit le compte, enfant ou non.
+  const profiles = await deleteCounted(db, 'parent_profiles', {
+    column: 'parent_username',
+    values: username,
+  });
+  counters.parentProfiles = profiles.count ?? undefined; // best effort
 
   // 4) Le compte d'authentification d'abord : c'est lui qui porte l'identité.
   //    Un profil sans compte Auth serait un orphelin.
-  //    NB : si un ancien profil sans `auth_id` n'a jamais eu de compte Auth,
-  //    cette étape est simplement sautée.
-  if (target.auth_id) {
-    const { error } = await db.auth.admin.deleteUser(target.auth_id);
+  if (authId) {
+    const { error } = await db.auth.admin.deleteUser(authId);
     if (error) {
       return sendError(res, 500, 'Suppression du compte d’authentification impossible.');
     }

@@ -4,15 +4,22 @@ import { RestoProvider } from '@/context/RestoContext';
 
 // --- Mock Supabase : la base renvoie des réponses vides, la page doit
 // s'afficher proprement (état vide + pagination « 0 ») sans réseau réel.
+// --- Mock Supabase : la base renvoie des réponses vides, la page doit
+// s'afficher proprement (état vide + pagination « 0 ») sans réseau réel.
+const eqCalls: unknown[][] = [];
 const layec = () => {
-  const api = {
-    select: vi.fn(() => api),
-    order: vi.fn(() => api),
-    range: vi.fn(() => Promise.resolve({ data: [], count: 0, error: null })),
-    gte: vi.fn(() => api),
-    lte: vi.fn(() => api),
-    or: vi.fn(() => api),
-  } as unknown as { [k: string]: ReturnType<typeof vi.fn> };
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const api: Record<string, any> = {};
+  api.select = vi.fn(() => api);
+  api.eq = vi.fn((col: string, val: string) => {
+    eqCalls.push([col, val]);
+    return api;
+  });
+  api.order = vi.fn(() => api);
+  api.range = vi.fn(() => Promise.resolve({ data: [], count: 0, error: null }));
+  api.gte = vi.fn(() => api);
+  api.lte = vi.fn(() => api);
+  api.or = vi.fn(() => api);
   return api;
 };
 const fromMock = vi.fn((_t: string) => layec());
@@ -73,6 +80,7 @@ describe('Historique des paiements — helpers', () => {
 describe('Historique des paiements — page', () => {
   beforeEach(() => {
     fromMock.mockClear();
+    eqCalls.length = 0;
   });
 
   it('affiche le titre, les filtres et l’état vide quand la base est vide', async () => {
@@ -104,5 +112,16 @@ describe('Historique des paiements — page', () => {
     fireEvent.change(screen.getByTestId('paiements-recherche'), { target: { value: '77 123 45 67' } });
     fireEvent.click(screen.getByRole('button', { name: /appliquer les filtres/i }));
     await waitFor(() => expect(fromMock.mock.calls.length).toBeGreaterThan(avant));
+  });
+
+  it('ne demande à la base que les paiements réglés (statut « paid »)', async () => {
+    const { fetchPaiementsPage } = await import('@/lib/paiementsHistorique');
+    await fetchPaiementsPage({
+      filtres: {},
+      conn: { childIds: [], usernames: [] },
+      constraint: null,
+      page: 1,
+    });
+    expect(eqCalls).toContainEqual(['status', 'paid']);
   });
 });

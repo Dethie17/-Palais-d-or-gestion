@@ -112,6 +112,15 @@ const SubscriptionsAdminPage = () => {
   const paidSubs = subscriptions.filter((s) => settledSubIds.has(s.id));
   const filteredSubs = paidSubs.filter((s) => filter === 'all' || s.status === filter);
   const pendingPayments = payments.filter((p) => p.status === 'pending');
+  /**
+   * Onglet Paiements : les règlements réussis plus ceux à confirmer.
+   * Les tentatives échouées / annulées n'ont rien encaissé et restent dans
+   * l'historique de la passerelle — elles ne servent qu'à créer du bruit ici.
+   */
+  const listedPayments = useMemo(
+    () => payments.filter((p) => p.status === 'paid' || p.status === 'pending'),
+    [payments],
+  );
 
   const handleEncaisser = (subId: string) => {
     const payment = collectCashPayment(subId);
@@ -169,7 +178,7 @@ const SubscriptionsAdminPage = () => {
       <div className="flex gap-2 bg-white border-2 border-slate-100 rounded-2xl p-2 shadow-sm">
         {([
           { id: 'subs', label: `Abonnés (${paidSubs.length})`, icon: <Users className="w-4 h-4" /> },
-            { id: 'payments', label: `Paiements (${payments.length})`, icon: <Banknote className="w-4 h-4" /> },
+            { id: 'payments', label: `Paiements (${listedPayments.length})`, icon: <Banknote className="w-4 h-4" /> },
         ] as { id: Tab; label: string; icon: React.ReactNode }[]).map((t) => (
           <button
             key={t.id}
@@ -270,7 +279,7 @@ const SubscriptionsAdminPage = () => {
                 <tr><th className="text-left p-3">Référence</th><th className="text-left p-3">Parent / Enfant</th><th className="text-left p-3">Montant</th><th className="text-left p-3">Moyen</th><th className="text-left p-3">Statut</th><th className="text-left p-3">Règlement</th><th className="text-left p-3">Action</th></tr>
               </thead>
               <tbody>
-                {payments.length === 0 && walletTxs.filter((t) => t.status === 'pending').length === 0 && (
+                {listedPayments.length === 0 && walletTxs.filter((t) => t.status === 'pending').length === 0 && (
                   <tr><td colSpan={7} className="p-4 text-center text-slate-400">Aucun paiement.</td></tr>
                 )}
                 {walletTxs.filter((t) => t.status === 'pending').map((t) => {
@@ -298,7 +307,7 @@ const SubscriptionsAdminPage = () => {
                     </tr>
                   );
                 })}
-{[...payments].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((p) => (
+{[...listedPayments].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((p) => (
                   <tr key={p.id} className="border-t">
                     <td className="p-3 font-mono text-xs">{p.reference}</td>
                     <td className="p-3">
