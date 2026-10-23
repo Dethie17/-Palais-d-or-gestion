@@ -18,9 +18,8 @@ const ISM_PAGES: PageName[] = [
   'import-eleves',
   // Historique des paiements (parents ↔ école), paginé depuis la base.
   'paiements',
-  // L'Espace ISM supervise l'ensemble des sites : il doit pouvoir
-  // consulter et imprimer les QR Cartes, comme le Superviseur.
-  'qrgallery', 'qrcode',
+  // Les QR Cartes Student ne sont pas exposés à l'Espace ISM :
+  // émission et impression restent côté Superviseur (terrain).
 ];
 export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // Parent : UN seul parcours continu (Accès Abonné) + profil.

@@ -1,14 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useResto } from '@/context/RestoContext';
 import { KioskOrder } from '@/types/menu';
-import { CheckCircle, XCircle, ScanLine, Camera, ImagePlus, Square, Search, UtensilsCrossed, ShoppingBag, Ban, X, Clock3, Volume2, VolumeX, AlertTriangle, Inbox, CreditCard, Wallet, CalendarDays } from 'lucide-react';
+import { CheckCircle, XCircle, ScanLine, Camera, ImagePlus, Square, Search, UtensilsCrossed, ShoppingBag, Ban, X, Clock3, Volume2, VolumeX, AlertTriangle, Inbox, CreditCard, Wallet, CalendarDays, Download } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } from 'html5-qrcode';
 import { pickBackCameraId, isSecureScanContext, friendlyScanError, scanErrorName } from '@/lib/qrScan';
 import { formatCurrency } from '@/lib/utils';
+import { ABO_OFFICIAL } from '@/lib/aboTariffs';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
 function sameDay(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+/** Période du journal des validations : jour / semaine / mois. */
+type JournalPeriod = 'day' | 'week' | 'month';
+
+/** Début (0 h) de la période demandée — lundi pour la semaine. */
+function startOfPeriod(period: JournalPeriod, base = new Date()): number {
+  const d = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  if (period === 'day') return d.getTime();
+  if (period === 'week') {
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d.getTime();
+  }
+  return new Date(base.getFullYear(), base.getMonth(), 1).getTime();
 }
 
 /**
@@ -88,6 +103,62 @@ const ValidationPage = () => {
   const refusedToday = today.filter((v) => v.status === 'rejected').length;
   /** Commandes payées par carte qui attendent leur remise au guichet. */
   const queueLength = useMemo(() => kioskOrders.filter((o) => o.status === 'pending').length, [kioskOrders]);
+
+  // ---- Journal des validations : période jour / semaine / mois + export ----
+  const [journalPeriod, setJournalPeriod] = useState<JournalPeriod>('day');
+  const journalSince = useMemo(() => startOfPeriod(journalPeriod), [journalPeriod]);
+  const journalRows = useMemo(
+    () => validations
+      .filter((v) => new Date(v.validatedAt).getTime() >= journalSince)
+      .sort((a, b) => +new Date(b.validatedAt) - +new Date(a.validatedAt)),
+    [validations, journalSince],
+  );
+
+  /**
+   * Répartition du service DU JOUR par formule officielle :
+   * F2 = préscolaire/élémentaire, F3 = collège/lycée.
+   */
+  const repartitionDuJour = useMemo(() => {
+    const split = { F2: 0, F3: 0 };
+    today
+      .filter((v) => v.status === 'accepted' && v.childId)
+      .forEach((v) => {
+        const sub = subscriptions.find((s) => s.childId === v.childId && s.status === 'active');
+        if (sub?.formulaId === 'F2') split.F2 += 1;
+        else if (sub?.formulaId === 'F3') split.F3 += 1;
+      });
+    return split;
+  }, [today, subscriptions]);
+
+  /** Export CSV (Excel-friendly) du journal sur la période affichée. */
+  const exportJournal = () => {
+    const ba = (iso: string | Date, opts: Intl.DateTimeFormatOptions) => new Date(iso).toLocaleString('fr-FR', opts);
+    const rows: string[][] = [['Date', 'Heure', 'Élève', 'Formule', 'Statut', 'Motif']];
+    journalRows.forEach((v) => {
+      const k = v.childId ? kids.find((c) => c.id === v.childId) : undefined;
+      const sub = v.childId ? subscriptions.find((s) => s.childId === v.childId && s.status === 'active') : undefined;
+      const formule = sub?.formulaId === 'F2'
+        ? 'Préscolaire & Élémentaire'
+        : sub?.formulaId === 'F3'
+          ? 'Collège & Lycée'
+          : v.clientUsername?.startsWith('TICKET-') ? 'Ticket' : sub?.formulaId ?? '—';
+      rows.push([
+        ba(v.validatedAt, { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        ba(v.validatedAt, { hour: '2-digit', minute: '2-digit' }),
+        k ? `${k.firstName} ${k.lastName}` : v.clientUsername,
+        formule,
+        v.status === 'accepted' ? 'Servie' : 'Refusé',
+        v.reason ?? '',
+      ]);
+    });
+    const csv = '﻿' + rows.map((r) => r.map((x) => `"${x.replace(/"/g, '""')}"`).join(';')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `journal-repas-${journalPeriod}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   // Élèves avec abonnement actif (compteur d'en-tête)
   const activeSubs = useMemo(
@@ -225,13 +296,12 @@ const ValidationPage = () => {
   const pendingOrdersTotal = pendingOrders.reduce((s, o) => s + o.total, 0);
   const pendingTicket = !!pendingScan && pendingScan.code.startsWith('TICKET-');
   const pendingSubQr = !!pendingScan && subscriptions.some((s) => (s.qrToken ?? '').toUpperCase() === pendingScan.code);
-  // Prix du repas sans abonnement : même règle que validateMeal.
-  const ticketPrices = formulas.filter((f) => f.kind === 'ticket').map((f) => f.price);
-  const mealPrice = ticketPrices.length > 0 ? Math.min(...ticketPrices) : 500;
-  const mealDeductedBySub = !!pendingSub && pendingSub.mealsRemaining > 0;
-  const mealDeductedByCard = !mealDeductedBySub && !pendingTicket && pendingBalance >= mealPrice;
+  // Règle de service : un repas ne se sert qu'uniquement si l'élève a un
+  // abonnement actif (ou un ticket). La carte prépayée ne débitant plus le
+  // repas, le solde carte n'est plus une alternative au déjeuner.
+  const pendingSubServes = !!pendingSub && pendingSub.mealsRemaining > 0;
   const canServeMeal = !!pendingScan && hasSite && !pendingTicket
-    ? pendingServedToday < 1 && (mealDeductedBySub || mealDeductedByCard || pendingSubQr)
+    ? pendingServedToday < 1 && (pendingSubServes || pendingSubQr)
     : !!pendingScan && hasSite;
 
   const confirmPendingOrders = () => {
@@ -444,27 +514,6 @@ const ValidationPage = () => {
         </div>
       </header>
 
-      {/* ============ PLAT DU JOUR ============ */}
-      {todayDish ? (
-        <div className="rounded-2xl border-2 border-emerald-100 bg-white p-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <span className="text-[11px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1 flex items-center gap-1.5">
-            <UtensilsCrossed className="w-3.5 h-3.5" /> Plat du jour
-          </span>
-          <p className="font-black text-slate-900">{todayDish}</p>
-          {todayItems.length > 0 && (
-            <p className="text-sm text-slate-600 flex flex-wrap gap-1.5">
-              {todayItems.map((it) => (
-                <span key={it.name} className="bg-slate-100 rounded-full px-2.5 py-0.5 text-xs font-bold text-slate-700">{it.name}</span>
-              ))}
-            </p>
-          )}
-        </div>
-      ) : (
-        <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
-          <span className="font-bold text-slate-700">Aucun menu publié aujourd’hui</span> — service par abonnement / solde carte. Le Personnel compose la semaine dans Gestion Menu.
-        </div>
-      )}
-
       {/* ============ RETOUR DU SERVICE (bandeau collant) ============ */}
       {result && (
         <div
@@ -585,13 +634,11 @@ const ValidationPage = () => {
                       ? 'Aucune cantine sélectionnée.'
                       : pendingServedToday >= 1
                         ? 'Un repas a déjà été servi aujourd’hui à cet élève (1 repas / jour).'
-                        : mealDeductedBySub && pendingSub
+                        : pendingSubServes && pendingSub
                           ? `Abonnement : 1 repas sera décompté (${pendingSub.mealsRemaining} → ${pendingSub.mealsRemaining - 1} restants).`
-                          : mealDeductedByCard
-                            ? `Carte : ${formatCurrency(mealPrice)} seront débités (solde ${formatCurrency(pendingBalance)} → ${formatCurrency(pendingBalance - mealPrice)}).`
-                            : pendingSubQr
-                              ? 'Abonnement : 1 repas sera décompté de la formule scannée.'
-                              : `Aucun abonnement actif et solde carte insuffisant (${formatCurrency(pendingBalance)} pour un repas à ${formatCurrency(mealPrice)}) : repas impossible.`}
+                          : pendingSubQr
+                            ? 'Abonnement : 1 repas sera décompté de la formule scannée.'
+                            : 'Aucun abonnement de repas actif pour cet élève : le repas ne peut pas être servi (cartes parents / Espace ISM).'}
                 </span>
               </div>
             </div>
@@ -675,7 +722,7 @@ const ValidationPage = () => {
               className="min-h-[48px] px-6 rounded-xl bg-green-700 text-white font-black text-sm hover:bg-green-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
             >
               <CheckCircle className="w-4 h-4" />
-              {pendingTicket ? 'Confirmer le repas visiteur' : 'Confirmer le repas'}
+              {pendingTicket ? 'Confirmer le repas visiteur' : 'Confirmer le repas servi'}
             </button>
           </div>
         </section>
@@ -965,36 +1012,84 @@ const ValidationPage = () => {
         </div>
       </div>
 
-      {/* ============ JOURNAL DES PASSAGES ============ */}
-      <section className="bg-white rounded-3xl border-2 border-slate-100 overflow-hidden">
+      {/* ============ JOURNAL DES VALIDATIONS ============ */}
+      <section className="bg-white rounded-3xl border-2 border-slate-100 overflow-hidden" data-testid="journal-repas">
         <div className="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
-          <p className="font-black text-slate-900 flex items-center gap-2">
-            <Inbox className="w-5 h-5 text-green-700" /> Journal du jour
-            <span className="text-xs font-bold text-slate-400">({today.length} passage{today.length > 1 ? 's' : ''})</span>
-          </p>
-          <div className="flex gap-2">
-            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800">{servedToday} servis</span>
-            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-red-100 text-red-700">{refusedToday} refus</span>
+          <div className="min-w-0">
+            <p className="font-black text-slate-900 flex items-center gap-2">
+              <Inbox className="w-5 h-5 text-green-700" /> Journal des validations
+              <span className="text-xs font-bold text-slate-400">
+                ({journalRows.length} passage{journalRows.length > 1 ? 's' : ''} — {journalPeriod === 'day' ? 'jour' : journalPeriod === 'week' ? 'semaine' : 'mois'})
+              </span>
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-black">
+              <span className="text-[10px] uppercase tracking-widest text-slate-400 mr-1">Répartition du jour</span>
+              <span className="px-2.5 py-1 rounded-full bg-emerald-600 text-white" data-testid="repartition-f2">
+                Préscolaire & Élémentaire · {repartitionDuJour.F2}
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-slate-800 text-white" data-testid="repartition-f3">
+                Collège & Lycée · {repartitionDuJour.F3}
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">{servedToday} servis</span>
+              <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-700">{refusedToday} refus</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-xl border-2 border-slate-200 overflow-hidden" role="group" aria-label="Période du journal">
+              {(['day', 'week', 'month'] as JournalPeriod[]).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setJournalPeriod(p)}
+                  aria-pressed={journalPeriod === p}
+                  data-testid={`journal-periode-${p}`}
+                  className={`px-3.5 py-2 min-h-[40px] text-xs font-bold transition ${journalPeriod === p ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                >
+                  {p === 'day' ? 'Jour' : p === 'week' ? 'Semaine' : 'Mois'}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={exportJournal}
+              disabled={journalRows.length === 0}
+              className="px-4 py-2 min-h-[40px] rounded-xl bg-green-700 text-white text-xs font-black hover:bg-green-800 disabled:opacity-40 inline-flex items-center gap-1.5"
+              data-testid="journal-export"
+            >
+              <Download className="w-3.5 h-3.5" /> Exporter
+            </button>
           </div>
         </div>
-        {today.length === 0 ? (
-          <p className="px-4 pb-4 pt-1 text-sm text-slate-500">Aucun passage aujourd’hui.</p>
+        {journalRows.length === 0 ? (
+          <p className="px-4 pb-4 pt-1 text-sm text-slate-500">
+            Aucun passage sur la période ({journalPeriod === 'day' ? 'aujourd’hui' : journalPeriod === 'week' ? 'semaine en cours' : 'mois en cours'}).
+          </p>
         ) : (
           <div className="max-h-[420px] overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-500 sticky top-0">
-                <tr><th className="text-left p-3">Heure</th><th className="text-left p-3">Élève</th><th className="text-left p-3">Plat servi</th><th className="text-left p-3">Statut</th><th className="text-left p-3">Motif</th></tr>
+                <tr><th className="text-left p-3">Date</th><th className="text-left p-3">Heure</th><th className="text-left p-3">Élève</th><th className="text-left p-3">Formule</th><th className="text-left p-3">Statut</th><th className="text-left p-3">Motif</th></tr>
               </thead>
               <tbody>
-                {today.map((v) => (
-                  <tr key={v.id} className="border-t">
-                    <td className="p-3">{new Date(v.validatedAt).toLocaleTimeString('fr-FR')}</td>
-                    <td className="p-3 font-semibold capitalize">{eleveOfValidation(v)}</td>
-                    <td className="p-3 text-slate-600">{dishOfDate(new Date(v.validatedAt)) ?? '—'}</td>
-                    <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${v.status === 'accepted' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{v.status === 'accepted' ? 'SERVIE' : 'Refusé'}</span></td>
-                    <td className="p-3 text-slate-500">{v.reason ?? '—'}</td>
-                  </tr>
-                ))}
+                {journalRows.map((v) => {
+                  const k = v.childId ? kids.find((c) => c.id === v.childId) : undefined;
+                  const sub = v.childId ? subscriptions.find((s) => s.childId === v.childId && s.status === 'active') : undefined;
+                  const formuleLabel = sub?.formulaId === 'F2'
+                    ? 'Préscolaire & Élémentaire'
+                    : sub?.formulaId === 'F3'
+                      ? 'Collège & Lycée'
+                      : v.clientUsername?.startsWith('TICKET-') ? 'Ticket' : sub?.formulaId ?? '—';
+                  return (
+                    <tr key={v.id} className="border-t">
+                      <td className="p-3 text-slate-500 whitespace-nowrap">{new Date(v.validatedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</td>
+                      <td className="p-3 whitespace-nowrap">{new Date(v.validatedAt).toLocaleTimeString('fr-FR')}</td>
+                      <td className="p-3 font-semibold capitalize">{eleveOfValidation(v)}</td>
+                      <td className="p-3 text-slate-600">{formuleLabel}</td>
+                      <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-bold ${v.status === 'accepted' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{v.status === 'accepted' ? 'SERVIE' : 'Refusé'}</span></td>
+                      <td className="p-3 text-slate-500">{v.reason ?? '—'}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

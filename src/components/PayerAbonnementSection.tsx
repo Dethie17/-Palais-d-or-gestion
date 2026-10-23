@@ -5,19 +5,20 @@ import { isValidSnPhone } from '@/lib/wave';
 import {
   prochainsMois, moisCouverts, labelMois, debutDeMoisIso, selectionConsecutive, type MoisCle,
 } from '@/lib/aboMois';
-import { cycleOfClass, formulaCoversCycle, CYCLE_LABEL } from '@/lib/schoolCycles';
+import { cycleOfClass, CYCLE_LABEL } from '@/lib/schoolCycles';
+import { ABO_OFFICIAL, officialAboForCycle, officialPrice, type AboId } from '@/lib/aboTariffs';
 import { formatCurrency } from '@/lib/utils';
 import { Smartphone, Check, ChevronRight, AlertTriangle } from 'lucide-react';
 
 /**
- * Espace Parent — « Payer l'abonnement ».
- * Le parent choisit l'ENFANT : le montant est déduit de la formule du cycle
- * de sa classe (référentiel schoolCycles), les mois déjà couverts par un
- * abonnement sont verrouillés (« Payé »), et il peut régler plusieurs mois
- * consécutifs en UNE seule opération : un seul abonnement élargi couvert
- * par un seul paiement. Le total est recalculé ici formule × mois ; le
- * paiement part chez SycaPay (Wave ou Max it) qui envoie le client
- * automatiquement dans son application.
+ * Espace Abonné — « Payer l'abonnement ».
+ * Le parent choisit l'ENFANT : la formule est déduite du cycle de sa classe —
+ * F2 (préscolaire/élémentaire, 27 000 FCFA) ou F3 (collège/lycée, 32 000 FCFA)
+ * — les mois déjà couverts par un abonnement sont verrouillés (« Payé »), et
+ * il peut régler plusieurs mois consécutifs en UNE seule opération : un seul
+ * abonnement élargi couvert par un seul paiement. Le total est recalculé ici
+ * au tarif officiel × mois ; le paiement part chez SycaPay (Wave ou Max it)
+ * qui envoie le client automatiquement dans son application.
  */
 const PayerAbonnementSection = ({ kids, start, onError }: {
   kids: Child[];
@@ -42,18 +43,24 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
 
   const child = kids.find((k) => k.id === childId);
 
-  /** Formule abonnement du cycle de la classe de l'enfant. */
-  const formulaByChild = useMemo(() => {
-    const abos = formulas.filter((f) => f.kind === 'subscription' && !f.name.startsWith('[Ancien]'));
-    const map = new Map<string, (typeof formulas)[number]>();
+  /** Formule officielle du cycle de la classe de l'enfant : F2 ou F3, tarif ancré. */
+  const aboOfChild = useMemo(() => {
+    const map = new Map<string, { id: AboId; name: string; price: number; description: string }>();
     kids.forEach((k) => {
-      const c = cycleOfClass(k.className);
-      const f = abos.find((x) => formulaCoversCycle(x.id, c)) ?? abos[0];
-      if (f) map.set(k.id, f);
+      const id = officialAboForCycle(cycleOfClass(k.className));
+      if (!id) return;
+      const stored = formulas.find((f) => f.id === id);
+      const official = ABO_OFFICIAL[id];
+      map.set(k.id, {
+        id,
+        name: official.name,
+        price: official.price,
+        description: stored?.description ?? '1 repas le midi, jours d’école, pendant 30 jours',
+      });
     });
     return map;
   }, [formulas, kids]);
-  const formula = child ? formulaByChild.get(child.id) : undefined;
+  const formula = child ? aboOfChild.get(child.id) : undefined;
 
   /** Mois offerts : les 8 prochains, verrouillés si couverts par un abonnement. */
   const months = useMemo(() => {
@@ -69,7 +76,7 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [childId, months.length, months.map((m) => `${m.cle}:${m.paid}`).join(',')]);
 
-  const total = (formula?.price ?? 0) * selected.length;
+  const total = (formula ? officialPrice(formula.id, formulas) : 0) * selected.length;
   const consecutif = selectionConsecutive(selected);
 
   const toggleMois = (cle: MoisCle) => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor, act, within } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 import { AuthProvider } from '@/context/AuthContext';
 import { RestoProvider, useResto } from '@/context/RestoContext';
 import { ProductProvider } from '@/context/ProductContext';
@@ -78,9 +78,6 @@ function renderPage(children: React.ReactNode) {
 }
 
 /** Formulaire d'inscription du cycle demandé. */
-function cycleForm(cycle: string) {
-  return within(screen.getByTestId(`enroll-cycle-${cycle}`));
-}
 
 /**
  * Attend que la session soit résolue ET la fiche parent chargée.
@@ -93,65 +90,26 @@ async function waitForProfile() {
   );
 }
 
-describe('Espace Abonné — inscription des enfants', () => {
-  it('le cycle Primaire propose les classes du référentiel (CIA → CID)', async () => {
-    seedFamily();
-    renderPage(<EspaceParentPage />);
-    await waitForProfile();
-    const form = cycleForm('primaire');
-    const select = form.getByLabelText('Classe de l’enfant 1');
-    const values = Array.from((select as HTMLSelectElement).options).map((o) => o.value);
-    expect(values).toEqual(expect.arrayContaining(['CIA', 'CIB', 'CIC', 'CID', 'CP', 'CE1', 'CE2', 'CM1', 'CM2']));
-  });
-
-  it('inscrit plusieurs enfants et crée un QR Carte par enfant', async () => {
-    seedFamily();
+describe('Espace Abonné — rendu général', () => {
+  it('affiche le parcours continu : payer, menu, kiosque, annonces, historique', async () => {
+    seedFamily([{ first: 'Moussa', last: 'Diallo', cls: 'CIA', cycle: 'primaire' }]);
     renderPage(<EspaceParentPage />);
     await waitForProfile();
 
-    const form = cycleForm('primaire');
-    // On passe à 2 enfants.
-    fireEvent.click(form.getByLabelText('Un enfant de plus'));
-    fireEvent.change(form.getByLabelText('Nom de l’enfant 1'), { target: { value: 'Diallo' } });
-    fireEvent.change(form.getByLabelText('Prénom de l’enfant 1'), { target: { value: 'Moussa' } });
-    fireEvent.change(form.getByLabelText('Classe de l’enfant 1'), { target: { value: 'CIA' } });
-    fireEvent.change(form.getByLabelText('Nom de l’enfant 2'), { target: { value: 'Diallo' } });
-    fireEvent.change(form.getByLabelText('Prénom de l’enfant 2'), { target: { value: 'Aïcha' } });
-    fireEvent.change(form.getByLabelText('Classe de l’enfant 2'), { target: { value: 'CIB' } });
+    expect(screen.getByTestId('section-payer-abonnement')).toBeTruthy();
+    expect(screen.getByText('Payer l’abonnement')).toBeTruthy();
+    expect(screen.getAllByText(/Menu du jour/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Kiosque indisponible pour le moment/)).toBeTruthy();
+    expect(screen.getByText(/Annonces de la cantine/)).toBeTruthy();
+    expect(screen.getByText(/Historique des dépenses/)).toBeTruthy();
 
-    fireEvent.click(form.getByRole('button', { name: 'Inscrire ces 2 enfants' }));
-
-    await waitFor(() => expect(screen.getAllByText(/Moussa Diallo/).length).toBeGreaterThanOrEqual(1));
-    expect(screen.getAllByText(/Aïcha Diallo/).length).toBeGreaterThanOrEqual(1);
-
-    // Deux QR Carte distincts, un par enfant.
-    // Format actuel : jeton sécurisé de 22 caractères base64url
-    // (l'ancien ORESTO-XXXXXX dérivé du nom est invalidé).
-    const tokens = screen.getAllByText(/^[A-Za-z0-9_-]{22}$/).map((el) => el.textContent);
-    const unique = new Set(tokens);
-    expect(unique.size).toBe(2);
+    // Le formulaire de réclamations est embarqué dans l'espace abonné.
+    expect(screen.getByTestId('section-reclamations')).toBeTruthy();
+    expect(screen.getByTestId('parent-reclamations-form')).toBeTruthy();
+    expect(screen.getAllByText(/Déconnexion/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('refuse un enfant déjà inscrit : pas de doublon, pas de second QR', async () => {
-    seedFamily([{ first: 'Moussa', last: 'Diallo', cls: 'CE2', cycle: 'primaire' }]);
-    renderPage(<EspaceParentPage />);
-    await waitForProfile();
-
-    const form = cycleForm('primaire');
-    fireEvent.change(form.getByLabelText('Nom de l’enfant 1'), { target: { value: 'diallo' } });
-    fireEvent.change(form.getByLabelText('Prénom de l’enfant 1'), { target: { value: 'MOUSSA' } });
-    fireEvent.change(form.getByLabelText('Classe de l’enfant 1'), { target: { value: 'CE2' } });
-    fireEvent.click(form.getByRole('button', { name: 'Inscrire cet enfant' }));
-
-    await waitFor(() =>
-      expect(screen.getByText(/est déjà inscrit/i)).toBeTruthy(),
-    );
-    // Toujours un seul QR pour cet enfant.
-    const tokens = new Set(screen.getAllByText(/^[A-Za-z0-9_-]{22}$/).map((el) => el.textContent));
-    expect(tokens.size).toBe(1);
-  });
-
-  it('le QR Carte de chaque enfant est visible dans l’espace abonné', async () => {
+  it('les enfants inscrits apparaissent avec un QR Carte unique chacun', async () => {
     seedFamily([
       { first: 'Moussa', last: 'Diallo', cls: 'CIA', cycle: 'primaire' },
       { first: 'Aïcha', last: 'Diallo', cls: 'CIB', cycle: 'primaire' },
@@ -159,26 +117,37 @@ describe('Espace Abonné — inscription des enfants', () => {
     renderPage(<EspaceParentPage />);
     await waitForProfile();
 
-    // Le QR de chaque enfant est affiché avec sa carte (le même jeton
-    // apparaît dans la gallerie du haut et dans « Mes cartes » —
-    // l'unicité de l'enfant est ce qui compte).
+    expect(screen.getByTestId('qr-enfants')).toBeTruthy();
+    // Jeton sécurisé : 22 caractères base64url, un par enfant.
     const tokens = screen.getAllByText(/^[A-Za-z0-9_-]{22}$/).map((el) => el.textContent);
     expect(new Set(tokens).size).toBe(2);
-    // La classe de chaque enfant est affichée.
+
+    expect(screen.getAllByText(/Moussa Diallo/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Aïcha Diallo/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/CIA/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/CIB/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('la semaine publiée s’affiche en consultation (pas d’achat en ligne)', async () => {
+    seedPublishedWeek();
+    seedFamily();
+    renderPage(<EspaceParentPage />);
+    await waitForProfile();
+
+    expect((await screen.findAllByText(/Menu du jour/)).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Riz/)).toBeTruthy();
+    expect(screen.getAllByText('MENU DU JOUR').length).toBeGreaterThanOrEqual(1);
   });
 });
 
 describe('Espace Abonné — menus', () => {
-  it('les menus restent visibles avec leurs prix (consultation)', async () => {
+  it('les menus restent visibles avec le badge du jour (consultation seule)', async () => {
     seedPublishedWeek();
     seedFamily();
     renderPage(<EspaceParentPage />);
     await waitForProfile();
     expect((await screen.findAllByText(/Menu du jour/)).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/Riz/)).toBeTruthy();
-    expect(screen.getAllByText(/FCFA/).length).toBeGreaterThanOrEqual(1);
   });
 });
 

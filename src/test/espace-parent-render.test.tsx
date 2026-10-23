@@ -63,7 +63,7 @@ function renderPage() {
 }
 
 describe('EspaceParentPage render (repro crash childId)', () => {
-  it('rend les 5 sections sans planter (semaine publiée)', async () => {
+  it('rend les sections de l’Accès Abonné sans planter (semaine publiée)', async () => {
     seedPublishedWeek();
     seedChild();
     // Le seed enfant réinitialise le provider : republier la semaine après.
@@ -72,10 +72,11 @@ describe('EspaceParentPage render (repro crash childId)', () => {
     // `findBy…` et non `getBy…` : le profil est désormais résolu de façon
     // asynchrone (session serveur → lecture du rôle en base). Au premier
     // rendu, l'écran affiche encore « Chargement… ».
-    await screen.findByText(/Je choisis l’abonnement/);
+    await screen.findByTestId('section-payer-abonnement');
+    expect(screen.getByText('Payer l’abonnement')).toBeTruthy();
     expect(screen.getAllByText(/Menu du jour/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/Kiosque indisponible pour le moment/)).toBeTruthy();
     expect(screen.getByText(/Historique des dépenses/)).toBeTruthy();
-    expect(screen.getByText(/Recharger ma carte/)).toBeTruthy();
   });
 
   it('menu du jour de la semaine de référence affiché par défaut (consultation seule)', async () => {

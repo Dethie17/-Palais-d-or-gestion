@@ -22,10 +22,11 @@ function parentWorkbook(rows: unknown[][]): Promise<File> {
 
 /**
  * Import Parent : la DAF crée les accès parents par numéro de téléphone,
- * sans mot de passe. L'onglet doit rester séparé de l'import élèves.
+ * sans mot de passe. Les élèves ne s'importent plus ici : ils sont créés
+ * automatiquement avec leur parent.
  */
-describe('Import — onglet Import Parent', () => {
-  it('propose les deux onglets et le formulaire sans mot de passe', () => {
+describe('Import Parent', () => {
+  it('affiche directement le formulaire sans mot de passe (plus d’onglet élèves)', () => {
     render(
       <RestoProvider>
         <ImportElevesPage />
@@ -33,7 +34,6 @@ describe('Import — onglet Import Parent', () => {
     );
 
     expect(screen.getByRole('heading', { name: /import/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('import-tab-parents'));
 
     expect(screen.getByTestId('parent-create-form')).toBeInTheDocument();
     expect(screen.getByText(/aucun mot de passe n’est créé/i)).toBeInTheDocument();
@@ -51,7 +51,6 @@ describe('Import — onglet Import Parent', () => {
         <ImportElevesPage />
       </RestoProvider>,
     );
-    fireEvent.click(screen.getByTestId('import-tab-parents'));
 
     const file = await parentWorkbook([
       ['prenom', 'nom', 'telephone'],

@@ -2,18 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import {
-  IMPORT_HEADERS,
   PARENT_IMPORT_HEADERS,
   MAX_FILE_BYTES,
-  analyzeImport,
   analyzeParentImport,
   buildParentTemplateBlob,
-  buildTemplateBlob,
-  duplicateKey,
   normalizePhoneDigits,
-  parseImportFile,
   parseParentImportFile,
-  type ImportRow,
   type ParentImportRow,
   type RowIssue,
 } from '@/lib/excelImport';
@@ -25,19 +19,17 @@ import writeXlsxFile from 'write-excel-file';
 import type { SchoolCycle } from '@/types/menu';
 import {
   Upload, FileSpreadsheet, Download, CheckCircle,
-  XCircle, Loader2, ShieldCheck, Users, UserPlus, SkipForward,
-  UserRound, Phone, Plus, KeyRound, History,
+  XCircle, Loader2, ShieldCheck, UserPlus, SkipForward,
+  Phone, Plus, KeyRound, History,
 } from 'lucide-react';
 
 /**
- * Import d'élèves et de parents depuis Excel — administrateur uniquement.
+ * Import des parents depuis Excel — administrateur uniquement.
  *
- * Onglet « Import Élèves » : drop → aperçu chiffré → confirmation →
- * écriture vérifiée ligne par ligne → rapport final.
- *
- * Onglet « Import Parent » : la DAF enregistre les parents (nom, prénom,
- * téléphone). Le numéro EST l'identifiant de connexion : aucun mot de passe
- * n'est créé, affiché ni communiqué. Saisie manuelle ou fichier Excel.
+ * La DAF enregistre les parents (nom, prénom, téléphone). Le numéro EST
+ * l'identifiant de connexion : aucun mot de passe n'est créé, affiché ni
+ * communiqué. Saisie manuelle ou fichier Excel. Les élèves ne sont PAS
+ * importés ici : ils sont créés automatiquement avec leur parent.
  */
 interface ReportEntry {
   line: number;
@@ -45,8 +37,6 @@ interface ReportEntry {
   status: 'created' | 'duplicate' | 'error';
   detail: string;
 }
-
-type Tab = 'students' | 'parents';
 
 interface ParentResultRow {
   phone: string;
@@ -114,7 +104,6 @@ const ImportElevesPage = () => {
   const {
     parentProfiles, children: allChildren, importStudentRow, refreshRemote,
   } = useResto();
-  const [tab, setTab] = useState<Tab>('students');
   /** Recharge l'historique après chaque import fini. */
   const [historyKey, setHistoryKey] = useState(0);
   const bumpHistory = () => setHistoryKey((k) => k + 1);
@@ -137,63 +126,18 @@ const ImportElevesPage = () => {
         <FileSpreadsheet className="w-7 h-7 text-emerald-700" /> Import
       </h1>
       <p className="text-sm text-slate-500 mt-1">
-        {tab === 'students'
-          ? 'Élèves depuis un fichier Excel : aperçu chiffré avant écriture, doublons ignorés.'
-          : 'Parents : le numéro de téléphone est l’identifiant de connexion — aucun mot de passe.'}
+        Parents : le numéro de téléphone est l’identifiant de connexion — aucun mot de passe.
+        Les élèves sont créés automatiquement avec leur parent.
       </p>
 
-      <div className="mt-4 inline-flex p-1 rounded-2xl bg-slate-100" role="tablist" aria-label="Type d’import">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'students'}
-          data-testid="import-tab-students"
-          onClick={() => setTab('students')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition ${tab === 'students' ? 'bg-white text-slate-900 shadow' : 'text-slate-500 hover:text-slate-700'}`}
-        >
-          <Users className="w-4 h-4" /> Import Élèves
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'parents'}
-          data-testid="import-tab-parents"
-          onClick={() => setTab('parents')}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition ${tab === 'parents' ? 'bg-white text-slate-900 shadow' : 'text-slate-500 hover:text-slate-700'}`}
-        >
-          <UserRound className="w-4 h-4" /> Import Parent
-        </button>
-      </div>
-
-      {tab === 'students'
-        ? (
-          <StudentsImport
-            existingKeys={new Set(
-              allChildren.map((c) =>
-                duplicateKey({
-                  parentUsername: c.parentUsername,
-                  prenom: c.firstName,
-                  nom: c.lastName,
-                  classe: c.className,
-                }),
-              ),
-            )}
-            existingParents={new Set(parentProfiles.map((p) => p.parentUsername))}
-            importStudentRow={importStudentRow}
-            importedBy={user?.username ?? null}
-            onFinished={bumpHistory}
-          />
-        )
-        : (
-          <ParentsImport
-            parentProfiles={parentProfiles}
-            children={allChildren}
-            refreshRemote={refreshRemote}
-            importedBy={user?.username ?? null}
-            onFinished={bumpHistory}
-            importStudentRow={importStudentRow}
-          />
-        )}
+      <ParentsImport
+        parentProfiles={parentProfiles}
+        children={allChildren}
+        refreshRemote={refreshRemote}
+        importedBy={user?.username ?? null}
+        onFinished={bumpHistory}
+        importStudentRow={importStudentRow}
+      />
 
       <ImportHistory refreshKey={historyKey} />
     </div>
@@ -270,342 +214,6 @@ function ImportHistory({ refreshKey }: { refreshKey: number }) {
         </table>
       </div>
     </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Onglet élèves                                                       */
-/* ------------------------------------------------------------------ */
-
-function StudentsImport({
-  existingKeys,
-  existingParents,
-  importStudentRow,
-  importedBy,
-  onFinished,
-}: {
-  existingKeys: Set<string>;
-  existingParents: Set<string>;
-  importStudentRow: (row: {
-    parentUsername: string;
-    parentNom: string;
-    parentPrenom: string;
-    parentTel: string;
-    prenom: string;
-    nom: string;
-    classe: string;
-    cycle: ImportRow['cycle'];
-  }) => Promise<{ childId: string; parentCreated: boolean; duplicate: boolean }>;
-  /** Compte qui fait l'import (traçabilité du journal). */
-  importedBy: string | null;
-  onFinished: () => void;
-}) {
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [rows, setRows] = useState<ImportRow[]>([]);
-  const [parseIssues, setParseIssues] = useState<RowIssue[]>([]);
-  const [parsing, setParsing] = useState(false);
-  const [parseError, setParseError] = useState<string | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [report, setReport] = useState<ReportEntry[] | null>(null);
-
-  const analysis = useMemo(
-    () => (rows.length > 0 ? analyzeImport(rows, existingKeys, existingParents) : null),
-    [rows, existingKeys, existingParents],
-  );
-
-  const downloadTemplate = async () => {
-    const url = URL.createObjectURL(await buildTemplateBlob());
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'modele-import-eleves.xlsx';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  };
-
-  const handleFile = async (file: File) => {
-    setParseError(null);
-    setReport(null);
-    setRows([]);
-    setParseIssues([]);
-    setFileName(file.name);
-    if (file.size > MAX_FILE_BYTES) {
-      setParseError('Fichier trop volumineux (5 Mo maximum).');
-      return;
-    }
-    setParsing(true);
-    try {
-      const parsed = await parseImportFile(file);
-      setRows(parsed.rows);
-      setParseIssues(parsed.issues);
-      if (parsed.rows.length === 0 && parsed.issues.length === 0) {
-        setParseError('Aucune ligne d’élève trouvée dans ce fichier.');
-      }
-    } catch (err) {
-      setParseError(err instanceof Error ? err.message : 'Lecture du fichier impossible.');
-    } finally {
-      setParsing(false);
-    }
-  };
-
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (file) void handleFile(file);
-  };
-
-  const handleConfirm = async () => {
-    if (!analysis || analysis.toCreate.length === 0 || importing) return;
-    setImporting(true);
-    setReport(null);
-    const entries: ReportEntry[] = analysis.duplicates.map((d) => ({
-      line: d.line, label: '', status: 'duplicate' as const, detail: d.reason,
-    }));
-    const list = analysis.toCreate;
-    setProgress({ done: 0, total: list.length });
-    for (let i = 0; i < list.length; i += 1) {
-      const row = list[i];
-      const label = `${row.prenom} ${row.nom} (${row.classe})`;
-      try {
-        const res = await importStudentRow(row);
-        if (res.duplicate) {
-          entries.push({
-            line: row.line, label, status: 'duplicate' as const,
-            detail: 'Déjà inscrit — aucun doublon créé.',
-          });
-        } else {
-          entries.push({
-            line: row.line, label, status: 'created' as const,
-            detail: res.parentCreated
-              ? `Inscrit — parent ${formatPhone(row.parentTel)} créé (identifiant : ${formatPhone(row.parentTel)}).`
-              : `Inscrit — parent ${formatPhone(row.parentTel)}.`,
-          });
-        }
-      } catch (err) {
-        entries.push({
-          line: row.line, label, status: 'error',
-          detail: err instanceof Error ? err.message : 'Écriture impossible.',
-        });
-      }
-      setProgress({ done: i + 1, total: list.length });
-    }
-    entries.sort((a, b) => a.line - b.line);
-    setReport(entries);
-    setImporting(false);
-    // Journal : l'import restera auditable même après fermeture du rapport.
-    void recordImportBatch({
-      kind: 'students',
-      totalRows: analysis.duplicates.length + list.length,
-      createdCount: entries.filter((e) => e.status === 'created').length,
-      duplicateCount: entries.filter((e) => e.status === 'duplicate').length,
-      errorCount: entries.filter((e) => e.status === 'error').length,
-      createdBy: importedBy,
-    });
-    onFinished();
-  };
-
-  /** Rapport final en Excel : élève, statut, motif — prêt à renvoyer à la DAF. */
-  const downloadReport = () =>
-    downloadReportXlsx('rapport-import-eleves.xlsx', report ?? []);
-
-  const created = report?.filter((r) => r.status === 'created') ?? [];
-  const createdParents = new Set(
-    (report ?? [])
-      .filter((r) => r.status === 'created')
-      .map((r) => rows.find((row) => row.line === r.line)?.parentUsername ?? ''),
-  );
-  const parentsCreated = analysis
-    ? analysis.parentsToCreate.filter((p) => createdParents.has(p.username))
-    : [];
-
-  /**
-   * Effectifs par classe : l'admin compare avec la liste de l'école AVANT de
-   * confirmer. Une coquille (« CE2 » au lieu de « CM2 ») se voit ici, pas après.
-   */
-  const perClass = (list: ImportRow[]) => {
-    const map = new Map<string, number>();
-    for (const r of list) map.set(r.classe, (map.get(r.classe) ?? 0) + 1);
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], 'fr'));
-  };
-
-  return (
-    <>
-      <button onClick={downloadTemplate} className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border-2 border-slate-200 text-sm font-bold text-slate-700 hover:border-emerald-500">
-        <Download className="w-4 h-4" /> Télécharger le modèle Excel
-      </button>
-      <p className="mt-2 text-xs text-slate-400">Colonnes : {IMPORT_HEADERS.join(' · ')}</p>
-      <p className="mt-1 text-xs text-slate-400">
-        <span className="font-semibold text-slate-500">parent_tel</span> porte le numéro de téléphone du parent — c’est son identifiant de connexion et la clé de rattachement de ses enfants. Un élève déjà inscrit (même parent, même prénom, nom et classe) n’est pas réinscrit : aucun doublon de QR n’est créé.
-      </p>
-
-      {/* ---------- 1. Dépôt ---------- */}
-      <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={onDrop}
-        onClick={() => fileRef.current?.click()}
-        className="mt-4 rounded-3xl border-2 border-dashed border-slate-300 bg-white p-8 text-center cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/30 transition-all"
-      >
-        <Upload className="w-8 h-8 mx-auto text-slate-400" />
-        <p className="mt-2 font-bold text-slate-700">{fileName ?? 'Déposez le fichier .xlsx ici, ou cliquez pour choisir'}</p>
-        <p className="text-xs text-slate-400 mt-1">Le fichier est lu dans votre navigateur — rien n’est envoyé avant votre confirmation.</p>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".xlsx,.xls"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void handleFile(f);
-            e.target.value = '';
-          }}
-        />
-      </div>
-
-      {parsing && (
-        <p className="mt-4 flex items-center gap-2 text-sm font-bold text-slate-600">
-          <Loader2 className="w-4 h-4 animate-spin" /> Lecture du fichier…
-        </p>
-      )}
-      {parseError && (
-        <p className="mt-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-semibold px-4 py-3 flex gap-2">
-          <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> {parseError}
-        </p>
-      )}
-
-      {/* ---------- 2. Aperçu ---------- */}
-      {analysis && !report && (
-        <div className="mt-4 rounded-3xl bg-white border p-5">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
-            <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-3">
-              <p className="text-2xl font-black text-emerald-700 tabular-nums">{analysis.toCreate.length}</p>
-              <p className="text-[11px] font-bold text-emerald-600">À inscrire</p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 border p-3">
-              <p className="text-2xl font-black text-slate-700 tabular-nums">{analysis.duplicates.length}</p>
-              <p className="text-[11px] font-bold text-slate-500">Doublons ignorés</p>
-            </div>
-            <div className="rounded-2xl bg-blue-50 border border-blue-200 p-3">
-              <p className="text-2xl font-black text-blue-700 tabular-nums">{analysis.parentsToCreate.length}</p>
-              <p className="text-[11px] font-bold text-blue-600">Parents inconnus</p>
-            </div>
-            <div className="rounded-2xl bg-red-50 border border-red-200 p-3">
-              <p className="text-2xl font-black text-red-600 tabular-nums">{parseIssues.length}</p>
-              <p className="text-[11px] font-bold text-red-500">Lignes en erreur</p>
-            </div>
-          </div>
-
-          {analysis.parentsToCreate.length > 0 && (
-            <p className="mt-3 text-xs font-semibold text-blue-800 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 flex gap-2">
-              <UserPlus className="w-4 h-4 flex-shrink-0" />
-              Parents à ouvrir : {analysis.parentsToCreate.map((p) => formatPhone(p.tel)).slice(0, 8).join(', ')}
-              {analysis.parentsToCreate.length > 8 ? ` (+${analysis.parentsToCreate.length - 8})` : ''} — leur fiche est créée à l’import, mais leur accès n’existe qu’après l’onglet Import Parent (identifiant = leur numéro).
-            </p>
-          )}
-          {analysis.duplicates.length > 0 && (
-            <ul className="mt-3 text-xs text-slate-500 space-y-1 max-h-32 overflow-y-auto">
-              {analysis.duplicates.slice(0, 10).map((d, i) => (
-                <li key={i} className="flex gap-1.5"><SkipForward className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" /> Ligne {d.line} : {d.reason}</li>
-              ))}
-              {analysis.duplicates.length > 10 && <li>… et {analysis.duplicates.length - 10} autres.</li>}
-            </ul>
-          )}
-          {parseIssues.length > 0 && (
-            <ul className="mt-3 text-xs text-red-600 space-y-1 max-h-32 overflow-y-auto">
-              {parseIssues.slice(0, 10).map((d, i) => (
-                <li key={i}>Ligne {d.line} : {d.message}</li>
-              ))}
-              {parseIssues.length > 10 && <li>… et {parseIssues.length - 10} autres.</li>}
-            </ul>
-          )}
-
-          {analysis.toCreate.length > 0 && (
-            <div className="mt-3 rounded-2xl border border-slate-200 overflow-hidden">
-              <p className="px-3 py-2 text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-50">
-                Effectifs par classe — comparez avec la liste de l’école avant de confirmer
-              </p>
-              <table className="w-full text-sm">
-                <tbody>
-                  {perClass(analysis.toCreate).map(([classe, n]) => (
-                    <tr key={classe} className="border-t border-slate-100">
-                      <td className="px-3 py-1.5 font-bold text-slate-700">{classe}</td>
-                      <td className="px-3 py-1.5 text-right font-black tabular-nums text-slate-900">{n}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <button
-            onClick={handleConfirm}
-            disabled={importing || analysis.toCreate.length === 0}
-            className="mt-4 w-full py-3.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-2"
-          >
-            {importing
-              ? <><Loader2 className="w-4 h-4 animate-spin" /> Inscription {progress.done}/{progress.total}…</>
-              : <><Users className="w-4 h-4" /> Confirmer : inscrire {analysis.toCreate.length} élève{analysis.toCreate.length > 1 ? 's' : ''}</>}
-          </button>
-        </div>
-      )}
-
-      {/* ---------- 3. Rapport ---------- */}
-      {report && (
-        <div className="mt-4 rounded-3xl bg-white border p-5">
-          <h2 className="font-extrabold text-slate-800 flex items-center gap-2">
-            <CheckCircle className="w-5 h-5 text-emerald-600" /> Import terminé
-          </h2>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
-            <span className="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700">{created.length} inscrits</span>
-            <span className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-600">{report.filter((r) => r.status === 'duplicate').length} doublons</span>
-            <span className="px-3 py-1.5 rounded-full bg-red-100 text-red-600">{report.filter((r) => r.status === 'error').length} erreurs</span>
-            {parentsCreated.length > 0 && (
-              <span className="px-3 py-1.5 rounded-full bg-blue-100 text-blue-700">{parentsCreated.length} parents sans accès (à activer dans Import Parent)</span>
-            )}
-          </div>
-          {report.filter((r) => r.status === 'error').length > 0 && (
-            <ul className="mt-3 text-xs text-red-600 space-y-1 max-h-40 overflow-y-auto">
-              {report.filter((r) => r.status === 'error').map((r, i) => (
-                <li key={i}>Ligne {r.line} ({r.label}) : {r.detail}</li>
-              ))}
-            </ul>
-          )}
-          {report.filter((r) => r.status === 'error').length === 0 && created.length > 0 && (
-            <div className="mt-3 rounded-2xl border border-slate-200 overflow-hidden">
-              <p className="px-3 py-2 text-xs font-black uppercase tracking-widest text-slate-500 bg-slate-50">
-                Inscrits par classe — contrôle final
-              </p>
-              <table className="w-full text-sm">
-                <tbody>
-                  {perClass(
-                    created
-                      .map((c) => rows.find((row) => row.line === c.line))
-                      .filter((r): r is ImportRow => Boolean(r)),
-                  ).map(([classe, n]) => (
-                    <tr key={classe} className="border-t border-slate-100">
-                      <td className="px-3 py-1.5 font-bold text-slate-700">{classe}</td>
-                      <td className="px-3 py-1.5 text-right font-black tabular-nums text-slate-900">{n}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="mt-3 flex gap-2">
-            <button onClick={downloadReport} className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 flex items-center justify-center gap-2">
-              <Download className="w-4 h-4" /> Télécharger le rapport (Excel)
-            </button>
-            <button
-              onClick={() => { setReport(null); setRows([]); setFileName(null); }}
-              className="px-4 py-2.5 rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50"
-            >
-              Nouvel import
-            </button>
-          </div>
-        </div>
-      )}
-    </>
   );
 }
 

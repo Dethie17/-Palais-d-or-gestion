@@ -58,7 +58,7 @@ describe('Poste de service — ValidationPage (espace Personnel)', () => {
     expect(screen.getByText('repas servis')).toBeInTheDocument();
     expect(screen.getByText('file d’attente')).toBeInTheDocument();
     expect(screen.getByLabelText(/saisie manuelle/i)).toBeInTheDocument();
-    expect(screen.getByText(/journal du jour/i)).toBeInTheDocument();
+    expect(screen.getByText(/journal des validations/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /scanner le badge/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /photo du badge/i })).toBeInTheDocument();
   });
@@ -77,7 +77,7 @@ describe('Poste de service — ValidationPage (espace Personnel)', () => {
     expect(latest().validations.filter((v) => v.status === 'accepted')).toHaveLength(0);
 
     // Étape 2 : confirmation → le repas est validé.
-    fireEvent.click(screen.getByRole('button', { name: /^confirmer le repas$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^confirmer le repas servi$/i }));
 
     const banner = screen.getByRole('status');
     expect(banner).toHaveTextContent(/servie/i);

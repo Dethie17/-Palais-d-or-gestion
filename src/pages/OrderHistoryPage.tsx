@@ -1,9 +1,30 @@
 import { useState } from 'react';
 import { formatCurrency } from '@/lib/utils';
-import { Clock, ShoppingBag, Search, XCircle, CheckCircle, Receipt } from 'lucide-react';
+import { Clock, ShoppingBag, Search, XCircle, CheckCircle, Receipt, Download } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Order } from '@/types/menu';
 import ConfirmDialog from '@/components/ConfirmDialog';
+
+type ExportPeriod = 'day' | 'week' | 'month';
+
+const PERIOD_LABEL: Record<ExportPeriod, string> = {
+  day: 'jour',
+  week: 'semaine',
+  month: 'mois',
+};
+
+/** Début de la période (heure locale) : aujourd'hui / lundi / 1er du mois. */
+const startOfPeriod = (period: ExportPeriod): number => {
+  const d = new Date();
+  if (period === 'week') {
+    const dow = d.getDay();
+    d.setDate(d.getDate() - ((dow + 6) % 7));
+  } else if (period === 'month') {
+    d.setDate(1);
+  }
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
 
 interface ReceiptModalProps {
   order: Order;
@@ -126,6 +147,36 @@ const OrderHistoryPage = () => {
     order.number.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const statusLabel = (status: string) => getStatusLabel(status);
+
+  /** Export CSV (Excel FR : séparateur `;`, BOM UTF-8) d'une période. */
+  const exportPeriodCsv = (period: ExportPeriod) => {
+    const since = startOfPeriod(period);
+    const rows = orders
+      .filter((o) => new Date(o.createdAt).getTime() >= since)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (rows.length === 0) return;
+    const cell = (v: string) => `"${v.split('"').join('""')}"`;
+    const header = 'Numéro;Date;Heure;Articles;Suppléments;Total FCFA;Statut;Paiement';
+    const lines = rows.map((o) => [
+      o.number,
+      o.createdAt.toLocaleDateString('fr-FR'),
+      o.createdAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      o.items.map((i) => `${i.quantity}× ${i.name}`).join(' | '),
+      (o.extras ?? []).map((x) => `${x.quantity}× ${x.extra.name}`).join(' | '),
+      String(o.total),
+      statusLabel(o.status),
+      o.paymentMethod ?? '',
+    ].map(cell).join(';'));
+    const blob = new Blob(['\ufeff' + header + '\n' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `commandes-${PERIOD_LABEL[period]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleCancelOrder = (orderId: string) => {
     setConfirmDialog({
       isOpen: true,
@@ -186,16 +237,32 @@ const OrderHistoryPage = () => {
           <p className="text-xs sm:text-sm text-slate-600 mt-1">{orders.length} commandes au total</p>
         </div>
 
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Rechercher par numéro de commande..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 sm:py-4 rounded-xl sm:rounded-2xl border-2 border-slate-200 bg-white focus:border-slate-400 focus:ring-4 focus:ring-slate-100 outline-none transition-all text-sm sm:text-base font-medium text-slate-800 placeholder:text-slate-400"
-          />
+        {/* Export + recherche */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="bg-white border-2 border-slate-200 rounded-2xl p-2 flex gap-1.5 items-center">
+            <span className="hidden sm:flex items-center gap-1.5 pl-2 pr-1 text-xs font-bold text-slate-500"><Download className="w-4 h-4" /> Export</span>
+            {(['day', 'week', 'month'] as ExportPeriod[]).map((p) => (
+              <button
+                key={p}
+                data-testid={`commandes-export-${p}`}
+                disabled={orders.length === 0}
+                onClick={() => exportPeriodCsv(p)}
+                className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-800 hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-slate-100 disabled:hover:text-slate-700"
+              >
+                {p === 'day' ? 'Jour' : p === 'week' ? 'Semaine' : 'Mois'}
+              </button>
+            ))}
+          </div>
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Rechercher par numéro de commande..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 sm:py-4 rounded-xl sm:rounded-2xl border-2 border-slate-200 bg-white focus:border-slate-400 focus:ring-4 focus:ring-slate-100 outline-none transition-all text-sm sm:text-base font-medium text-slate-800 placeholder:text-slate-400"
+            />
+          </div>
         </div>
       </div>
 
@@ -208,12 +275,13 @@ const OrderHistoryPage = () => {
                 <h3 className="font-bold text-slate-800 text-base sm:text-lg">{order.number}</h3>
                 <div className="flex items-center gap-1.5 text-xs sm:text-sm text-slate-600 bg-slate-100 px-2.5 sm:px-3 py-1.5 rounded-lg">
                   <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  {order.createdAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  {order.createdAt.toLocaleDateString('fr-FR')} à {order.createdAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
               
               <div className="text-xs sm:text-sm text-slate-500">
                 {order.createdAt.toLocaleDateString('fr-FR', { 
+                  weekday: 'long',
                   day: 'numeric', 
                   month: 'long', 
                   year: 'numeric' 

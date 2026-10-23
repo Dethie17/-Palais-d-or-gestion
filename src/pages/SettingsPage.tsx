@@ -24,7 +24,9 @@ interface DbUser {
   created_at?: string;
 }
 
-const CREATABLE_ROLES: UserRole[] = ['client', 'personnel', 'gestionnaire', 'admin'];
+// Comptes créables : la Direction bénéficie d'un seul rôle — le Caissier.
+// (Réservé à la DAF côté serveur ; rôles supérieurs ne se créent pas ici.)
+const CREATABLE_ROLES: UserRole[] = ['gestionnaire'];
 
 /**
  * Paramètres — Personnel de service (comptes du site) + Directeur Général
@@ -35,7 +37,8 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
   const { user } = useAuth();
   const { subscriptions, validations, payments } = useResto();
   const isStaff = user?.role === 'personnel';
-  // Le personnel ne crée jamais de comptes Direction / Caissier.
+  // Le personnel ne crée jamais de comptes caissier (rôle Direction) :
+  // il se limite aux comptes client et personnel.
   const allowedRoles: UserRole[] = isStaff ? ['client', 'personnel'] : CREATABLE_ROLES;
 
   const [dbUsers, setDbUsers] = useState<DbUser[]>([]);
@@ -231,7 +234,7 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
         <>
           {/* Ajouter un compte */}
           <form onSubmit={handleAdd} className="bg-white rounded-2xl border p-5">
-            <p className="font-bold text-slate-800 flex items-center gap-2"><Plus className="w-5 h-5 text-green-700" /> Ajouter un compte{isStaff ? ' (client, personnel)' : ' (caissier, personnel, client…)'}</p>
+            <p className="font-bold text-slate-800 flex items-center gap-2"><Plus className="w-5 h-5 text-green-700" /> Ajouter un compte{isStaff ? ' (client, personnel)' : ' (caissier)'}</p>
             <div className="mt-3 grid sm:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">Nom d’utilisateur</label>

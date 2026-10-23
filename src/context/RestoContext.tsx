@@ -24,6 +24,7 @@ import {
   ComplaintCategory,
   ComplaintStatus,
 } from '@/types/menu';
+import { isDemoAccount } from '@/context/AuthContext';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
   checkWaveCode,
@@ -630,26 +631,39 @@ function cleanupLegacyFormulas() {
   } catch { /* stockage indisponible */ }
 }
 
+const DEMO_SUBS_PURGE_FLAG = 'o-resto-purge-demo-subscriptions-applied';
+
+/**
+ * Purge unique des faux abonnements de démonstration (ex. S-DEMO-CLIENT) :
+ * plus aucun abonnement fictif ne doit polluer la comptabilité — Finance
+ * ne comptabilise que ce qui a été réellement réglé.
+ */
+function purgeDemoSubscriptions() {
+  try {
+    if (localStorage.getItem(DEMO_SUBS_PURGE_FLAG)) return;
+    const raw = localStorage.getItem(LS_KEYS.subscriptions);
+    if (raw) {
+      const subs = JSON.parse(raw) as Subscription[];
+      const filtered = subs.filter((s) => !(s.clientUsername && isDemoAccount(s.clientUsername)));
+      try { localStorage.setItem(LS_KEYS.subscriptions, JSON.stringify(filtered)); } catch { /* ignore */ }
+    }
+    try { localStorage.setItem(DEMO_SUBS_PURGE_FLAG, '1'); } catch { /* ignore */ }
+  } catch { /* stockage indisponible */ }
+}
+
 export function RestoProvider({ children }: { children: ReactNode }) {
   // Converge le site unique + purge l'ancienne formule avant tout chargement d'état
   cleanupSingleSite();
   cleanupLegacyFormulas();
+  purgeDemoSubscriptions();
   const [establishments, setEstablishments] = useState<Establishment[]>(() =>
     load(LS_KEYS.establishments, DEFAULT_ESTABLISHMENTS),
   );
+  // Catalogue d'abonnements : uniquement des données réelles —
+  // pas de souscription de démonstration qui polluerait la
+  // comptabilité (Finance comptabilise ce qui a été réellement payé).
   const [subscriptions, setSubscriptions] = useState<Subscription[]>(() =>
-    load<Subscription[]>(LS_KEYS.subscriptions, [
-      {
-        id: 'S-DEMO-CLIENT',
-        clientUsername: 'client',
-        formulaId: 'F1',
-        startDate: new Date().toISOString(),
-        endDate: new Date(Date.now() + 7 * 86400000).toISOString(),
-        status: 'active',
-        mealsRemaining: 4,
-        qrToken: getClientQrToken('client'),
-      },
-    ]),
+    load<Subscription[]>(LS_KEYS.subscriptions, []),
   );
   const [formulas, setFormulas] = useState<Formula[]>(() => {
     const stored = load(LS_KEYS.formulas, DEFAULT_FORMULAS);
@@ -2442,36 +2456,14 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           }));
           return { ok: true, message: `Repas validé pour ${childName} (${child.className}). Repas restants : ${liveChildSub.mealsRemaining - 1}.`, validation };
         }
-        // Sans abonnement : débit du prix du repas sur la carte
-        const ticketPrices = formulas.filter((f) => f.kind === 'ticket').map((f) => f.price);
-        const mealPrice = ticketPrices.length > 0 ? Math.min(...ticketPrices) : 500;
-        const balance = wallets.find((w) => w.childId === child.id)?.balance ?? 0;
-        if (balance < mealPrice) {
-          return fail(`Solde insuffisant sur la carte de ${childName} (${balance} FCFA, repas ${mealPrice} FCFA). Rechargez le QR.`, child.parentUsername, child.id);
-        }
-        const txId = uid('W');
-        const reference = `DEB-${Date.now().toString(36).toUpperCase()}`;
-        const label = `Repas ${childName} (${child.className})`;
-        setWalletTxs((prev) => [...prev, {
-          id: txId, childId: child.id, kind: 'debit', amount: mealPrice, method: 'card',
-          status: 'paid', reference, label, createdAt: now.toISOString(),
-        }]);
-        setWallets((prev) => prev.map((w) => (w.childId === child.id ? { ...w, balance: w.balance - mealPrice } : w)));
-        persist('wallet_transactions', supabase.from('wallet_transactions').insert({
-          id: txId, child_id: child.id, kind: 'debit', amount: mealPrice,
-          method: 'card', status: 'paid', reference, label,
-        }));
-        persist('wallets', supabase.from('wallets').upsert({ child_id: child.id, balance: balance - mealPrice }));
-        const validation: MealValidation = {
-          id: uid('V'), qrToken: token, clientUsername: child.parentUsername,
-          establishmentId, validatedAt: now.toISOString(), status: 'accepted', childId: child.id,
-        };
-        setValidations((prev) => [...prev, validation]);
-        persist('validations', supabase.from('validations').insert({
-          id: validation.id, qr_token: token, client_username: validation.clientUsername,
-          establishment_id: establishmentId, status: 'accepted', reason: null, child_id: child.id,
-        }));
-        return { ok: true, message: `Repas validé pour ${childName}. Débité ${mealPrice} FCFA. Solde : ${balance - mealPrice} FCFA.`, validation };
+        // Carte prépayée : elle ne débite PLUS le repas. Sans abonnement
+        // de repas actif, le service refuse — le parent règle son abonnement
+        // depuis l'Accès Abonné (F2 27 000 / F3 32 000) via Wave ou Max it.
+        return fail(
+          `Aucun abonnement de repas actif pour ${childName} (${child.className}) — l'abonnement mensuel est à régler côté parent.`,
+          child.parentUsername,
+          child.id,
+        );
       }
 
       // QR acceptés : on privilégie toujours un abonnement ACTIF et non expiré.
@@ -2528,7 +2520,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       }));
       return { ok: true, message: `Repas validé pour ${sub.clientUsername}. Repas restants : ${sub.mealsRemaining - 1}.`, validation };
     },
-    [subscriptions, validations, formulas, childrenList, wallets],
+    [subscriptions, validations, formulas, childrenList],
   );
 
   // Expiration automatique des abonnements dépassés (toutes les 60s + au chargement)
