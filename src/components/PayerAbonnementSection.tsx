@@ -3,22 +3,30 @@ import { useResto } from '@/context/RestoContext';
 import type { Child } from '@/types/menu';
 import { isValidSnPhone } from '@/lib/wave';
 import {
-  prochainsMois, moisCouverts, labelMois, debutDeMoisIso, selectionConsecutive, type MoisCle,
+  prochainsMois, labelMois, debutDeMoisIso, selectionConsecutive, etatMoisPourAbonnements,
+  type MoisAvecEtat, type MoisCle,
 } from '@/lib/aboMois';
 import { cycleOfClass, CYCLE_LABEL } from '@/lib/schoolCycles';
 import { ABO_OFFICIAL, officialAboForCycle, officialPrice, type AboId } from '@/lib/aboTariffs';
 import { formatCurrency } from '@/lib/utils';
-import { Smartphone, Check, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Smartphone, Check, ChevronRight, AlertTriangle, X } from 'lucide-react';
 
 /**
  * Espace Abonné — « Payer l'abonnement ».
  * Le parent choisit l'ENFANT : la formule est déduite du cycle de sa classe —
  * F2 (préscolaire/élémentaire, 27 000 FCFA) ou F3 (collège/lycée, 32 000 FCFA)
- * — les mois déjà couverts par un abonnement sont verrouillés (« Payé »), et
- * il peut régler plusieurs mois consécutifs en UNE seule opération : un seul
- * abonnement élargi couvert par un seul paiement. Le total est recalculé ici
- * au tarif officiel × mois ; le paiement part chez SycaPay (Wave ou Max it)
- * qui envoie le client automatiquement dans son application.
+ * — et il peut régler plusieurs mois consécutifs en UNE seule opération, puis
+ * revenir payer d'autres mois plus tard (paiements multiples).
+ *
+ * État de chaque mois :
+ * - « Payé » (verrouillé) : couvert par un abonnement dont au moins un paiement
+ *   est PAYÉ en base — pas un simple statut de réservation ;
+ * - « En attente » (verrouillé, libérable) : une tentative non aboutie bloque
+ *   le mois ; un clic l'annule et libère le mois ;
+ * - libre : sélectionnable.
+ * Le total est recalculé ici au tarif officiel × mois ; le paiement part chez
+ * SycaPay (Wave ou Max it) qui envoie le client automatiquement dans son
+ * application.
  */
 const PayerAbonnementSection = ({ kids, start, onError }: {
   kids: Child[];
@@ -33,12 +41,13 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
   ) => Promise<void>;
   onError: (text: string) => void;
 }) => {
-  const { formulas, subscriptions } = useResto();
+  const { formulas, subscriptions, payments, cancelSubscription } = useResto();
   const [childId, setChildId] = useState(kids[0]?.id ?? '');
   const [selected, setSelected] = useState<MoisCle[]>([]);
   const [phone, setPhone] = useState('');
   const [method, setMethod] = useState<'wave' | 'mobile_money'>('wave');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
 
   const child = kids.find((k) => k.id === childId);
@@ -62,25 +71,52 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
   }, [formulas, kids]);
   const formula = child ? aboOfChild.get(child.id) : undefined;
 
-  /** Mois offerts : les 8 prochains, verrouillés si couverts par un abonnement. */
-  const months = useMemo(() => {
-    if (!child) return [];
-    const subs = subscriptions.filter((s) => s.childId === child.id);
-    const couverts = moisCouverts(subs);
-    return prochainsMois(8).map((m) => ({ ...m, paid: couverts.has(m.cle) }));
-  }, [child, subscriptions]);
+  /** Abonnements de l'enfant qui portent un paiement réglé : seuls ces mois-là sont « Payé ». */
+  const paidSubIds = useMemo(
+    () => new Set(
+      payments
+        .filter((p) => p.status === 'paid' && p.subscriptionId)
+        .map((p) => p.subscriptionId as string),
+    ),
+    [payments],
+  );
+  const subsOfChild = useMemo(
+    () => (child ? subscriptions.filter((s) => s.childId === child.id) : []),
+    [child, subscriptions],
+  );
 
-  // Changement d'enfant / nouvel abonnement payé : on retire les mois couverts.
+  /** Mois offerts : les 8 prochains, avec leur état (payé / en attente / libre). */
+  const months = useMemo(
+    () => etatMoisPourAbonnements(subsOfChild, paidSubIds, prochainsMois(8)),
+    [subsOfChild, paidSubIds],
+  );
+
+  // Changement d'enfant / changement d'état d'un mois : on retire de la
+  // sélection les mois qui ne sont plus libres.
   useEffect(() => {
-    setSelected((prev) => prev.filter((k) => months.some((m) => m.cle === k && !m.paid)));
+    setSelected((prev) => prev.filter((k) => months.some((m) => m.cle === k && m.etat === 'libre')));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [childId, months.length, months.map((m) => `${m.cle}:${m.paid}`).join(',')]);
+  }, [childId, months.map((m) => `${m.cle}:${m.etat}`).join(',')]);
 
   const total = (formula ? officialPrice(formula.id, formulas) : 0) * selected.length;
   const consecutif = selectionConsecutive(selected);
 
   const toggleMois = (cle: MoisCle) => {
     setSelected((prev) => (prev.includes(cle) ? prev.filter((k) => k !== cle) : [...prev, cle]));
+  };
+
+  /** Libère un mois verrouillé par une réservation jamais soldée. */
+  const liberer = (m: MoisAvecEtat) => {
+    setNotice('');
+    setError('');
+    if (!m.attenteSubId) return;
+    try {
+      cancelSubscription(m.attenteSubId);
+      setNotice('Réservation en attente annulée — le mois est de nouveau disponible.');
+    } catch (e) {
+      const t = e instanceof Error ? e.message : 'Annulation impossible.';
+      onError(t);
+    }
   };
 
   const lancerPaiement = async () => {
@@ -158,30 +194,52 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
           <p className="text-xs font-bold text-slate-600">Mois à payer <span className="text-slate-400 font-normal">(un mois ne se paie qu’une fois)</span></p>
           <div className="mt-2 grid grid-cols-2 gap-2" data-testid="abo-mois-liste">
             {months.map((m) => {
-              const checked = selected.includes(m.cle);
+              const libre = m.etat === 'libre';
+              const checked = libre && selected.includes(m.cle);
               return (
-                <button
+                <div
                   key={m.cle}
-                  type="button"
-                  onClick={() => { if (!m.paid) toggleMois(m.cle); }}
-                  disabled={m.paid}
-                  aria-pressed={checked}
                   data-testid={`abo-mois-${m.cle}`}
-                  className={`flex items-center justify-between px-3 py-2 min-h-[44px] rounded-xl border-2 text-sm transition ${m.paid
+                  aria-disabled={!libre}
+                  className={`flex items-center justify-between gap-2 px-3 py-2 min-h-[44px] rounded-xl border-2 text-sm transition ${m.etat === 'paye'
                     ? 'border-slate-100 bg-slate-50 text-slate-400'
-                    : checked ? 'border-emerald-600 bg-emerald-50 text-emerald-900' : 'border-slate-200 bg-white hover:border-emerald-400 text-slate-700'}`}
+                    : m.etat === 'attente'
+                      ? 'border-amber-200 bg-amber-50 text-amber-700'
+                      : checked ? 'border-emerald-600 bg-emerald-50 text-emerald-900' : 'border-slate-200 bg-white text-slate-700'}`}
                 >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${m.paid ? 'border-slate-200' : checked ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'}`}>
+                  <button
+                    type="button"
+                    onClick={() => { if (libre) toggleMois(m.cle); }}
+                    disabled={!libre}
+                    aria-pressed={checked}
+                    aria-label={m.etat === 'paye' ? `${m.label} déjà payé` : m.etat === 'attente' ? `${m.label} en attente` : `Choisir ${m.label}`}
+                    className="flex items-center gap-2 min-w-0 flex-1 text-left disabled:cursor-not-allowed"
+                  >
+                    <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${!libre ? 'border-slate-200' : checked ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'}`}>
                       {checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
                     </span>
                     <span className="truncate">{m.label}</span>
-                  </span>
-                  {m.paid ? <span className="text-[10px] font-black text-emerald-700 whitespace-nowrap">Payé</span> : <ChevronRight className="w-4 h-4 text-slate-300" />}
-                </button>
+                  </button>
+                  {m.etat === 'paye' && (
+                    <span className="text-[10px] font-black text-emerald-700 whitespace-nowrap">Payé</span>
+                  )}
+                  {m.etat === 'attente' && (
+                    <button
+                      type="button"
+                      onClick={() => liberer(m)}
+                      title="Annuler la réservation jamais soldée qui bloque ce mois"
+                      data-testid={`abo-liberer-${m.cle}`}
+                      className="flex items-center gap-0.5 text-[9px] font-black text-amber-800 whitespace-nowrap hover:text-amber-950"
+                    >
+                      <X className="w-3 h-3" /> En attente
+                    </button>
+                  )}
+                  {libre && <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />}
+                </div>
               );
             })}
           </div>
+          {notice && <p className="text-xs font-bold text-emerald-700 mt-1">{notice}</p>}
           {!consecutif && (
             <p className="text-xs font-bold text-amber-700 mt-1 flex items-center gap-1">
               <AlertTriangle className="w-3.5 h-3.5" /> Les mois sélectionnés doivent être consécutifs.
@@ -260,7 +318,7 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
           </div>
         )}
         <p className="text-[11px] text-slate-400">
-          Règles : montant recalculé depuis la formule de la classe de l’enfant · un seul paiement pour tous les mois choisis · un mois déjà payé est verrouillé.
+          Règles : montant recalculé depuis la formule de la classe de l’enfant · paiement en une opération possible sur plusieurs mois consécutifs, puis de nouveaux paiements plus tard · « Payé » = mois réglé · « En attente » = demande jamais soldée, libérable d’un clic.
         </p>
       </div>
     </div>

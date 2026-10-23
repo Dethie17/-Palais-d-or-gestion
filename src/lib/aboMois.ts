@@ -108,3 +108,39 @@ export function selectionConsecutive(mois: MoisCle[]): boolean {
   }
   return true;
 }
+
+export type EtatMois = 'paye' | 'attente' | 'libre';
+
+export interface MoisAvecEtat {
+  cle: MoisCle;
+  label: string;
+  etat: EtatMois;
+  /** Abonnement « en attente » qui verrouille le mois (annulable par le parent). */
+  attenteSubId: string | null;
+}
+
+/**
+ * État de chaque mois proposé au paiement :
+ * - « payé »    : couvert par un abonnement réglé (un paiement PAYÉ le lie) ;
+ * - « attente » : couvert par un abonnement en attente (tentative non conclue
+ *   — le mois reste verrouillé, la base refusant le chevauchement, mais le
+ *   parent peut libérer la réservation d'un clic) ;
+ * - « libre »   : disponible pour un nouveau paiement.
+ * Un abonnement réglé couvre TOUS les mois de son intervalle (paiement unique
+ * pour N mois consécutifs) : ces mois sont tous « payé ».
+ */
+export function etatMoisPourAbonnements(
+  subs: (Pick<Subscription, 'id' | 'startDate' | 'endDate' | 'status'>)[],
+  paidSubIds: ReadonlySet<string>,
+  offered: { cle: MoisCle; label: string }[],
+): MoisAvecEtat[] {
+  return offered.map((m) => {
+    const couvrants = subs.filter((s) => abonnementCouvreMois(s, m.cle));
+    const regle = couvrants.find((s) => paidSubIds.has(s.id));
+    if (regle) return { cle: m.cle, label: m.label, etat: 'paye' as EtatMois, attenteSubId: null };
+    const enAttente = couvrants[0] ?? null;
+    return enAttente
+      ? { cle: m.cle, label: m.label, etat: 'attente' as EtatMois, attenteSubId: enAttente.id }
+      : { cle: m.cle, label: m.label, etat: 'libre' as EtatMois, attenteSubId: null };
+  });
+}
