@@ -2,12 +2,13 @@
  * POST /api/auth/delete-user — suppression DÉFINITIVE d'un compte.
  *
  * Qui peut supprimer quoi :
- *   - `admin` (DAF)          : tout compte SAUF les comptes `admin` (une DAF
- *       se gère dans le panneau Supabase — supprimer son pair en un clic
- *       invite l'erreur) ;
- *   - `personnel` (superviseur cantine) et `gestionnaire` : uniquement les
- *       comptes PARENT (`client`), qui portent les enfants, les cartitudes,
- *       les réclamations et le kiosque.
+ *   - `admin` (DG / Espace ISM) : tout compte SAUF les comptes `admin` (le
+ *       DG ne se gère pas en un clic — cf. panneau Supabase pour les pairs) ;
+ *   - `personnel` (superviseur) : uniquement les comptes PARENT (`client`),
+ *       qui portent les enfants, les cartitudes, les réclamations et le
+ *       kiosque ;
+ *   - `gestionnaire` (caissier) et `client` : la suppression ne leur est
+ *       pas permise.
  *
  * Ce que la suppression retire — dans l'ordre des clés étrangères, pour ne
  * jamais casser une référence :
@@ -31,7 +32,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { adminClient, SupabaseAdminConfigError } from '../_lib/supabaseAdmin.js';
-import { requireRole, STAFF_OR_ADMIN } from '../_lib/session.js';
+import { requireRole, DELETE_USER_ROLES } from '../_lib/session.js';
 import { authEmailForUser, findAuthUserByEmail } from '../_lib/parentAuth.js';
 import {
   handlePreflight,
@@ -84,7 +85,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   if (req.method === 'OPTIONS') return handlePreflight(req, res);
   if (req.method !== 'POST') return methodNotAllowed(req, res, ['POST']);
 
-  const caller = await requireRole(req, res, STAFF_OR_ADMIN);
+  const caller = await requireRole(req, res, DELETE_USER_ROLES);
   if (!caller) return;
 
   let body: DeleteBody;
@@ -153,7 +154,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   if (target.role === 'admin') {
     return sendError(res, 403, 'Un compte DAF se supprime depuis le panneau Supabase.');
   }
-  // Superviseur et caissier suppriment des PARENTS — pas des collègues.
+  // Le superviseur supprime des PARENTS — pas des collègues du staff.
+  // (Le DG, lui, gère aussi les comptes du personnel caissier.)
   if (caller.role !== 'admin' && target.role !== 'client') {
     return sendError(res, 403, 'Seuls les comptes parents peuvent être supprimés ici.');
   }

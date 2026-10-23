@@ -42,7 +42,7 @@ const SERVICE_TASKS: RoleTask[] = [
   { label: 'Créer les tickets repas', page: 'menu', detail: 'Nom, prix, durée, repas — tous les champs' },
   { label: 'Encaisser abonnements & recharges', page: 'subscriptions', detail: 'Espèces au comptoir, confirmations' },
   { label: 'Voir passages du jour', page: 'validation', detail: 'Servis / refusés en temps réel' },
-  { label: 'Gérer les utilisateurs', page: 'users', detail: 'Parents, enfants et comptes du site' },
+  { label: 'Gérer les utilisateurs', page: 'users', detail: 'Parents, enfants et comptes du site — suppression définitive d’un parent' },
   { label: 'Gérer les établissements', page: 'establishments', detail: 'Ajouter ou supprimer un site de service' },
   { label: 'Paramètres du site', page: 'settings', detail: 'Comptes, accès et mots de passe' },
   { label: 'Consulter historique service', page: 'history', detail: 'Tracer ce qui a été servi' },
@@ -52,7 +52,7 @@ const DIRECTION_TASKS: RoleTask[] = [
   { label: 'Tableau de bord + rapports PDF/Excel', page: 'dashboard', detail: 'CA connecté aux transactions, jour/semaine/mois' },
   { label: 'Finance & répartition', page: 'finance', detail: 'CA connecté aux transactions, répartition ISM / SycaPay / MIAMS' },
   { label: 'Abonnés & paiements (lecture)', page: 'subscriptions', detail: 'Abonnés payés, paiements encaissés, export Excel' },
-  { label: 'Utilisateurs & accès', page: 'users', detail: 'Voir parents, enfants et périmètres' },
+  { label: 'Utilisateurs & accès', page: 'users', detail: 'Voir parents, enfants et périmètres — supprimer définitivement un parent' },
   { label: 'Import du fichier élèves', page: 'import-eleves', detail: 'Créer les accès parents par numéro de téléphone' },
   { label: 'Historique des commandes', page: 'history', detail: 'Tout ce qui a été vendu ou servi, par enfant' },
 ];

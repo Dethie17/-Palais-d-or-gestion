@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { getRoleDef } from '@/lib/roleTasks';
+import { peutSupprimerParent } from '@/lib/permissions';
 import {
   ShieldCheck, Baby, Search, Trash2, ShieldAlert,
   AlertTriangle, UserRound,
@@ -26,6 +27,8 @@ const UsersPage = () => {
   const { user } = useAuth();
   const { subscriptions, formulas, validations, myChildren, parentProfiles, deleteParent, inactiveParents, isParentInactive, setParentActive } = useResto();
   const me = getRoleDef(user?.role);
+  /** Suppression définitive d'un parent : Superviseur et DG seulement. */
+  const peutSupprimer = peutSupprimerParent(user?.role);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'none' | 'low'>('all');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -94,7 +97,7 @@ const UsersPage = () => {
           <ShieldCheck className="w-7 h-7 text-green-700" /> Utilisateurs
         </h1>
         <p className="text-slate-500 text-sm mt-1">
-          Connecté en <strong>{me.title}</strong> — suivi des parents, enfants et formules. La suppression d&apos;un parent est définitive et tient compte de la comptabilité.
+          Connecté en <strong>{me.title}</strong> — suivi des parents, enfants et formules. La suppression d&apos;un parent est définitive, réservée au Superviseur et au DG, et tient compte de la comptabilité.
         </p>
       </div>
 
@@ -240,13 +243,17 @@ const UsersPage = () => {
                         </button>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => setConfirmDelete(c)}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
-                          title="Supprimer ce parent"
-                        >
-                          <Trash2 className="w-4 h-4" /> Supprimer
-                        </button>
+                        {peutSupprimer ? (
+                          <button
+                            onClick={() => setConfirmDelete(c)}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+                            title="Supprimer ce parent (Superviseur / DG)"
+                          >
+                            <Trash2 className="w-4 h-4" /> Supprimer
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-300">—</span>
+                        )}
                       </td>
                     </tr>
                   );

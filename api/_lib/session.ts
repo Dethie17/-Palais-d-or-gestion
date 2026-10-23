@@ -35,6 +35,12 @@ export interface Caller {
 export const ADMIN_ONLY: AppRole[] = ['admin'];
 /** Rôles autorisés à valider un paiement ou servir une commande. */
 export const STAFF_OR_ADMIN: AppRole[] = ['admin', 'personnel', 'gestionnaire'];
+/**
+ * Rôles autorisés à supprimer DÉFINITIVEMENT un compte parent :
+ * le Superviseur (cantine) et le DG (Espace ISM). L'appelant non admin ne
+ * peut viser que des comptes PARENT — jamais un collègue du staff.
+ */
+export const DELETE_USER_ROLES: AppRole[] = ['admin', 'personnel'];
 
 export function unauthorized(res: ServerResponse, message = 'Authentification requise.'): void {
   res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8', 'WWW-Authenticate': 'Bearer' });

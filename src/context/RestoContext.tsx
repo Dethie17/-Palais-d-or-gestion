@@ -2902,7 +2902,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * Suppression DÉFINITIVE d'un compte parent, par le superviseur ou la DAF.
+   * Suppression DÉFINITIVE d'un compte parent — permise au Superviseur
+   * et au DG (Espace ISM), vérifiée au serveur.
    *
    * Le travail lourd (compte d'authentification, réclamations, kiosque,
    * portefeuilles, enfants, profil) est fait PAR LE SERVEUR : chaque étape y

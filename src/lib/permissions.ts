@@ -40,6 +40,15 @@ export function canAccess(role: UserRole | undefined, page: PageName): boolean {
   return (ROLE_PAGES[role] ?? []).includes(page);
 }
 
+/**
+ * Suppression définitive d'un parent : permise au Superviseur (cantine)
+ * et au DG (Espace ISM) — la caisse (Caissier) n'efface jamais un compte.
+ * Le serveur `/api/auth/delete-user` applique la même règle.
+ */
+export function peutSupprimerParent(role: UserRole | undefined): boolean {
+  return role === 'personnel' || role === 'admin';
+}
+
 export const ROLE_LABEL: Record<UserRole, string> = {
   client: 'Parent',
   personnel: 'Superviseur',

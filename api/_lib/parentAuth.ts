@@ -51,7 +51,9 @@ export async function findAuthUserByEmail(
   for (let page = 1; page <= 10; page += 1) {
     const { data, error } = await db.auth.admin.listUsers({ page, perPage: 1000 });
     if (error || !data?.users?.length) return null;
-    const found = data.users.find((u) => u.email?.trim().toLowerCase() === wanted);
+    const found = (data.users as Array<{ id: string; email?: string | null }>).find(
+      (u) => u.email?.trim().toLowerCase() === wanted,
+    );
     if (found) return { id: found.id };
     if (data.users.length < 1000) return null;
   }
