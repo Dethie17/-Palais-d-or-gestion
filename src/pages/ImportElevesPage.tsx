@@ -14,7 +14,7 @@ import {
 import { postAdminJson } from '@/lib/adminApi';
 import { recordImportBatch, fetchImportBatches, type ImportBatchRow } from '@/lib/importBatches';
 import { toSheetData } from '@/lib/excelImport';
-import { CYCLES, cycleOfClass, CYCLE_LABEL } from '@/lib/schoolCycles';
+import { CYCLES, cycleOfClass, canonicalClassName, isKnownClass, allClasses, CYCLE_LABEL } from '@/lib/schoolCycles';
 import writeXlsxFile from 'write-excel-file';
 import type { SchoolCycle } from '@/types/menu';
 import {
@@ -29,7 +29,9 @@ import {
  * La DAF enregistre les parents (nom, prénom, téléphone). Le numéro EST
  * l'identifiant de connexion : aucun mot de passe n'est créé, affiché ni
  * communiqué. Saisie manuelle ou fichier Excel. Les élèves ne sont PAS
- * importés ici : ils sont créés automatiquement avec leur parent.
+ * importés ici : dès qu'un parent est créé, une interface d'inscription
+ * s'ouvre automatiquement pour enregistrer ses enfants, un par un, avec un
+ * champ CLASSE libre (hint du référentiel, cycle déduit de la classe).
  */
 interface ReportEntry {
   line: number;
@@ -257,11 +259,15 @@ function ParentsImport({
 
   // « Créer mon enfant » sur une fiche parent (saisie manuelle).
   const [childOf, setChildOf] = useState<string | null>(null);
+  /** Session ouverte automatiquement juste après la création d'un parent. */
+  const [autoEnroll, setAutoEnroll] = useState(false);
   const [childFirst, setChildFirst] = useState('');
   const [childLast, setChildLast] = useState('');
   const [childClass, setChildClass] = useState('');
   const [childSaving, setChildSaving] = useState(false);
   const [childNote, setChildNote] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const childFirstRef = useRef<HTMLInputElement>(null);
 
   // Fichier Excel
   const [fileName, setFileName] = useState<string | null>(null);
@@ -354,6 +360,10 @@ function ParentsImport({
         setFirstName('');
         setLastName('');
         setPhone('');
+        // Parent nouvellement créé : l'interface d'inscription de ses
+        // enfants s'ouvre automatiquement (les fiches ACTIVÉES gardent
+        // leurs enfants déjà rattachés, pas d'interface).
+        if (res.data.created?.[0]) ouvrirEnroll(created.phone, true);
         void refreshRemote();
       } else if (res.data.duplicates?.[0]) {
         setMessage({ kind: 'error', text: 'Ce numéro est déjà enregistré et actif.' });
@@ -459,9 +469,35 @@ function ParentsImport({
   const downloadParentReport = () => downloadReportXlsx('rapport-import-parents.xlsx', report ?? []);
 
   /**
+   * Ouvre l'interface d'inscription des enfants d'un parent.
+   * `nouveau` = ouverture automatique juste après la création du parent :
+   * la session enchaîne les enfants (un par un) jusqu'à « Terminer ».
+   */
+  const ouvrirEnroll = (username: string, nouveau = false) => {
+    setChildOf(username);
+    setAutoEnroll(nouveau);
+    setChildFirst('');
+    setChildLast('');
+    setChildClass('');
+    setChildNote(null);
+  };
+
+  // Quand la session s'ouvre, on amène l'interface à l'écran et on met le
+  // curseur directement dans le premier champ (jsdom : pas de scroll API).
+  useEffect(() => {
+    if (!childOf) return;
+    panelRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    if (autoEnroll) setTimeout(() => childFirstRef.current?.focus(), 350);
+  }, [childOf, autoEnroll]);
+
+  /**
    * « Créer mon enfant » depuis la fiche d'un parent existant : la
    * fonction d'import élèves fait tout (parent déjà présent ici, donc
    * simple enregistrement de l'enfant + génération de sa carte QR).
+   *
+   * La CLASSE est un champ libre : on canonise ce qui est reconnaissable
+   * (« cp » → « CP ») et on déduit le cycle de la classe (repli primaire),
+   * ce qui fixe la formule d'abonnement (F2/F3) et le tarif.
    */
   const handleAddChild = async (username: string) => {
     setMessage(null);
@@ -469,10 +505,11 @@ function ParentsImport({
       setChildNote({ kind: 'error', text: 'Prénom et nom de l’enfant requis.' });
       return;
     }
-    if (!childClass) {
-      setChildNote({ kind: 'error', text: 'Choisissez la classe de l’enfant.' });
+    if (!childClass.trim()) {
+      setChildNote({ kind: 'error', text: 'Indiquez la classe de l’enfant (champ libre).' });
       return;
     }
+    const classe = canonicalClassName(childClass);
     setChildSaving(true);
     setChildNote(null);
     try {
@@ -484,13 +521,13 @@ function ParentsImport({
         parentTel: profile?.phone && /^\d{9}$/.test(profile.phone) ? profile.phone : username,
         prenom: childFirst.trim(),
         nom: childLast.trim(),
-        classe: childClass,
-        cycle: cycleOfClass(childClass),
+        classe,
+        cycle: cycleOfClass(classe),
       });
       if (res.duplicate) {
-        setChildNote({ kind: 'ok', text: 'Cet enfant est déjà inscrit — aucune fiche ajoutée.' });
+        setChildNote({ kind: 'ok', text: 'Cet enfant est déjà inscrit — aucune fiche ajoutée. Vous pouvez ajouter un autre enfant, ou terminer.' });
       } else {
-        setChildNote({ kind: 'ok', text: 'Enfant inscrit : sa carte QR est prête (voir l’onglet Élèves ou la fiche du prochain scan).' });
+        setChildNote({ kind: 'ok', text: 'Enfant inscrit : sa carte QR est prête. Vous pouvez ajouter un autre enfant, ou terminer.' });
         void recordImportBatch({
           kind: 'students',
           totalRows: 1,
@@ -501,11 +538,12 @@ function ParentsImport({
         });
         onFinished();
         void refreshRemote();
-        setChildFirst('');
-        setChildLast('');
-        setChildClass('');
-        setChildOf(null);
       }
+      // La session reste ouverte : on enchainé les enfants, champ suivant prêt.
+      setChildFirst('');
+      setChildLast('');
+      setChildClass('');
+      setTimeout(() => childFirstRef.current?.focus(), 0);
     } catch (err) {
       setChildNote({ kind: 'error', text: err instanceof Error ? err.message : 'Création impossible.' });
     } finally {
@@ -576,6 +614,9 @@ function ParentsImport({
         </h2>
         <p className="text-xs text-slate-500 mt-1">
           Le téléphone est l’identifiant de connexion. Aucun mot de passe n’est créé.
+        </p>
+        <p className="text-xs text-emerald-700 font-bold mt-1">
+          Une fois le parent créé, l’interface d’inscription de ses enfants s’ouvre automatiquement — classe libre.
         </p>
         <div className="mt-3 grid sm:grid-cols-3 gap-2">
           <input
@@ -871,11 +912,8 @@ function ParentsImport({
                         <button
                           type="button"
                           onClick={() => {
-                            setChildOf(childOf === p.parentUsername ? null : p.parentUsername);
-                            setChildFirst('');
-                            setChildLast('');
-                            setChildClass('');
-                            setChildNote(null);
+                            if (childOf === p.parentUsername) setChildOf(null);
+                            else ouvrirEnroll(p.parentUsername);
                           }}
                           data-testid={`parent-add-child-${p.parentUsername}`}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
@@ -892,11 +930,19 @@ function ParentsImport({
         )}
       </div>
 
-      {/* ---------- Créer mon enfant (fiche parent sélectionnée) ---------- */}
+      {/* ---------- Interface d'inscription des enfants ---------- */}
+      {/* Ouverte AUTOMATIQUEMENT après la création d'un parent (session enchaînée),
+          ou via le bouton de sa fiche dans le tableau. La classe est un champ
+          libre : le référentiel sert de suggestions et de reconnaissance. */}
       {childOf && (
-        <div className="mt-4 rounded-3xl bg-white border border-emerald-200 p-5" data-testid="child-create-panel">
+        <div ref={panelRef} className="mt-4 rounded-3xl bg-white border border-emerald-200 p-5" data-testid="child-create-panel">
           <h3 className="font-extrabold text-slate-800 flex items-center gap-2">
-            <UserPlus className="w-4 h-4 text-emerald-600" /> Créer mon enfant
+            <UserPlus className="w-4 h-4 text-emerald-600" /> {autoEnroll ? 'Inscrire ses enfants' : 'Créer mon enfant'}
+            {autoEnroll && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5" data-testid="child-create-nouveau">
+                nouveau parent
+              </span>
+            )}
             <span className="text-xs font-bold text-slate-400">
               — {(() => {
                 const selections = parentProfiles.filter((p) => p.parentUsername === childOf);
@@ -905,11 +951,30 @@ function ParentsImport({
               })()}
             </span>
           </h3>
+          <p className="text-xs text-slate-500 mt-1">
+            {autoEnroll
+              ? 'Ajoutez ses enfants un par un — terminez quand c’est fait.'
+              : 'Un enfant à la fois : classe libre, carte QR générée automatiquement.'}
+          </p>
+
+          {/* Enfants déjà rattachés à ce parent (session en cours). */}
+          {(childrenOf.get(childOf) ?? []).length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5" data-testid="child-create-enfants">
+              <span className="text-[11px] font-bold text-slate-500">déjà rattachés :</span>
+              {(childrenOf.get(childOf) ?? []).map((kid) => (
+                <span key={kid} className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-600">
+                  {kid}
+                </span>
+              ))}
+            </div>
+          )}
+
           <form
             className="mt-3 grid gap-2 sm:grid-cols-3"
             onSubmit={(e) => { e.preventDefault(); void handleAddChild(childOf); }}
           >
             <input
+              ref={childFirstRef}
               value={childFirst}
               onChange={(e) => setChildFirst(e.target.value)}
               placeholder="Prénom de l’enfant"
@@ -923,29 +988,49 @@ function ParentsImport({
               data-testid="child-create-lastname"
               className="px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm focus:border-emerald-500 outline-none"
             />
-            <select
-              value={childClass}
-              onChange={(e) => setChildClass(e.target.value)}
-              data-testid="child-create-classe"
-              className="px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm bg-white focus:border-emerald-500 outline-none"
-            >
-              <option value="">Classe…</option>
-              {CYCLES.map((c) => (
-                <optgroup key={c.id} label={CYCLE_LABEL[c.id]}>
-                  {c.classes.map((cls) => <option key={cls} value={cls}>{cls}</option>)}
-                </optgroup>
-              ))}
-            </select>
-            <button
-              type="submit"
-              disabled={childSaving || !childFirst.trim() || !childLast.trim() || !childClass}
-              data-testid="child-create-save"
-              className="sm:col-span-3 mt-1 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-2"
-            >
-              {childSaving
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> Enregistrement…</>
-                : <><UserPlus className="w-4 h-4" /> Inscrire cet enfant (carte QR automatique)</>}
-            </button>
+            <div>
+              <input
+                list="classes-referentiel"
+                value={childClass}
+                onChange={(e) => setChildClass(e.target.value)}
+                placeholder="Classe (champ libre) — ex : CP, 5ème"
+                data-testid="child-create-classe"
+                className="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm focus:border-emerald-500 outline-none"
+              />
+              <datalist id="classes-referentiel">
+                {allClasses().map((cls) => <option key={cls} value={cls} />)}
+              </datalist>
+              {childClass.trim() && (
+                <p className="mt-1 text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap" data-testid="child-create-apercu">
+                  <span className="font-bold text-slate-700">{canonicalClassName(childClass)}</span>
+                  <span className="text-slate-300">·</span>
+                  cycle {CYCLE_LABEL[cycleOfClass(childClass)]}
+                  {isKnownClass(childClass)
+                    ? <span className="text-[10px] font-bold text-slate-400">(référentiel)</span>
+                    : <span className="text-[10px] font-bold text-slate-400">(hors référentiel — accepté)</span>}
+                </p>
+              )}
+            </div>
+            <div className="sm:col-span-3 mt-1 flex gap-2">
+              <button
+                type="submit"
+                disabled={childSaving || !childFirst.trim() || !childLast.trim() || !childClass.trim()}
+                data-testid="child-create-save"
+                className="flex-1 py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-2"
+              >
+                {childSaving
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Enregistrement…</>
+                  : <><UserPlus className="w-4 h-4" /> Inscrire cet enfant (carte QR automatique)</>}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setChildOf(null); setAutoEnroll(false); }}
+                data-testid="child-create-terminer"
+                className="px-4 py-3 rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-1.5"
+              >
+                <CheckCircle className="w-4 h-4 text-emerald-600" /> Terminer
+              </button>
+            </div>
           </form>
           {childNote && (
             <p className={`mt-3 text-xs font-semibold px-3 py-2 rounded-xl border ${childNote.kind === 'ok' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
@@ -953,7 +1038,7 @@ function ParentsImport({
             </p>
           )}
           <p className="mt-2 text-[11px] text-slate-400">
-            L’enfant hérite du compte du parent : son identifiant reste le numéro du parent, sa carte QR est générée automatiquement.
+            L’enfant hérite du compte du parent : son identifiant reste le numéro du parent, sa carte QR est générée automatiquement. Classe reconnue ou pas : le cycle (et donc la formule d’abonnement) est déduit de la classe saisie.
           </p>
         </div>
       )}
