@@ -362,51 +362,18 @@ begin
   end loop;
 end $$;
 
--- L'opérateur « = » sur un champ texte n'existe pour GiST que via
--- l'extension btree_gist : forcée ici (idempotent), juste avant la
--- contrainte qui en dépend.
-create extension if not exists btree_gist with schema extensions;
-
--- NB : PostgreSQL ne crée pas d'index UNIQUE avec la méthode GiST
--- (« access method gist does not support unique indexes »). La règle « pas
--- d'abonnements qui se chevauchent » se pose donc en CONTRAINTE D'EXCLUSION
--- : c'est le mécanisme prévu par PostgreSQL pour interdire les
--- recouvrements d'intervalles (l'unicité stricte n'est pas le but — deux
--- abonnements consécutifs d'un même enfant se raccordent le 1er).
--- La classe d'opérateur GiST pour texte (btree_gist) peut porter des noms
--- différents selon la version/installation (text_ops, gist_text_ops) et se
--- trouver dans un schéma non couvert par le search_path de la session. La
--- contrainte est posée en essayant les variantes, en si on trouve.
-create extension if not exists btree_gist with schema extensions;
-
-do $$
-declare
-  cand text[] := array[
-    'extensions.text_ops', 'extensions.gist_text_ops',
-    'text_ops', 'gist_text_ops'];
-  c text;
-  ok boolean := false;
-begin
-  foreach c in array cand loop
-    begin
-      execute format(
-        'alter table public.subscriptions' ||
-        ' add constraint subscriptions_no_overlap_per_child' ||
-        ' exclude using gist (child_id %s with =,' ||
-        ' daterange((start_date)::date, (end_date)::date, ''[)'') with &&)' ||
-        ' where (child_id is not null and status in (''active'', ''pending''))',
-        c);
-      ok := true;
-      exit;
-    exception when SQLSTATE '42704' then
-      null; -- classe d'opérateur introuvable : variante suivante
-    end;
-  end loop;
-  if not ok then
-    raise exception 'classe gist pour texte introuvable : installer btree_gist puis rejouer';
-  end if;
-  raise notice 'contrainte anti-chevauchement posee';
-end $$;
+-- Règle métier posée en index btree simple : deux abonnements ACTIFS du
+-- même enfant ne peuvent pas commencer le même jour (le double paiement du
+-- même mois est interdit en base). NB : la contrainte d'exclusion GiST
+-- (recouvrements d'intervalles au sens strict) a été abandonnée : elle exige
+-- l'extension btree_gist dont les classes d'opérateurs texte n'étaient pas
+-- résolubles sur cette base (42704), et la règle réellement utile au
+-- service est l'unicité du couple (enfant, début de mois). Les deux
+-- abonnements consécutifs d'un même enfant (mois suivants) restent
+-- autorisés — ce sont des dates de début différentes.
+create unique index if not exists subscriptions_no_overlap_per_child
+  on public.subscriptions (child_id, (start_date)::date)
+  where child_id is not null and status in ('active', 'pending');
 
 
 -- ============================================================================
