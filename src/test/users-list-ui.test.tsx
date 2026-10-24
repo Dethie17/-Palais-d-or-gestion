@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, within } from '@testing-library/react';
 import { AuthProvider } from '@/context/AuthContext';
 import { RestoProvider, useResto } from '@/context/RestoContext';
 import UsersPage from '@/pages/UsersPage';
@@ -133,5 +133,30 @@ describe('Utilisateurs — liste professionnelle', () => {
     expect(identifiant).toBeInTheDocument();
     const row = screen.getByText('Diallo Awa').closest('tr');
     expect(row?.textContent).toContain('77 123 45 67');
+  });
+
+  it('ouvre la fiche du parent au clic : profil, enfants, QR et abonnements', async () => {
+    const { latest } = mountUsers();
+    await screen.findByRole('heading', { name: /utilisateurs/i });
+
+    act(() => { latest().saveParentProfile('771234567', 'Awa', 'Diallo', '771234567'); });
+    act(() => { latest().addChild('771234567', 'Moussa', 'Diallo', 'CE2', 'primaire'); });
+    await screen.findByTestId('users-table');
+    await screen.findByText('Diallo Awa');
+
+    screen.getAllByRole('button', { name: /fiche/i }).forEach((b) => { act(() => { b.click(); }); });
+    const fiche = await screen.findByTestId('parent-fiche');
+    expect(within(fiche).getByText('Diallo Awa')).toBeInTheDocument();
+    expect(within(fiche).getByText(/Moussa Diallo/)).toBeInTheDocument();
+    // L'enfant est sans abonnement tant qu'il n'y a pas de souscription active
+    expect(within(fiche).getAllByText(/Sans abonnement/i).length).toBeGreaterThan(0);
+    // Les enfants embarquent leur QR de cantine
+    expect(fiche.querySelectorAll('svg').length).toBeGreaterThan(0);
+
+    // Fermeture : la fiche disparaît
+    const closeButtons = within(fiche).getAllByRole('button', { name: /fermer/i });
+    act(() => { closeButtons[0].click(); });
+    await screen.findByTestId('users-table');
+    expect(screen.queryByTestId('parent-fiche')).not.toBeInTheDocument();
   });
 });

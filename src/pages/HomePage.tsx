@@ -349,7 +349,7 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
             <QuickLink title="Tableau de bord" desc="Graphiques, top produits, export PDF" icon={<LayoutDashboard className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('dashboard')} />
             <QuickLink title="Finance" desc="Ventes, abonnements, solde ISM" icon={<Banknote className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('finance')} />
             <QuickLink title="Utilisateurs & accès" desc="Comptes, rôles et périmètres" icon={<Users className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('users')} />
-            <QuickLink title="Abonnés & paiements" desc="Encaissements Wave, espèces" icon={<Users className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('subscriptions')} />
+            <QuickLink title="Abonnés & paiements" desc="Encaissements Wave & Orange Money" icon={<Users className="w-6 h-6 text-white" />} gradient="from-slate-800 to-slate-900" onClick={() => onNavigate('subscriptions')} />
           </div>
         </>
       )}

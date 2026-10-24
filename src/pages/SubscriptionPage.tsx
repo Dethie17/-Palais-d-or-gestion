@@ -4,7 +4,7 @@ import { useResto } from '@/context/RestoContext';
 import { ORestoPayment, ORestoPaymentMethod, ORestoPaymentStatus, PageName, Subscription } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
 import { isMobileMethod, isOnlineMobileMethod, isValidSnPhone, type WavePaymentRequest } from '@/lib/wave';
-import { isOfficialFormula } from '@/lib/formulas';
+import { isOfficialFormula, isHebdoFormula } from '@/lib/formulas';
 import {
   CheckCircle, Smartphone, Ticket, QrCode, Receipt,
   Clock, CalendarDays, UtensilsCrossed, AlertCircle, RefreshCw,
@@ -110,9 +110,9 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
   const profile = parentProfileOf(username);
 
   const ABO_ORDER = ['F2', 'F3'];
-  // Parents : Lycée + Présco-Élém + formules créées (F1 hebdo masquée).
+  // Parents : Lycée + Présco-Élém + formules créées (l'hebdomadaire est retiré).
   const aboFormulas = formulas
-    .filter((f) => f.kind === 'subscription' && !f.name.startsWith('[Ancien]') && (f.id === 'F2' || f.id === 'F3' || !isOfficialFormula(f.id)))
+    .filter((f) => f.kind === 'subscription' && !f.name.startsWith('[Ancien]') && !isHebdoFormula(f) && (f.id === 'F2' || f.id === 'F3' || !isOfficialFormula(f.id)))
     .sort((a, b) => {
       const ia = ABO_ORDER.indexOf(a.id);
       const ib = ABO_ORDER.indexOf(b.id);

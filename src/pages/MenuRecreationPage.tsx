@@ -9,7 +9,7 @@ import { dayPhoto } from '@/data/cantineWeek';
 import { menuTicketTotal } from '@/lib/menus';
 
 import {
-  CalendarDays, Banknote, Smartphone, QrCode, CheckCircle,
+  CalendarDays, Smartphone, QrCode, CheckCircle,
   XCircle, ArrowLeft, CreditCard, Copy, AlertCircle, ExternalLink,
   Loader2, RefreshCw
 } from 'lucide-react';
@@ -26,7 +26,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
   const { weeklyMenus, createWalkInTicket } = useResto();
   const [step, setStep] = useState<POSStep>('select');
   const [selectedMenu, setSelectedMenu] = useState<WeeklyMenu | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'wave'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'wave' | 'mobile_money'>('wave');
   const [ticketToken, setTicketToken] = useState<string | null>(null);
   const [ticketReference, setTicketReference] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +44,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
     setSuccess(null);
   };
 
-  const handlePaymentMethodChange = (method: 'cash' | 'wave') => {
+  const handlePaymentMethodChange = (method: 'wave' | 'mobile_money') => {
     setPaymentMethod(method);
     setError(null);
   };
@@ -54,22 +54,22 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
     setError(null);
     setSuccess(null);
 
-    if (paymentMethod === 'cash') {
-      // Paiement espèces : immédiat
-      const { token, reference } = createWalkInTicket(selectedMenu, 'cash');
+    if (paymentMethod === 'wave') {
+      // Paiement Wave : le caissier confirme que le client a payé
+      const { token, reference } = createWalkInTicket(selectedMenu, 'wave');
       setTicketToken(token);
       setTicketReference(reference);
       setStep('qrcode');
-      setSuccess('Paiement espèces validé ✓');
+      setSuccess('Paiement Wave validé ✓');
       return;
     }
 
-    // Paiement Wave : le caissier confirme que le client a payé
-    const { token, reference } = createWalkInTicket(selectedMenu, 'wave');
+    // Paiement Orange Money : le caissier confirme que le client a payé
+    const { token, reference } = createWalkInTicket(selectedMenu, 'mobile_money');
     setTicketToken(token);
     setTicketReference(reference);
     setStep('qrcode');
-    setSuccess('Paiement Wave validé ✓');
+    setSuccess('Paiement Orange Money validé ✓');
   };
 
   const [linkCopied, setLinkCopied] = useState(false);
@@ -88,7 +88,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
     if (step === 'payment') {
       setStep('select');
       setSelectedMenu(null);
-      setPaymentMethod('cash');
+      setPaymentMethod('wave');
     } else if (step === 'qrcode') {
       setStep('payment');
       setTicketToken(null);
@@ -99,7 +99,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
   const handleNewSale = () => {
     setStep('select');
     setSelectedMenu(null);
-    setPaymentMethod('cash');
+    setPaymentMethod('wave');
     setTicketToken(null);
     setTicketReference(null);
     setError(null);
@@ -232,16 +232,8 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
               </div>
             </div>
 
+            {/* Choix du patron : la caisse n'accepte que Wave et Orange Money. */}
             <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => handlePaymentMethodChange('cash')}
-                className={`py-4 rounded-xl font-bold text-lg transition-all ${paymentMethod === 'cash'
-                  ? 'bg-gradient-to-r from-slate-500 to-red-600 text-white shadow-lg shadow-slate-500/30'
-                  : 'bg-white border-2 border-slate-200 text-slate-700 hover:border-slate-300'
-                }`}
-              >
-                <Banknote className="w-6 h-6 mx-auto mb-1" /> Espèces
-              </button>
               <button
                 onClick={() => handlePaymentMethodChange('wave')}
                 className={`py-4 rounded-xl font-bold text-lg transition-all ${paymentMethod === 'wave'
@@ -250,6 +242,15 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
                 }`}
               >
                 <Smartphone className="w-6 h-6 mx-auto mb-1" /> Wave
+              </button>
+              <button
+                onClick={() => handlePaymentMethodChange('mobile_money')}
+                className={`py-4 rounded-xl font-bold text-lg transition-all ${paymentMethod === 'mobile_money'
+                  ? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-lg shadow-orange-500/30'
+                  : 'bg-white border-2 border-slate-200 text-slate-700 hover:border-orange-300'
+                }`}
+              >
+                <CreditCard className="w-6 h-6 mx-auto mb-1" /> Orange Money
               </button>
             </div>
 
@@ -290,25 +291,30 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
                   onClick={handleConfirmPayment}
                   className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
                 >
-                  <CheckCircle className="w-5 h-5" /> Client a payé — Générer le ticket
+                  <CheckCircle className="w-5 h-5" /> Paiement Wave reçu — Générer le ticket
                 </button>
               </div>
             )}
 
-            <button
-              onClick={paymentMethod === 'cash' ? handleConfirmPayment : () => {}}
-              disabled={paymentMethod === 'wave'}
-              className={`w-full py-4 rounded-xl font-bold text-lg transition-all ${paymentMethod === 'cash'
-                ? 'bg-gradient-to-r from-slate-500 to-red-600 text-white shadow-lg shadow-slate-500/30 hover:shadow-xl'
-                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              }`}
-            >
-              {paymentMethod === 'cash' ? (
-                <span className="flex items-center justify-center gap-2"><Banknote className="w-5 h-5" /> Confirmer le paiement espèces</span>
-              ) : (
-                <span className="flex items-center justify-center gap-2"><Smartphone className="w-5 h-5" /> Valider le paiement Wave ci-dessus</span>
-              )}
-            </button>
+            {paymentMethod === 'mobile_money' && (
+              <div className="space-y-4">
+                <div className="rounded-2xl border-2 border-orange-200 bg-gradient-to-b from-orange-50 to-white p-5 text-center">
+                  <p className="text-xs font-black uppercase tracking-widest text-orange-600 flex items-center justify-center gap-1.5">
+                    <Smartphone className="w-4 h-4" /> Paiement Orange Money
+                  </p>
+                  <p className="text-3xl lg:text-4xl font-black text-slate-900 mt-2">{formatCurrency(selectedMenu.price ?? 0)}</p>
+                  <p className="mt-2 text-xs text-slate-500 bg-white border border-slate-200 rounded-xl px-3 py-2.5">
+                    Le client paie ce montant via Orange Money, puis « Paiement Orange Money validé » pour générer le ticket.
+                  </p>
+                </div>
+                <button
+                  onClick={handleConfirmPayment}
+                  className="w-full py-3 bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  <CheckCircle className="w-5 h-5" /> Paiement Orange Money validé — Générer le ticket
+                </button>
+              </div>
+            )}
           </div>
 
           <button onClick={handleBack} className="w-full py-3 text-slate-600 font-medium hover:text-slate-800 flex items-center justify-center gap-2">

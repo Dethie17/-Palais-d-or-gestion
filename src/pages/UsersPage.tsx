@@ -3,9 +3,12 @@ import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { getRoleDef } from '@/lib/roleTasks';
 import { peutSupprimerParent } from '@/lib/permissions';
+import { isHebdoFormula } from '@/lib/formulas';
+import type { Subscription, SubscriptionStatus } from '@/types/menu';
+import { QRCodeSVG } from 'qrcode.react';
 import {
-  ShieldCheck, Baby, Search, Trash2, ShieldAlert,
-  AlertTriangle, UserRound,
+  ShieldCheck, Baby, Search, Trash2, ShieldAlert, UserRound,
+  Eye, X, QrCode, AlertTriangle,
 } from 'lucide-react';
 
 const LOW_MEALS = 3;
@@ -16,16 +19,27 @@ function formatPhone(value: string): string {
   return d.length === 9 ? `${d.slice(0, 2)} ${d.slice(2, 5)} ${d.slice(5, 7)} ${d.slice(7)}` : value;
 }
 
+const SUB_STATUS_LABEL: Record<SubscriptionStatus, { label: string; cls: string }> = {
+  active: { label: 'Active', cls: 'bg-emerald-100 text-emerald-700' },
+  pending: { label: 'En attente de paiement', cls: 'bg-amber-100 text-amber-700' },
+  expired: { label: 'Expirée', cls: 'bg-slate-100 text-slate-500' },
+  cancelled: { label: 'Annulée', cls: 'bg-red-100 text-red-600' },
+};
+
 /**
  * Liste des parents — registre professionnel, en tableau.
  *
- * La création de compte parent se fait désormais dans Import → Import Parent
- * (numéro de téléphone seul, sans mot de passe). Cette page se concentre sur
- * le suivi : enfants, abonnement, repas restants, dernière validation.
+ * Un clic sur un parent (ou « Fiche ») ouvre sa fiche complète : profil,
+ * enfants avec leurs QR codes et tous ses abonnements avec état + action.
+ * L'abonnement hebdomadaire a été retiré : F1 ne s'affiche plus nulle part.
+ * La création de compte parent se fait dans Import → Import Parent.
  */
 const UsersPage = () => {
   const { user } = useAuth();
-  const { subscriptions, formulas, validations, myChildren, parentProfiles, deleteParent, inactiveParents, isParentInactive, setParentActive } = useResto();
+  const {
+    subscriptions, formulas, validations, myChildren, parentProfiles,
+    deleteParent, inactiveParents, isParentInactive, setParentActive, cancelSubscription,
+  } = useResto();
   const me = getRoleDef(user?.role);
   /** Suppression définitive d'un parent : Superviseur et DG seulement. */
   const peutSupprimer = peutSupprimerParent(user?.role);
@@ -33,6 +47,8 @@ const UsersPage = () => {
   const [filter, setFilter] = useState<'all' | 'active' | 'none' | 'low'>('all');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  /** Fiche détaillée d'un parent : identifiant (username) courant. */
+  const [detailParent, setDetailParent] = useState<string | null>(null);
 
   const clientsSeen = Array.from(new Set(subscriptions.map((s) => s.clientUsername)));
   const parentsSeen = Array.from(new Set([
@@ -40,8 +56,25 @@ const UsersPage = () => {
     ...parentProfiles.map((p) => p.parentUsername),
   ])).sort();
 
+  /** Abonnement hebdomadaire retiré du catalogue (F1 et équivalents courts). */
+  const isHebdoSub = (s: Subscription) => {
+    if (s.formulaId === 'F1') return true;
+    return isHebdoFormula(formulas.find((f) => f.id === s.formulaId));
+  };
+  /** Abonnements visibles de ce parent : hors hebdomadaire, actifs d'abord. */
+  const visiblesOf = (username: string): Subscription[] =>
+    subscriptions
+      .filter((s) => s.clientUsername === username && !isHebdoSub(s))
+      .sort((a, b) => {
+        const rank = (st: SubscriptionStatus) => (st === 'active' ? 0 : st === 'pending' ? 1 : st === 'expired' ? 2 : 3);
+        return new Date(b.startDate).getTime() - new Date(a.startDate).getTime() || rank(a.status) - rank(b.status);
+      });
+
+  const activeSubOf = (username: string) =>
+    visiblesOf(username).find((s) => s.status === 'active');
+
   const mealsOf = (username: string) =>
-    subscriptions.filter((s) => s.clientUsername === username && s.status === 'active')
+    visiblesOf(username).filter((s) => s.status === 'active')
       .reduce((sum, s) => sum + s.mealsRemaining, 0);
 
   const servedOf = (username: string) =>
@@ -56,7 +89,9 @@ const UsersPage = () => {
   }).length;
 
   const totalKids = Array.from(new Set(parentsSeen)).reduce((n, c) => n + myChildren(c).length, 0);
-  const activeSubs = new Set(subscriptions.filter((s) => s.status === 'active').map((s) => s.clientUsername)).size;
+  const activeSubs = new Set(
+    subscriptions.filter((s) => s.status === 'active' && !isHebdoSub(s)).map((s) => s.clientUsername),
+  ).size;
 
   const q = search.trim().toLowerCase();
   const filtered = parentsSeen.filter((c) => {
@@ -66,7 +101,7 @@ const UsersPage = () => {
       const hay = [c, prof ? `${prof.firstName} ${prof.lastName} ${prof.phone}` : '', ...kids.map((k) => `${k.firstName} ${k.lastName} ${k.className}`)].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
-    const active = subscriptions.some((s) => s.clientUsername === c && s.status === 'active');
+    const active = Boolean(activeSubOf(c));
     if (filter === 'active') return active;
     if (filter === 'none') return !active;
     if (filter === 'low') return active && mealsOf(c) <= LOW_MEALS;
@@ -97,7 +132,7 @@ const UsersPage = () => {
           <ShieldCheck className="w-7 h-7 text-green-700" /> Utilisateurs
         </h1>
         <p className="text-slate-500 text-sm mt-1">
-          Connecté en <strong>{me.title}</strong> — suivi des parents, enfants et formules. La suppression d&apos;un parent est définitive, réservée au Superviseur et au DG, et tient compte de la comptabilité.
+          Connecté en <strong>{me.title}</strong> — cliquez sur un parent pour ouvrir sa fiche : profil, enfants et abonnements. La suppression d&apos;un parent est définitive, réservée au Superviseur et au DG, et tient compte de la comptabilité.
         </p>
       </div>
 
@@ -165,14 +200,23 @@ const UsersPage = () => {
                 {filtered.map((c) => {
                   const prof = parentProfiles.find((p) => p.parentUsername === c);
                   const kids = myChildren(c);
-                  const active = subscriptions.find((s) => s.clientUsername === c && s.status === 'active');
+                  const active = activeSubOf(c);
                   const formula = formulas.find((f) => f.id === active?.formulaId);
                   const meals = mealsOf(c);
                   const low = Boolean(active) && meals <= LOW_MEALS;
                   const isInactive = isParentInactive(c);
                   const phoneUsername = /^[67]\d{8}$/.test(c.replace(/\D/g, '')) && c.replace(/\D/g, '').length === 9;
                   return (
-                    <tr key={c} className="border-t border-slate-100 align-top hover:bg-slate-50/60">
+                    <tr
+                      key={c}
+                      data-testid="users-row"
+                      title="Ouvrir la fiche du parent"
+                      onClick={(e) => {
+                        if ((e.target as HTMLElement).closest('button')) return;
+                        setDetailParent(c);
+                      }}
+                      className="border-t border-slate-100 align-top hover:bg-slate-50/60 cursor-pointer"
+                    >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <span className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center text-xs font-black flex-shrink-0">
@@ -243,17 +287,24 @@ const UsersPage = () => {
                         </button>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {peutSupprimer ? (
+                        <div className="inline-flex items-center gap-1">
                           <button
-                            onClick={() => setConfirmDelete(c)}
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
-                            title="Supprimer ce parent (Superviseur / DG)"
+                            onClick={() => setDetailParent(c)}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-green-700 transition-colors px-2 py-1 rounded-lg hover:bg-green-50"
+                            title="Voir la fiche du parent"
                           >
-                            <Trash2 className="w-4 h-4" /> Supprimer
+                            <Eye className="w-4 h-4" /> Fiche
                           </button>
-                        ) : (
-                          <span className="text-[11px] text-slate-300">—</span>
-                        )}
+                          {peutSupprimer && (
+                            <button
+                              onClick={() => setConfirmDelete(c)}
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+                              title="Supprimer ce parent (Superviseur / DG)"
+                            >
+                              <Trash2 className="w-4 h-4" /> Supprimer
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -298,10 +349,182 @@ const UsersPage = () => {
         </div>
       )}
 
+      {detailParent && (
+        <ParentFicheDialog
+          username={detailParent}
+          onClose={() => setDetailParent(null)}
+          isHebdoSub={isHebdoSub}
+        />
+      )}
+
       {isAdminHint(user?.role)}
     </div>
   );
 };
+
+/**
+ * Fiche détaillée d'un parent : profil, état du compte, enfants
+ * avec leurs QR de cantine, abonnements (état + action) — le registre
+ * et les repas servis récapitulent ce que le personnel a encaissé.
+ */
+function ParentFicheDialog({
+  username, onClose, isHebdoSub,
+}: {
+  username: string;
+  onClose: () => void;
+  isHebdoSub: (s: Subscription) => boolean;
+}) {
+  const { parentProfiles, myChildren, subscriptions, formulas, isParentInactive, setParentActive, cancelSubscription } = useResto();
+  const prof = parentProfiles.find((p) => p.parentUsername === username);
+  const kids = myChildren(username);
+  const subs = subscriptions
+    .filter((s) => s.clientUsername === username && !isHebdoSub(s))
+    .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+  const isInactive = isParentInactive(username);
+  const phoneUsername = /^[67]\d{8}$/.test(username.replace(/\D/g, '')) && username.replace(/\D/g, '').length === 9;
+  const abonnesCount = subs.filter((s) => s.status === 'active').length;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" data-testid="parent-fiche">
+      <button aria-label="Fermer" onClick={onClose} className="absolute inset-0 bg-slate-900/60" />
+      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[88vh] overflow-y-auto p-6">
+        {/* En-tête : profil + état du compte */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-base font-black flex-shrink-0">
+              {(prof?.firstName?.charAt(0) ?? username.charAt(0)).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-lg font-black tracking-tight text-slate-900 truncate">
+                {prof ? `${prof.lastName} ${prof.firstName}`.trim() : username}
+              </h2>
+              <p className="text-xs text-slate-500 tabular-nums">
+                Identifiant : {phoneUsername ? formatPhone(username) : username}
+                {prof?.phone && phoneUsername && prof.phone !== username ? ` · fiche : ${formatPhone(prof.phone)}` : ''}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setParentActive(username, !isInactive)}
+              className={`text-xs font-bold px-3 py-1.5 rounded-full ${isInactive ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
+            >
+              {isInactive ? 'Réactiver le compte' : 'Inactiver le compte'}
+            </button>
+            <button
+              onClick={onClose}
+              aria-label="Fermer la fiche"
+              data-testid="parent-fiche-close"
+              className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className={`text-[11px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full ${isInactive ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+            {isInactive ? 'Compte inactif' : 'Compte actif'}
+          </span>
+          <span className="text-[11px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-slate-50 text-slate-600 border border-slate-200">
+            {kids.length} enfant{kids.length > 1 ? 's' : ''}
+          </span>
+          <span className="text-[11px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-slate-50 text-slate-600 border border-slate-200">
+            {abonnesCount} abonnement{abonnesCount > 1 ? 's' : ''} actif{abonnesCount > 1 ? 's' : ''}
+          </span>
+        </div>
+
+        {/* Enfants : identité + QR de cantine */}
+        <section className="mt-6" data-testid="fiche-enfants">
+          <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+            <QrCode className="w-4 h-4" /> Enfants & QR cantine
+          </h3>
+          {kids.length === 0 ? (
+            <p className="text-sm text-slate-400 py-6 text-center border-2 border-dashed border-slate-100 rounded-2xl mt-2">
+              Aucun enfant enregistré pour ce parent.
+            </p>
+          ) : (
+            <div className="grid sm:grid-cols-2 gap-3 mt-2">
+              {kids.map((k) => {
+                const abonne = subscriptions.some(
+                  (s) => s.childId === k.id && s.status === 'active' && !isHebdoSub(s),
+                );
+                return (
+                  <div key={k.id} className="border-2 border-slate-100 rounded-2xl p-3 flex items-center gap-3 bg-slate-50/50">
+                    {k.qrToken ? (
+                      <div className="bg-white rounded-xl border border-slate-200 p-1.5 flex-shrink-0">
+                        <QRCodeSVG value={k.qrToken} size={84} />
+                      </div>
+                    ) : (
+                      <span className="w-[96px] h-[96px] rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 flex-shrink-0">
+                        <Baby className="w-6 h-6" />
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-900 truncate">{k.firstName} {k.lastName}</p>
+                      <p className="text-xs text-slate-500">{k.className}</p>
+                      <p className="mt-1.5 inline-flex text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full">
+                        {abonne ? (
+                          <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Abonné</span>
+                        ) : (
+                          <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full">Sans abonnement</span>
+                        )}
+                      </p>
+                      {k.qrToken && (
+                        <p className="mt-1 text-[10px] font-mono text-slate-400 truncate max-w-[150px]">{k.qrToken}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Abonnements : type, état, action */}
+        <section className="mt-6" data-testid="fiche-abonnements">
+          <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4" /> Abonnements
+          </h3>
+          {subs.length === 0 ? (
+            <p className="text-sm text-slate-400 py-6 text-center border-2 border-dashed border-slate-100 rounded-2xl mt-2">
+              Aucun abonnement (l&apos;hebdomadaire a été retiré du catalogue).
+            </p>
+          ) : (
+            <div className="mt-2 divide-y divide-slate-100 border-2 border-slate-100 rounded-2xl overflow-hidden">
+              {subs.map((s) => {
+                const formula = formulas.find((f) => f.id === s.formulaId);
+                const badge = SUB_STATUS_LABEL[s.status] ?? SUB_STATUS_LABEL.expired;
+                return (
+                  <div key={s.id} className="px-4 py-3 flex items-start justify-between gap-3 bg-white">
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-800 text-sm">{formula?.name ?? 'Formule'}</p>
+                      <p className="text-[11px] text-slate-400 tabular-nums">
+                        {new Date(s.startDate).toLocaleDateString('fr-FR')} → {new Date(s.endDate).toLocaleDateString('fr-FR')}
+                        {s.status === 'active' ? ` · ${s.mealsRemaining} repas restants` : ''}
+                      </p>
+                      <span className={`mt-1 inline-block text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                    </div>
+                    {s.status === 'pending' && (
+                      <button
+                        onClick={() => cancelSubscription(s.id)}
+                        className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 flex-shrink-0"
+                        title="Annuler cette demande de paiement"
+                      >
+                        Annuler la demande
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Petit rappel de l'unique porte de création : la DAF passe par Import Parent.

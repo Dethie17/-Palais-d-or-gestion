@@ -5,6 +5,7 @@ import type { ORestoPaymentMethod, SchoolCycle } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
 import { isMobileMethod, isOnlineMobileMethod, isValidSnPhone, type WavePaymentRequest } from '@/lib/wave';
 import { CYCLES, CYCLE_LABEL, FORMULA_CYCLES, formulaCoversCycle } from '@/lib/schoolCycles';
+import { isHebdoFormula } from '@/lib/formulas';
 import {
   PARENT_PAYMENT_METHODS, PARENT_METHOD_LABEL, PARENT_METHOD_ERROR,
   isParentPaymentMethod,
@@ -252,7 +253,7 @@ const ChildrenPage = () => {
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
   };
 
-  const aboFormulas = formulas.filter((f) => f.kind === 'subscription' && !f.name.startsWith('[Ancien]'));
+  const aboFormulas = formulas.filter((f) => f.kind === 'subscription' && !f.name.startsWith('[Ancien]') && !isHebdoFormula(f));
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">

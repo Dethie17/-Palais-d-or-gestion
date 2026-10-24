@@ -5,17 +5,13 @@ import { WAVE_BUSINESS_URL, WAVE_BUSINESS_NAME } from '@/lib/wave';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   ArrowLeft,
-  Banknote,
   CreditCard,
   Smartphone,
   CheckCircle,
-  Delete,
   Plus,
   Minus,
   ExternalLink,
   Copy,
-  Loader2,
-  RefreshCw
 } from 'lucide-react';
 
 interface PaymentPageProps {
@@ -24,10 +20,10 @@ interface PaymentPageProps {
   onBack: () => void;
 }
 
+// Choix du patron : au comptant, la caisse n'accepte que Wave et Orange Money.
 const paymentMethods = [
   { id: 'wave', label: 'Wave', icon: Smartphone, gradient: 'from-blue-500 to-cyan-600', available: true },
-  { id: 'cash', label: 'Espèces (comptant)', icon: Banknote, gradient: 'from-green-500 to-emerald-600', available: true },
-  { id: 'mobile_money', label: 'Mobile Money', icon: CreditCard, gradient: 'from-amber-500 to-slate-600', available: true },
+  { id: 'mobile_money', label: 'Orange Money', icon: CreditCard, gradient: 'from-orange-500 to-amber-600', available: true },
 ];
 
 const availableExtras: ProductExtra[] = [
@@ -46,7 +42,6 @@ const extraImages: Record<string, string> = {
 
 const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
   const [selectedMethod, setSelectedMethod] = useState('wave');
-  const [amountReceived, setAmountReceived] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [selectedExtras, setSelectedExtras] = useState<{ [key: string]: number }>({});
   const [linkCopied, setLinkCopied] = useState(false);
@@ -57,16 +52,6 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
     return sum + (extra ? extra.price * quantity : 0);
   }, 0);
   const total = subtotal + extrasTotal;
-  const received = parseFloat(amountReceived) || 0;
-  const change = received - total;
-
-  const handleNumpad = (val: string) => {
-    if (val === '←') {
-      setAmountReceived((prev) => prev.slice(0, -1));
-    } else {
-      setAmountReceived((prev) => prev + val);
-    }
-  };
 
   const handleIncreaseExtra = (extraId: string) => {
     setSelectedExtras(prev => ({
@@ -113,14 +98,12 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
       createdAt: new Date(),
       customerName: name || undefined,
       paymentMethod: paymentMethods.find((m) => m.id === selectedMethod)?.label,
-      amountReceived: selectedMethod === 'cash' ? received : undefined,
-      change: selectedMethod === 'cash' && received >= total ? change : undefined,
       qrToken,
     };
     onPaymentComplete(order);
   };
 
-  const canPay = cart.length > 0 && (selectedMethod === 'cash' ? received >= total && total > 0 : total > 0);
+  const canPay = cart.length > 0 && total > 0;
 
   const copyWaveLink = async () => {
     try {
@@ -330,31 +313,15 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
             </div>
           )}
 
-          {selectedMethod === 'cash' && (
-            <div className="space-y-4">
-              <div className="text-center p-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border-2 border-green-200">
-                <p className="text-sm font-medium text-slate-600 mb-2">Montant reçu</p>
-                <p className="text-3xl lg:text-4xl font-bold text-green-700 mb-3">
-                  {formatCurrency(received)}
-                </p>
-                {received >= total && change > 0 && (
-                  <div className="pt-3 border-t-2 border-green-200">
-                    <p className="text-sm font-medium text-slate-600 mb-1">Monnaie à rendre</p>
-                    <p className="text-xl font-bold text-green-600">{formatCurrency(change)}</p>
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-3 gap-2.5">
-                {['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', '←'].map((val) => (
-                  <button
-                    key={val}
-                    onClick={() => handleNumpad(val)}
-                    className="py-4 lg:py-5 rounded-xl bg-white border-2 border-slate-200 text-lg lg:text-xl font-bold text-slate-800 hover:bg-slate-50 hover:border-slate-400 active:scale-95 transition-all shadow-sm"
-                  >
-                    {val === '←' ? <Delete className="w-5 h-5 mx-auto" /> : val}
-                  </button>
-                ))}
-              </div>
+          {selectedMethod === 'mobile_money' && (
+            <div className="rounded-2xl border-2 border-orange-200 bg-gradient-to-b from-orange-50 to-white p-5 text-center">
+              <p className="text-xs font-black uppercase tracking-widest text-orange-600 flex items-center justify-center gap-1.5">
+                <Smartphone className="w-4 h-4" /> Paiement Orange Money
+              </p>
+              <p className="text-3xl lg:text-4xl font-black text-slate-900 mt-2">{formatCurrency(total)}</p>
+              <p className="mt-2 text-xs text-slate-500 bg-white border border-slate-200 rounded-xl px-3 py-2.5">
+                Le client paie ce montant via Orange Money (transfert ou paiement marchand), puis « Paiement Orange Money reçu » pour encaisser.
+              </p>
             </div>
           )}
 
@@ -365,7 +332,9 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
             className="btn-primary w-full py-4 lg:py-5 text-base lg:text-lg shadow-xl"
           >
             <CheckCircle aria-hidden className="w-6 h-6" />
-            {selectedMethod === 'wave' ? 'Paiement Wave reçu — encaisser' : 'Confirmer le paiement'}
+            {selectedMethod === 'wave'
+              ? 'Paiement Wave reçu — encaisser'
+              : 'Paiement Orange Money reçu — encaisser'}
           </button>
         </div>
       </div>

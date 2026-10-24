@@ -15,6 +15,16 @@ export function isOfficialFormula(id: string): boolean {
   return OFFICIAL_FORMULA_IDS.includes(id);
 }
 
+/**
+ * Abonnement hebdomadaire (retiré du catalogue à la demande du patron) :
+ * tout abonnement de 7 jours ou moins. F1 en est l'identifiant officiel.
+ */
+export function isHebdoFormula(
+  f: Pick<Formula, 'kind' | 'durationDays'> | undefined | null,
+): boolean {
+  return Boolean(f && f.kind === 'subscription' && f.durationDays <= 7);
+}
+
 /** Cycles couverts par une formule (vide = transverse / tous cycles). */
 export function cyclesOfFormula(f: Pick<Formula, 'id'>): SchoolCycle[] {
   return FORMULA_CYCLES[f.id] ?? [];

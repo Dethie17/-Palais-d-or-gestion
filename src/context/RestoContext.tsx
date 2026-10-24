@@ -270,7 +270,9 @@ export const ISM_SITE: Establishment = {
 const DEFAULT_ESTABLISHMENTS: Establishment[] = [{ ...ISM_SITE }];
 
 const DEFAULT_FORMULAS: Formula[] = [
-  { id: 'F1', name: 'Abonnement Hebdomadaire — Plat du jour', description: 'Plat du jour, 5 repas du lundi au vendredi', price: 9500, durationDays: 7, mealsIncluded: 5, rules: '1 repas / jour, service du midi uniquement', kind: 'subscription' },
+  // Abonnement Hebdomadaire (F1) retiré du catalogue à la demande du patron :
+  // seuls des abonnements mensuels sont proposés, les héritages F1 sont
+  // décommissionnés par healRemoteCatalog() / supabase-hebdo-retire.sql.
   { id: 'F2', name: 'Abonnement Mensuel — Préscolaire & Élémentaire', description: '1 repas le midi, jours d’école, pendant 30 jours', price: 27000, oldPrice: 30000, durationDays: 30, mealsIncluded: 20, rules: '1 repas / jour, service du midi uniquement', kind: 'subscription' },
   { id: 'F3', name: 'Abonnement Mensuel — Lycée', description: '1 repas le midi, jours d’école, pendant 30 jours', price: 32000, oldPrice: 35000, durationDays: 30, mealsIncluded: 20, rules: '1 repas / jour, service du midi uniquement', kind: 'subscription' },
   // Ticket à l'unité : 1 repas crédité, valable 7 jours
@@ -296,7 +298,7 @@ function applyOfficialTariffs(list: Formula[]): Formula[] {
     else byId.set(id, { ...official });
   }
   // 2. Ordre stable : officielles d'abord, personnalisées ensuite
-  const order = ['F1', 'F2', 'F3', 'T1', 'C10'];
+  const order = ['F2', 'F3', 'T1', 'C10'];
   return [...byId.values()].sort((a, b) => {
     const ia = order.indexOf(a.id);
     const ib = order.indexOf(b.id);
@@ -538,7 +540,7 @@ interface RestoContextType {
   updateWeeklyMenu: (day: WeeklyMenu['day'], name: string, description: string, items?: WeeklyMenuItem[], price?: number) => void;
   // ---- Ticket visiteur (walk-in) ----
   walkInTickets: { token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string }[];
-  createWalkInTicket: (menu: WeeklyMenu, method: 'cash' | 'wave') => { token: string; reference: string; ticket: { token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string } };
+  createWalkInTicket: (menu: WeeklyMenu, method: 'cash' | 'wave' | 'mobile_money') => { token: string; reference: string; ticket: { token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string } };
   // ---- Commandes kiosques (carte élève) : file du service ----
   kioskOrders: KioskOrder[];
   /** Confirme la remise d'une commande au scan de l'élève. */
@@ -603,7 +605,7 @@ function cleanupSingleSite() {
  * Nettoyage direct de l'ancienne formule « Midi Semaine 7 500 » (remplacée
  * par l'Hebdo officiel 9 500 au catalogue) : exécuté une seule fois.
  * - La formule personnalisée est supprimée du catalogue ;
- * - ses abonnements (actifs / en attente) sont rattachés à F1 :
+ * - ses abonnements (actifs / en attente) sont rattachés à F2 (mensuel) :
  *   repas restants, dates et historique conservés.
  */
 const LEGACY_CLEANUP_FLAG = 'o-resto-cleanup-midisemaine-applied';
@@ -621,7 +623,7 @@ function cleanupLegacyFormulas() {
         const rawS = localStorage.getItem(LS_KEYS.subscriptions);
         if (rawS) {
           const subs = JSON.parse(rawS) as Subscription[];
-          const fixed = subs.map((s) => (doomed.includes(s.formulaId) ? { ...s, formulaId: 'F1' } : s));
+          const fixed = subs.map((s) => (doomed.includes(s.formulaId) ? { ...s, formulaId: 'F2' } : s));
           try { localStorage.setItem(LS_KEYS.subscriptions, JSON.stringify(fixed)); } catch { /* ignore */ }
         }
         try { localStorage.setItem(LS_KEYS.formulas, JSON.stringify(list.filter((f) => !doomed.includes(f.id)))); } catch { /* ignore */ }
@@ -805,7 +807,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           );
         }
         // Anciennes formules perso « Midi Semaine » : écartées de l'état local
-        // (rattachées à F1), la base distante est réparée par healRemoteCatalog().
+        // (rattachées à F2), la base distante est réparée par healRemoteCatalog().
         const droppedRemoteIds = (formRes.data ?? [])
           .filter((r) => !OFFICIAL_TARIFFS_2026[r.id] && /midi\s*semaine/i.test(r.name ?? ''))
           .map((r) => r.id as string);
@@ -833,7 +835,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           setSubscriptions(
             subRes.data.map((r) => ({
               id: r.id, clientUsername: r.client_username,
-              formulaId: droppedRemoteIds.includes(r.formula_id) ? 'F1' : r.formula_id,
+              formulaId: droppedRemoteIds.includes(r.formula_id) ? 'F2' : r.formula_id,
               startDate: r.start_date, endDate: r.end_date, status: r.status,
               mealsRemaining: r.meals_remaining, qrToken: r.qr_token,
               childId: r.child_id ?? undefined,
@@ -1021,12 +1023,13 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshRemote]);
 
-  // Répare la base distante : site unique ISM Thiès, tarifs officiels 2026
-  // et suppression de l'ancienne « Midi Semaine ». Best-effort.
+  // Répare la base distante : site unique ISM Thiès, tarifs officiels 2026,
+  // suppression de l'ancienne « Midi Semaine » et retrait du hebdomadaire
+  // (F1) demandé par le patron. Best-effort.
   useEffect(() => {
     (async () => {
       try {
-        if (localStorage.getItem('o-resto-remote-heal-2026d')) return;
+        if (localStorage.getItem('o-resto-remote-heal-2026e')) return;
         const fullRows = Object.values(OFFICIAL_TARIFFS_2026).map((f) => ({
           id: f.id, name: f.name, description: f.description, price: f.price,
           old_price: f.oldPrice ?? null, duration_days: f.durationDays,
@@ -1047,10 +1050,44 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         if (!found.error) {
           const ids = (found.data ?? []).map((r) => r.id as string).filter((id) => !OFFICIAL_TARIFFS_2026[id]);
           if (ids.length > 0) {
-            await supabase.from('subscriptions').update({ formula_id: 'F1' }).in('formula_id', ids);
+            await supabase.from('subscriptions').update({ formula_id: 'F2' }).in('formula_id', ids);
             await supabase.from('formulas').delete().in('id', ids);
           }
         }
+        // Hebdomadaire retiré du catalogue (demande du patron) : les
+        // abonnements F1 encore ouverts sont résiliés, leurs règlements
+        // payés sont remboursés (jamais comptabilisés comme validés), puis
+        // la formule est retirée. Les héritages déjà clôturés restent
+        // dans la comptabilité passée (titres réellement consommés).
+        const hebdoRes = await supabase
+          .from('subscriptions')
+          .select('id')
+          .eq('formula_id', 'F1')
+          .in('status', ['active', 'pending']);
+        const hebdoIds = (hebdoRes.data ?? []).map((r) => r.id as string);
+        if (hebdoIds.length > 0) {
+          await supabase
+            .from('oresto_payments')
+            .update({ status: 'refunded' })
+            .in('subscription_id', hebdoIds)
+            .eq('status', 'paid');
+          await supabase
+            .from('subscriptions')
+            .update({ status: 'cancelled' })
+            .in('id', hebdoIds);
+        }
+        setSubscriptions((prev) =>
+          prev.map((s) => (s.formulaId === 'F1' && s.status !== 'cancelled' ? { ...s, status: 'cancelled' as const } : s)),
+        );
+        setPayments((prev) =>
+          prev.map((p) =>
+            p.status === 'paid' && hebdoIds.includes(p.subscriptionId ?? '')
+              ? { ...p, status: 'refunded' as const }
+              : p,
+          ),
+        );
+        await supabase.from('formulas').delete().eq('id', 'F1');
+        setFormulas((prev) => prev.filter((f) => f.id !== 'F1'));
         // Site unique ISM Thiès : crée le site, rattache les validations, retire E1/E2
         const siteUp = await supabase.from('establishments').upsert({
           id: ISM_SITE.id, name: ISM_SITE.name, address: ISM_SITE.address, manager: ISM_SITE.manager,
@@ -1060,7 +1097,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           await supabase.from('establishments').delete().in('id', ['E1', 'E2']);
           setEstablishments([{ ...ISM_SITE }]);
         }
-        try { localStorage.setItem('o-resto-remote-heal-2026d', '1'); } catch { /* ignore */ }
+        try { localStorage.setItem('o-resto-remote-heal-2026e', '1'); } catch { /* ignore */ }
         // Ré-applique les tarifs officiels sur l'état local (au cas où le
         // chargement distant aurait précédé la réparation).
         setFormulas((prev) => applyOfficialTariffs(prev));
@@ -2271,7 +2308,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
 
   // Créer un ticket visiteur (walk-in) pour le menu du jour — génère un QR TICKET-XXXXXX
   const createWalkInTicket = useCallback(
-    (menu: WeeklyMenu, method: 'cash' | 'wave') => {
+    (menu: WeeklyMenu, method: 'cash' | 'wave' | 'mobile_money') => {
       const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
       const token = `TICKET-${Date.now().toString(36).toUpperCase()}${rand}`;
       const reference = `WLK-${Date.now().toString(36).toUpperCase()}`;

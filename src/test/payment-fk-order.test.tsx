@@ -111,7 +111,7 @@ describe('Ordre des écritures abonnement → paiement', () => {
   it('n’écrit le paiement qu’après l’abonnement (plus de violation 23503)', async () => {
     const api = captureApi();
     await act(async () => {
-      const sub = api.subscribe('client', 'F1');
+      const sub = api.subscribe('client', 'F2');
       api.paySubscription(sub.id, 'wave', sub);
       await Promise.resolve();
     });
@@ -132,7 +132,7 @@ describe('Ordre des écritures abonnement → paiement', () => {
   it('réessaie un refus 23503 le temps que la ligne liée devienne visible', async () => {
     paymentFailuresLeft = 1;
     const api = captureApi();
-    const sub = api.subscribe('client', 'F1');
+    const sub = api.subscribe('client', 'F2');
     await act(async () => {
       api.paySubscription(sub.id, 'wave', sub);
       // Laisse l'écriture de l'abonnement démarrer avant de la libérer.
