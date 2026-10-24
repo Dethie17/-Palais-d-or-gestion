@@ -371,11 +371,17 @@ end $$;
 -- service est l'unicité du couple (enfant, début de mois). Les deux
 -- abonnements consécutifs d'un même enfant (mois suivants) restent
 -- autorisés — ce sont des dates de début différentes.
--- NB : dans la définition d'un index, une expression doit être entourée de
--- parenthèses SUPPLÉMENTAIRES pour contenir un cast : `(col)::date` seul est
--- refusé (« syntax error at or near :: »).
+-- NB : start_date est de type TEXTE dans le schéma réel. Le cast
+-- ((start_date)::date) appelle la conversion text→date que PostgreSQL
+-- marque STABLE (elle dépend de la configuration locale) : interdite dans
+-- l'expression d'un index (42P17 « functions in index expression must be
+-- marked IMMUTABLE »). L'unicité est donc posée sur (child_id, start_date)
+-- TEL QUEL : l'application écrit la date de début en ISO normalisé
+-- (« YYYY-MM-DD ») et le cas visé est le double règlement du même mois —
+-- deux lignes au même couple (enfant, date de début). Les abonnements des
+-- mois suivants (dates différentes) restent possibles pour le même enfant.
 create unique index if not exists subscriptions_no_overlap_per_child
-  on public.subscriptions (child_id, ((start_date)::date))
+  on public.subscriptions (child_id, start_date)
   where child_id is not null and status in ('active', 'pending');
 
 
