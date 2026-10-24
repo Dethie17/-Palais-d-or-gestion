@@ -11,7 +11,7 @@ import {
   Baby, BadgeCheck, Crown, GraduationCap, Sparkles, ShieldCheck,
   Wallet, History, ChevronRight, Info, Star,
 } from 'lucide-react';
-import { CYCLES, FORMULA_CYCLES } from '@/lib/schoolCycles';
+import { CYCLES, FORMULA_CYCLES, allClasses } from '@/lib/schoolCycles';
 import type { SchoolCycle } from '@/types/menu';
 import {
   PARENT_PAYMENT_METHODS, PARENT_METHOD_LABEL, PARENT_METHOD_ERROR,
@@ -663,7 +663,7 @@ function QuickEnrollCycle({ cycleId, username, hasProfile, addChild, kidsCount, 
         }
         try {
           if (rows.some((r) => !r.cls)) {
-            onDone('Choisissez la classe de chaque enfant dans la liste du cycle.');
+            onDone('Indiquez la classe de chaque enfant (champ libre).');
             return;
           }
           const names: string[] = [];
@@ -725,13 +725,23 @@ function QuickEnrollCycle({ cycleId, username, hasProfile, addChild, kidsCount, 
             </div>
             <div>
               <label htmlFor={`enfant-classe-${i}`} className="sr-only">Classe de l’enfant {i + 1}</label>
-              <select id={`enfant-classe-${i}`} value={r.cls} onChange={(e) => setRow(i, { cls: e.target.value })} required className="px-2 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-green-700 bg-white min-w-0 w-full">
-                <option value="">Classe *</option>
-                {cycle.classes.map((cls) => <option key={cls} value={cls}>{cls}</option>)}
-              </select>
+              <input
+                id={`enfant-classe-${i}`}
+                list="abo-classes-referentiel"
+                value={r.cls}
+                onChange={(e) => setRow(i, { cls: e.target.value })}
+                placeholder="Classe (champ libre) *"
+                required
+                maxLength={40}
+                spellCheck={false}
+                className="px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-green-700 min-w-0 w-full"
+              />
             </div>
           </div>
         ))}
+        <datalist id="abo-classes-referentiel">
+          {allClasses().map((cls) => <option key={cls} value={cls} />)}
+        </datalist>
       </div>
       <button type="submit" className="btn-primary mt-3 w-full py-2.5">
         Inscrire {count > 1 ? `ces ${count} enfants` : 'cet enfant'} + QR Carte

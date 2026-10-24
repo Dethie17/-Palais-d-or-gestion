@@ -171,8 +171,9 @@ const ValidationPage = () => {
   );
   const filteredKids = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const cf = classFilter.trim().toLowerCase();
     return kids
-      .filter((k) => (!classFilter || k.className === classFilter))
+      .filter((k) => !cf || (k.className ?? '').toLowerCase().includes(cf))
       .filter((k) => !q || `${k.firstName} ${k.lastName} ${k.className}`.toLowerCase().includes(q) || k.qrToken.toLowerCase().includes(q))
       .sort((a, b) => a.firstName.localeCompare(b.firstName));
   }, [kids, search, classFilter]);
@@ -955,15 +956,19 @@ const ValidationPage = () => {
                 <label htmlFor="search-eleve" className="sr-only">Rechercher un élève</label>
                 <input id="search-eleve" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Nom, classe ou code QR…" className="w-full pl-9 pr-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-green-700" />
               </div>
-              {classes.length > 0 && (
-                <label htmlFor="classe-eleve" className="sr-only">Filtrer par classe</label>
-              )}
-              {classes.length > 0 && (
-                <select id="classe-eleve" value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className="px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-green-600">
-                  <option value="">Toutes classes</option>
-                  {classes.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              )}
+              <label htmlFor="classe-eleve" className="sr-only">Filtrer par classe</label>
+              <input
+                id="classe-eleve"
+                list="classes-eleve-suggestions"
+                value={classFilter}
+                onChange={(e) => setClassFilter(e.target.value)}
+                placeholder="Toutes classes"
+                spellCheck={false}
+                className="px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-green-600"
+              />
+              <datalist id="classes-eleve-suggestions">
+                {classes.map((c) => <option key={c} value={c} />)}
+              </datalist>
             </div>
             {filteredKids.length === 0 ? (
               <p className="p-4 text-sm text-slate-500">Aucun élève{search || classFilter ? ' pour cette recherche' : ' inscrit'}.</p>

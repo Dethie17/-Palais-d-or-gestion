@@ -4,7 +4,7 @@ import { useResto } from '@/context/RestoContext';
 import type { ORestoPaymentMethod, SchoolCycle } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
 import { isMobileMethod, isOnlineMobileMethod, isValidSnPhone, type WavePaymentRequest } from '@/lib/wave';
-import { CYCLES, CYCLE_LABEL, FORMULA_CYCLES, formulaCoversCycle } from '@/lib/schoolCycles';
+import { CYCLES, CYCLE_LABEL, FORMULA_CYCLES, formulaCoversCycle, allClasses, cycleOfClass } from '@/lib/schoolCycles';
 import { isHebdoFormula } from '@/lib/formulas';
 import {
   PARENT_PAYMENT_METHODS, PARENT_METHOD_LABEL, PARENT_METHOD_ERROR,
@@ -330,15 +330,24 @@ const ChildrenPage = () => {
                         <div className="grid grid-cols-2 gap-1.5" onClick={(e) => e.stopPropagation()}>
                           <input value={editForm.lastName} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} placeholder="Nom" maxLength={40} spellCheck={false} className="px-2 py-1.5 rounded-lg text-sm text-slate-900 outline-none" />
                           <input value={editForm.firstName} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} placeholder="Prénom" maxLength={40} spellCheck={false} className="px-2 py-1.5 rounded-lg text-sm text-slate-900 outline-none" />
-                          <select value={editForm.cycle} onChange={(e) => setEditForm({ ...editForm, cycle: e.target.value as SchoolCycle, className: '' })} className="px-2 py-1.5 rounded-lg text-sm text-slate-900 outline-none">
+                          <select value={editForm.cycle} onChange={(e) => setEditForm({ ...editForm, cycle: e.target.value as SchoolCycle })} className="px-2 py-1.5 rounded-lg text-sm text-slate-900 outline-none">
                             {CYCLES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                           </select>
-                          <select value={editForm.className} onChange={(e) => setEditForm({ ...editForm, className: e.target.value })} className="px-2 py-1.5 rounded-lg text-sm text-slate-900 outline-none">
-                            <option value="">Classe…</option>
-                            {CYCLES.find((c) => c.id === editForm.cycle)?.classes.map((cls) => (
-                              <option key={cls} value={cls}>{cls}</option>
-                            ))}
-                          </select>
+                          <input
+                            value={editForm.className}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setEditForm({ ...editForm, className: v, cycle: cycleOfClass(v, editForm.cycle) });
+                            }}
+                            list="classe-edition-suggestions"
+                            placeholder="Classe (champ libre)"
+                            maxLength={40}
+                            spellCheck={false}
+                            className="px-2 py-1.5 rounded-lg text-sm text-slate-900 outline-none"
+                          />
+                          <datalist id="classe-edition-suggestions">
+                            {allClasses().map((cls) => <option key={cls} value={cls} />)}
+                          </datalist>
                         </div>
                       ) : (
                         <>

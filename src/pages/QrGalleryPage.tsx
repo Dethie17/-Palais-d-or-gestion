@@ -25,8 +25,9 @@ const QrGalleryPage = () => {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const cf = classFilter.trim().toLowerCase();
     return kids
-      .filter((k) => !classFilter || k.className === classFilter)
+      .filter((k) => !cf || (k.className ?? '').toLowerCase().includes(cf))
       .filter((k) =>
         !q ||
         `${k.firstName} ${k.lastName} ${k.className}`.toLowerCase().includes(q) ||
@@ -174,16 +175,19 @@ const QrGalleryPage = () => {
             className="w-full pl-9 pr-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-green-600"
           />
         </div>
-        {classes.length > 0 && (
-          <select
-            value={classFilter}
-            onChange={(e) => setClassFilter(e.target.value)}
-            className="px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-green-600"
-          >
-            <option value="">Toutes classes</option>
-            {classes.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        )}
+        <label htmlFor="qr-classe-filter" className="sr-only">Filtrer par classe</label>
+        <input
+          id="qr-classe-filter"
+          list="qr-classes-suggestions"
+          value={classFilter}
+          onChange={(e) => setClassFilter(e.target.value)}
+          placeholder="Toutes classes"
+          spellCheck={false}
+          className="px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-green-600"
+        />
+        <datalist id="qr-classes-suggestions">
+          {classes.map((c) => <option key={c} value={c} />)}
+        </datalist>
       </div>
 
       {filtered.length === 0 ? (
