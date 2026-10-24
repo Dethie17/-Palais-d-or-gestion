@@ -804,6 +804,20 @@ begin
   end if;
 end $$;
 
+-- 6.15 bis JOURNAL D'AUDIT PAIEMENTS (payment_callbacks) : écrite par les
+-- routes serveur (webhooks opérateurs, clé de service — outreveille RLS).
+-- Le navigateur ne la lit jamais, aucune politique : poste inattainable.
+-- On n'active PAS « force » : la lecture manuelle DAF (audit) via SQL Editor
+-- reste possible.
+do $$
+begin
+  if exists (select 1 from information_schema.tables
+             where table_schema = 'public' and table_name = 'payment_callbacks') then
+    execute 'revoke all on public.payment_callbacks from anon';
+    execute 'alter table public.payment_callbacks enable row level security';
+  end if;
+end $$;
+
 -- 6.16 STOCKAGE : photos preuves (aucune lecture publique, URL signées).
 insert into storage.buckets (id, name, public)
 values ('reclamation-photos', 'reclamation-photos', false)
