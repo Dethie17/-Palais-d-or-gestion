@@ -373,20 +373,39 @@ create extension if not exists btree_gist with schema extensions;
 -- : c'est le mécanisme prévu par PostgreSQL pour interdire les
 -- recouvrements d'intervalles (l'unicité stricte n'est pas le but — deux
 -- abonnements consécutifs d'un même enfant se raccordent le 1er).
-do $$ begin
-  if not exists (
-    select 1 from pg_constraint
-     where conrelid = 'public.subscriptions'::regclass
-       and conname = 'subscriptions_no_overlap_per_child'
-  ) then
-    alter table public.subscriptions
-      add constraint subscriptions_no_overlap_per_child
-      exclude using gist (
-        child_id with =,
-        daterange((start_date)::date, (end_date)::date, '[)') with &&
-      )
-      where (child_id is not null and status in ('active', 'pending'));
+-- La classe d'opérateur GiST pour texte (btree_gist) peut porter des noms
+-- différents selon la version/installation (text_ops, gist_text_ops) et se
+-- trouver dans un schéma non couvert par le search_path de la session. La
+-- contrainte est posée en essayant les variantes, en si on trouve.
+create extension if not exists btree_gist with schema extensions;
+
+do $$
+declare
+  cand text[] := array[
+    'extensions.text_ops', 'extensions.gist_text_ops',
+    'text_ops', 'gist_text_ops'];
+  c text;
+  ok boolean := false;
+begin
+  foreach c in array cand loop
+    begin
+      execute format(
+        'alter table public.subscriptions' ||
+        ' add constraint subscriptions_no_overlap_per_child' ||
+        ' exclude using gist (child_id %s with =,' ||
+        ' daterange((start_date)::date, (end_date)::date, ''[)'') with &&)' ||
+        ' where (child_id is not null and status in (''active'', ''pending''))',
+        c);
+      ok := true;
+      exit;
+    exception when SQLSTATE '42704' then
+      null; -- classe d'opérateur introuvable : variante suivante
+    end;
+  end loop;
+  if not ok then
+    raise exception 'classe gist pour texte introuvable : installer btree_gist puis rejouer';
   end if;
+  raise notice 'contrainte anti-chevauchement posee';
 end $$;
 
 
