@@ -18,6 +18,13 @@
 -- Pré-requis : la table public.children et les fonctions
 -- public.current_app_username() / public.is_staff() existent déjà dans la
 -- base (posées à la livraison ; les écrans enfants/parents fonctionnent).
+--
+-- ⚠️ Si « ERROR: function public.is_staff() does not exist » apparaît : la
+-- base n'a jamais reçu final-2026. Ordre alors : sections 1 à 4 de ce
+-- fichier d'abord (table + index, sans RLS), PUIS
+-- supabase-o-resto-final-2026.sql en entier (il crée les fonctions), PUIS
+-- ce fichier une deuxième fois (les politiques RLS de la section 5
+-- passeront cette fois — le tout est idempotent).
 -- ============================================================================
 
 -- 1. TABLE DE BASE ----------------------------------------------------------
