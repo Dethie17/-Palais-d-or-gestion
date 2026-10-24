@@ -445,9 +445,14 @@ function ParentFicheDialog({
           ) : (
             <div className="grid sm:grid-cols-2 gap-3 mt-2">
               {kids.map((k) => {
-                const abonne = subscriptions.some(
-                  (s) => s.childId === k.id && s.status === 'active' && !isHebdoSub(s),
-                );
+                /** Abonnement de CET enfant : actif, sinon en attente, sinon expiré. */
+                const kidSubs = subscriptions.filter((s) => s.childId === k.id && !isHebdoSub(s));
+                const kidSub =
+                  kidSubs.find((s) => s.status === 'active') ??
+                  kidSubs.find((s) => s.status === 'pending') ??
+                  kidSubs.find((s) => s.status === 'expired');
+                const kidFormula = kidSub ? formulas.find((f) => f.id === kidSub.formulaId) : undefined;
+                const kidBadge = kidSub ? (SUB_STATUS_LABEL[kidSub.status] ?? SUB_STATUS_LABEL.expired) : null;
                 return (
                   <div key={k.id} className="border-2 border-slate-100 rounded-2xl p-3 flex items-center gap-3 bg-slate-50/50">
                     {k.qrToken ? (
@@ -462,13 +467,30 @@ function ParentFicheDialog({
                     <div className="min-w-0">
                       <p className="font-bold text-slate-900 truncate">{k.firstName} {k.lastName}</p>
                       <p className="text-xs text-slate-500">{k.className}</p>
-                      <p className="mt-1.5 inline-flex text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full">
-                        {abonne ? (
-                          <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Abonné</span>
-                        ) : (
+                      {kidSub && kidBadge ? (
+                        <>
+                          <p className="mt-1 text-xs font-bold text-slate-700 truncate">{kidFormula?.name ?? 'Formule'}</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <span className={`text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full ${kidBadge.cls}`}>
+                              {kidBadge.label}
+                              {kidSub.status === 'active' ? ` · ${kidSub.mealsRemaining} repas` : ''}
+                            </span>
+                            {kidSub.status === 'pending' && (
+                              <button
+                                onClick={() => cancelSubscription(kidSub.id)}
+                                className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
+                                title="Annuler cette demande de paiement"
+                              >
+                                Annuler la demande
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="mt-1.5 inline-flex text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full">
                           <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full">Sans abonnement</span>
-                        )}
-                      </p>
+                        </p>
+                      )}
                       {k.qrToken && (
                         <p className="mt-1 text-[10px] font-mono text-slate-400 truncate max-w-[150px]">{k.qrToken}</p>
                       )}

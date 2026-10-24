@@ -140,7 +140,8 @@ describe('Utilisateurs — liste professionnelle', () => {
     await screen.findByRole('heading', { name: /utilisateurs/i });
 
     act(() => { latest().saveParentProfile('771234567', 'Awa', 'Diallo', '771234567'); });
-    act(() => { latest().addChild('771234567', 'Moussa', 'Diallo', 'CE2', 'primaire'); });
+    let kidId = '';
+    act(() => { kidId = latest().addChild('771234567', 'Moussa', 'Diallo', 'CE2', 'primaire').id; });
     await screen.findByTestId('users-table');
     await screen.findByText('Diallo Awa');
 
@@ -152,6 +153,14 @@ describe('Utilisateurs — liste professionnelle', () => {
     expect(within(fiche).getAllByText(/Sans abonnement/i).length).toBeGreaterThan(0);
     // Les enfants embarquent leur QR de cantine
     expect(fiche.querySelectorAll('svg').length).toBeGreaterThan(0);
+
+    // Demande d'abonnement sur l'enfant : la carte montre TYPE + ÉTAT + ACTION
+    act(() => { latest().subscribe('771234567', 'F2', kidId); });
+    expect(within(fiche).getAllByText(/Mensuel/i).length).toBeGreaterThan(0);
+    expect(within(fiche).getAllByText(/En attente/i).length).toBeGreaterThan(0);
+    expect(within(fiche).getAllByRole('button', { name: /annuler la demande/i }).length).toBeGreaterThan(0);
+    // Plus de « Sans abonnement » : la souscription prend le relais
+    expect(within(fiche).queryByText(/Sans abonnement/i)).not.toBeInTheDocument();
 
     // Fermeture : la fiche disparaît
     const closeButtons = within(fiche).getAllByRole('button', { name: /fermer/i });
