@@ -362,6 +362,11 @@ begin
   end loop;
 end $$;
 
+-- L'opérateur « = » sur un champ texte n'existe pour GiST que via
+-- l'extension btree_gist : forcée ici (idempotent), juste avant la
+-- contrainte qui en dépend.
+create extension if not exists btree_gist with schema extensions;
+
 -- NB : PostgreSQL ne crée pas d'index UNIQUE avec la méthode GiST
 -- (« access method gist does not support unique indexes »). La règle « pas
 -- d'abonnements qui se chevauchent » se pose donc en CONTRAINTE D'EXCLUSION
