@@ -371,8 +371,11 @@ end $$;
 -- service est l'unicité du couple (enfant, début de mois). Les deux
 -- abonnements consécutifs d'un même enfant (mois suivants) restent
 -- autorisés — ce sont des dates de début différentes.
+-- NB : dans la définition d'un index, une expression doit être entourée de
+-- parenthèses SUPPLÉMENTAIRES pour contenir un cast : `(col)::date` seul est
+-- refusé (« syntax error at or near :: »).
 create unique index if not exists subscriptions_no_overlap_per_child
-  on public.subscriptions (child_id, (start_date)::date)
+  on public.subscriptions (child_id, ((start_date)::date))
   where child_id is not null and status in ('active', 'pending');
 
 
