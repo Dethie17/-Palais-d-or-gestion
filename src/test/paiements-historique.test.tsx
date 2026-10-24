@@ -7,12 +7,17 @@ import { RestoProvider } from '@/context/RestoContext';
 // --- Mock Supabase : la base renvoie des réponses vides, la page doit
 // s'afficher proprement (état vide + pagination « 0 ») sans réseau réel.
 const eqCalls: unknown[][] = [];
+const notCalls: unknown[][] = [];
 const layec = () => {
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const api: Record<string, any> = {};
   api.select = vi.fn(() => api);
   api.eq = vi.fn((col: string, val: string) => {
     eqCalls.push([col, val]);
+    return api;
+  });
+  api.not = vi.fn((col: string, op: string, val: unknown) => {
+    notCalls.push([col, op, val]);
     return api;
   });
   api.order = vi.fn(() => api);
@@ -81,6 +86,7 @@ describe('Historique des paiements — page', () => {
   beforeEach(() => {
     fromMock.mockClear();
     eqCalls.length = 0;
+    notCalls.length = 0;
   });
 
   it('affiche le titre, les filtres et l’état vide quand la base est vide', async () => {
@@ -114,7 +120,7 @@ describe('Historique des paiements — page', () => {
     await waitFor(() => expect(fromMock.mock.calls.length).toBeGreaterThan(avant));
   });
 
-  it('ne demande à la base que les paiements réglés (statut « paid »)', async () => {
+  it('ne demande à la base que les paiements validés (paid et encaissé)', async () => {
     const { fetchPaiementsPage } = await import('@/lib/paiementsHistorique');
     await fetchPaiementsPage({
       filtres: {},
@@ -123,5 +129,8 @@ describe('Historique des paiements — page', () => {
       page: 1,
     });
     expect(eqCalls).toContainEqual(['status', 'paid']);
+    // Un paiement non validé côté serveur (settled_at vide) ne doit jamais
+    // remonter : même règle que la comptabilité (v_paiements_valides).
+    expect(notCalls).toContainEqual(['settled_at', 'is', null]);
   });
 });
