@@ -334,7 +334,10 @@ create extension if not exists btree_gist with schema extensions;
 -- (mêmes jours, même enfant), la création de la contrainte échouerait
 -- sans explication. On liste le premier pair en conflit pour corriger
 -- l'article concerné (statut → cancelled) avant de rejouer le fichier.
-do $$ declare v_child uuid; v_d1 date; v_d2 date;
+-- id est de type texte dans le schéma réel (ids « C-… » des enfants) :
+-- déclarer la variable uuid cassait le pré-flight sur toute base dont les
+-- child_id ne sont pas des UUID.
+do $$ declare v_child text; v_d1 date; v_d2 date;
 begin
   for v_child in
     select distinct child_id from public.subscriptions
