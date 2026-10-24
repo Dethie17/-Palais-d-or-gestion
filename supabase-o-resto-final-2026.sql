@@ -362,18 +362,25 @@ begin
   end loop;
 end $$;
 
+-- NB : PostgreSQL ne crée pas d'index UNIQUE avec la méthode GiST
+-- (« access method gist does not support unique indexes »). La règle « pas
+-- d'abonnements qui se chevauchent » se pose donc en CONTRAINTE D'EXCLUSION
+-- : c'est le mécanisme prévu par PostgreSQL pour interdire les
+-- recouvrements d'intervalles (l'unicité stricte n'est pas le but — deux
+-- abonnements consécutifs d'un même enfant se raccordent le 1er).
 do $$ begin
   if not exists (
-    select 1 from pg_indexes
-     where schemaname = 'public'
-       and indexname = 'subscriptions_no_overlap_per_child'
+    select 1 from pg_constraint
+     where conrelid = 'public.subscriptions'::regclass
+       and conname = 'subscriptions_no_overlap_per_child'
   ) then
-    create unique index subscriptions_no_overlap_per_child
-      on public.subscriptions using gist (
-        child_id,
-        daterange((start_date)::date, (end_date)::date, '[)')
+    alter table public.subscriptions
+      add constraint subscriptions_no_overlap_per_child
+      exclude using gist (
+        child_id with =,
+        daterange((start_date)::date, (end_date)::date, '[)') with &&
       )
-      where child_id is not null and status in ('active', 'pending');
+      where (child_id is not null and status in ('active', 'pending'));
   end if;
 end $$;
 
