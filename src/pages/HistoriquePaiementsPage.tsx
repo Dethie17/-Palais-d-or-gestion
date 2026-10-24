@@ -77,7 +77,10 @@ const HistoriquePaiementsPage = () => {
     const nameTerm = /[\p{L}]/u.test(brut) ? normKey(brut) : null;
 
     let enfants = kids;
-    if (applied.classe) enfants = enfants.filter((c) => c.className === applied.classe);
+    // Classe saisie LIBREMENT : comparaison tolérante (accents, casse,
+    // recherche partielle « 6a » retient « CI-6A » et « 6A2 »).
+    const classeTerm = applied.classe ? normKey(applied.classe) : null;
+    if (classeTerm) enfants = enfants.filter((c) => normKey(c.className ?? '').includes(classeTerm));
     if (nameTerm) {
       enfants = enfants.filter((c) =>
         [c.firstName, c.lastName].some((v) => normKey(v).includes(nameTerm)));
@@ -85,8 +88,10 @@ const HistoriquePaiementsPage = () => {
     const childIds = enfants.map((c) => c.id);
 
     let parents = parentProfiles;
-    if (applied.classe) {
-      const classesConnues = new Set(kids.filter((c) => c.className === applied.classe).map((c) => c.parentUsername));
+    if (classeTerm) {
+      const classesConnues = new Set(
+        enfants.map((c) => c.parentUsername),
+      );
       parents = parents.filter((p) => classesConnues.has(p.parentUsername));
     }
     if (phoneTerm) parents = parents.filter((p) => p.parentUsername === phoneTerm);
@@ -338,18 +343,22 @@ const HistoriquePaiementsPage = () => {
               className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-green-600"
             />
           </label>
-          <label className="text-xs font-bold text-slate-600">
-            Classe
-            <select
-              data-testid="paiements-classe"
-              value={classe}
-              onChange={(e) => setClasse(e.target.value)}
-              className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-green-600"
-            >
-              <option value="">Toutes les classes</option>
-              {classes.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </label>
+      <label className="text-xs font-bold text-slate-600">
+        Classe
+        {/* Champ Libre : la saisie au clavier reste possible même quand la
+            liste des classes (déduite des enfants chargés) est vide. */}
+        <input
+          data-testid="paiements-classe"
+          list="paiements-classes-suggestions"
+          value={classe}
+          onChange={(e) => setClasse(e.target.value)}
+          placeholder="Toutes les classes"
+          className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-green-600"
+        />
+        <datalist id="paiements-classes-suggestions">
+          {classes.map((c) => <option key={c} value={c} />)}
+        </datalist>
+      </label>
           <label className="text-xs font-bold text-slate-600 sm:col-span-2">
             Recherche (nom, prénom ou téléphone)
             <div className="mt-1 relative">
@@ -370,6 +379,18 @@ const HistoriquePaiementsPage = () => {
           </button>
           <button type="button" onClick={resetFilters} className="px-4 py-2 rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-700 hover:border-slate-300">
             Réinitialiser
+          </button>
+          {/* Téléchargement directement dans le pavé de filtres : l'export
+              suit les critères affichés (Excel, mêmes colonnes que le haut de page). */}
+          <button
+            type="button"
+            data-testid="paiements-download"
+            onClick={() => void prepareExport('xlsx')}
+            disabled={exporting !== ''}
+            className="px-4 py-2 rounded-xl border-2 border-green-700 text-green-800 text-sm font-bold flex items-center gap-1.5 hover:bg-green-50 disabled:opacity-60"
+          >
+            <Download className="w-4 h-4" />
+            {exporting !== '' ? 'Préparation…' : 'Télécharger'}
           </button>
           <span className="ml-auto text-xs text-slate-500">
             {loading ? 'Chargement…' : `${total} paiement${total > 1 ? 's' : ''} au total`}

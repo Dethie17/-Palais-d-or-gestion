@@ -3,6 +3,8 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getClientQrToken } from '@/lib/clientQr';
 import { authEmailFor, usernameFromAuthEmail } from '@/lib/authEmail';
+import { useSessionExpiry, type SessionExpiryReason } from '@/lib/sessionExpiry';
+import { toast } from 'sonner';
 export { authEmailFor };
 import {
   registerFailure,
@@ -766,6 +768,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* le jeton local est déjà purgé */
     }
   };
+
+  // Expiration automatique : inactivité prolongée (préavis 60 s) ou durée
+  // maximale atteinte — la reconnexion est exigée dans les deux cas.
+  useSessionExpiry(user !== null && !loading, (reason: SessionExpiryReason) => {
+    void logout();
+    toast.info(
+      reason === 'inactivity'
+        ? 'Session fermée après inactivité. Reconnectez-vous.'
+        : 'Session fermée : durée maximale atteinte. Reconnectez-vous.',
+    );
+  });
 
   const changePassword = async (currentPassword: string, newPassword: string): Promise<boolean> => {
     if (!user) return false;
