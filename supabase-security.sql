@@ -433,7 +433,7 @@ grant update (username, role, establishment_id, qr_token)
 
 drop policy if exists users_read on public.users;
 create policy users_read on public.users for select
-  using (public.is_admin() or auth_id = auth.uid());
+  using (public.is_admin() or auth_id = auth.uid() or (auth_id is null and username = public.current_app_username()));
 
 drop policy if exists users_self_register on public.users;
 create policy users_self_register on public.users for insert

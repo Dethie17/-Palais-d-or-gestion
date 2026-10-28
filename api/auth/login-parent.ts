@@ -125,21 +125,22 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return sendError(res, 500, 'Connexion impossible pour le moment. Réessayez.');
   }
 
-  // Pivot RLS : dès cette première connexion, on lie sa ligne `users` à son
-  // ID d'authentification — c'est ce lien que les politiques Supabase
-  // sécurisées attendent (auth.users.id = users.auth_id). Best effort : en
-  // cas d'échec (colonne pas encore ajoutée côté base par ex.) on logge et
-  // la connexion continue ; la prochaine connexion refera la liaison.
+  // Répare définitivement la marque du compte et le lien métier/Auth.
+  // Ces informations sont nécessaires au pont de session et ne doivent pas
+  // rester une correction "fire and forget" susceptible de gagner la course
+  // sur le chargement du profil côté navigateur.
   const authId = data.user?.id;
   if (authId) {
-    void db
+    await db.auth.admin.updateUserById(authId, {
+      app_metadata: { oresto: 'parent' },
+    }).catch(() => undefined);
+
+    const { error: linkError } = await db
       .from('users')
       .update({ auth_id: authId })
       .eq('username', phone)
-      .eq('role', 'client')
-      .then(({ error: linkError }) => {
-        if (linkError) console.error('[login-parent] liaison auth_id :', linkError.message);
-      });
+      .eq('role', 'client');
+    if (linkError) console.error('[login-parent] liaison auth_id :', linkError.message);
   }
 
   return sendJson(res, 200, {

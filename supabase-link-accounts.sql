@@ -1,45 +1,73 @@
 -- =============================================================================
--- O RESTO — RATTACHEMENT DES COMPTES MÉTIER AUX COMPTES AUTH
+-- O RESTO — RATTACHEMENT AUTOMATIQUE DE TOUS LES PARENTS
 -- =============================================================================
--- À exécuter UNE FOIS, dans le SQL Editor, APRÈS :
+-- Domaine Auth attendu : <numéro>@oresto-sn.com
+-- Exemple : 776111463@oresto-sn.com
 --
---   1. supabase-security.sql
---   2. la création des comptes dans Authentication → Users
---
--- L'application se connecte avec l'adresse `<nom d'utilisateur>@oresto-sn.com`
--- (cf. authEmailFor dans src/lib/authEmail.ts). Ce script fait donc la
--- correspondance tout seul : il n'y a aucun uuid à copier à la main.
---
--- Il est idempotent — le rejouer ne fait rien de plus.
+-- À exécuter dans Supabase SQL Editor APRÈS chaque import ou création de parents.
+-- Ce script est idempotent : il peut être rejoué sans effet supplémentaire.
+-- Il rattache les fiches existantes, mais ne crée pas les comptes Auth.
+-- Les nouveaux parents doivent être créés via Import → Import Parent / API.
 -- =============================================================================
 
-begin;
+BEGIN;
 
-update public.users u
-set auth_id = a.id
-from auth.users a
-where u.auth_id is null
-  and a.email = u.username || '@oresto-sn.com';
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS auth_id uuid;
+CREATE UNIQUE INDEX IF NOT EXISTS users_auth_id_key
+  ON public.users(auth_id) WHERE auth_id IS NOT NULL;
 
-commit;
+-- 1. Cas standard : le nom métier du parent est déjà son numéro normalisé.
+UPDATE public.users AS u
+SET auth_id = a.id
+FROM auth.users AS a
+WHERE u.role = 'client'
+  AND u.auth_id IS NULL
+  AND lower(a.email) = lower(regexp_replace(u.username, '[^0-9]', '', 'g') || '@oresto-sn.com');
+
+-- 2. Cas importé/ancien : parent_profiles porte le numéro canonique, users porte
+--    un ancien identifiant. Le script répare le lien sans fusionner les données.
+UPDATE public.users AS u
+SET auth_id = a.id
+FROM public.parent_profiles AS pp
+JOIN auth.users AS a
+  ON lower(a.email) = lower(regexp_replace(pp.phone, '[^0-9]', '', 'g') || '@oresto-sn.com')
+WHERE u.role = 'client'
+  AND u.username = pp.parent_username
+  AND u.auth_id IS NULL;
+
+-- 3. Marquer tous les comptes Auth parents avec le marqueur attendu par l'app.
+UPDATE auth.users AS a
+SET raw_app_meta_data = coalesce(a.raw_app_meta_data, '{}'::jsonb) || '{"oresto":"parent"}'::jsonb
+FROM public.users AS u
+WHERE u.role = 'client'
+  AND a.id = u.auth_id;
+
+COMMIT;
 
 -- -----------------------------------------------------------------------------
--- Compte rendu
---
--- `rattache` doit valoir true pour TOUTES les lignes. Un false signifie :
---   - soit le compte n'existe pas dans Authentication → Users,
---   - soit son adresse n'est pas exactement <username>@oresto-sn.com.
---
--- Dans les deux cas l'application refusera la connexion : c'est le
--- comportement voulu. Un profil non rattaché n'est accessible à personne.
+-- Diagnostic complet
 -- -----------------------------------------------------------------------------
-select
-  username,
-  role,
-  auth_id is not null as rattache
-from public.users
-order by role, username;
+SELECT
+  u.username,
+  u.role,
+  u.auth_id IS NOT NULL AS rattache,
+  a.email AS email_auth
+FROM public.users AS u
+LEFT JOIN auth.users AS a ON a.id = u.auth_id
+WHERE u.role = 'client'
+ORDER BY u.username;
 
--- Rappel : l'inscription des parents passe par l'écran « Créer un compte » et
--- rattache le profil au fur et à mesure. Seuls les comptes du personnel et de
--- la direction doivent figurer ici.
+-- Parents importés dont le numéro existe dans parent_profiles, mais dont aucun
+-- compte Auth correspond à <numéro>@oresto-sn.com.
+SELECT
+  pp.parent_username,
+  pp.first_name,
+  pp.last_name,
+  pp.phone,
+  regexp_replace(pp.phone, '[^0-9]', '', 'g') || '@oresto-sn.com' AS compte_attendu,
+  u.auth_id IS NOT NULL AS rattache
+FROM public.parent_profiles AS pp
+LEFT JOIN public.users AS u
+  ON u.username = pp.parent_username AND u.role = 'client'
+WHERE u.auth_id IS NULL
+ORDER BY pp.phone;

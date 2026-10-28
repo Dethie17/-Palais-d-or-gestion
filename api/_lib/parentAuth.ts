@@ -32,13 +32,15 @@ export function parentPassword(secret: string, phone: string): string {
 
 /** Normalise un numéro sénégalais : 9 chiffres commençant par 6 ou 7. */
 export function normalizeSnPhone(value: unknown): string {
-  const digits = typeof value === 'string' ? value.replace(/\D/g, '') : '';
+  if (typeof value !== 'string') return '';
+  let digits = value.replace(/[^0-9]/g, '');
+  if (digits.startsWith('221') && digits.length === 12) digits = digits.slice(3);
   return /^[67]\d{8}$/.test(digits) ? digits : '';
 }
 
 /** Adresse Auth d'un identifiant (même schéma que le navigateur). */
 export function authEmailForUser(username: string, env: NodeJS.ProcessEnv = process.env): string {
-  const domain = (env.AUTH_EMAIL_DOMAIN ?? '').trim().toLowerCase() || 'oresto-sn.com';
+  const domain = (env.AUTH_EMAIL_DOMAIN ?? env.VITE_AUTH_EMAIL_DOMAIN ?? '').trim().toLowerCase() || 'oresto-sn.com';
   return `${username.trim().toLowerCase()}@${domain}`;
 }
 

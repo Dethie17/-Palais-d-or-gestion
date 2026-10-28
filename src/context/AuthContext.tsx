@@ -476,6 +476,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               .maybeSingle(),
           ),
         );
+        if (byName.error) console.error('[profileFromSession] read by username error:', byName.error);
         if (!byName.error) row = byName.data as typeof row;
       }
     }
@@ -711,7 +712,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * la connexion parent est indisponible — le message le dit clairement.
    */
   const loginParent = async (phone: string): Promise<{ ok: boolean; error?: string }> => {
-    const digits = phone.replace(/\D/g, '');
+    let digits = phone.replace(/\D/g, '');
+    if (digits.startsWith('221') && digits.length === 12) digits = digits.slice(3);
     if (!/^[67]\d{8}$/.test(digits)) {
       return { ok: false, error: 'Numéro invalide : 9 chiffres (ex : 77 123 45 67).' };
     }

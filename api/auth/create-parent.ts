@@ -193,6 +193,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       continue;
     }
     if (hasProfile && hasAuth) {
+      const authUser = await findAuthUserByEmail(db, email);
+      if (authUser) {
+        const password = parentPassword(secret, username);
+        await db.auth.admin.updateUserById(authUser.id, {
+          password,
+          app_metadata: { oresto: PARENT_SIGNUP_FLAG },
+        }).catch(() => undefined);
+        await db.from('users').update({ auth_id: authUser.id }).eq('username', username).eq('role', 'client');
+      }
       duplicates.push({ phone: username, name, reason: 'Compte déjà actif.' });
       identifiers.push({ phone: username, identifier: username, name, status: 'doublon' });
       continue;
