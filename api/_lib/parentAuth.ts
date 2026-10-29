@@ -32,8 +32,9 @@ export function parentPassword(secret: string, phone: string): string {
 
 /** Normalise un numéro sénégalais : 9 chiffres commençant par 6 ou 7. */
 export function normalizeSnPhone(value: unknown): string {
-  if (typeof value !== 'string') return '';
-  let digits = value.replace(/[^0-9]/g, '');
+  if (typeof value !== 'string' && typeof value !== 'number') return '';
+  let digits = String(value).replace(/[^0-9]/g, '');
+  if (digits.startsWith('00221') && digits.length === 14) digits = digits.slice(5);
   if (digits.startsWith('221') && digits.length === 12) digits = digits.slice(3);
   return /^[67]\d{8}$/.test(digits) ? digits : '';
 }

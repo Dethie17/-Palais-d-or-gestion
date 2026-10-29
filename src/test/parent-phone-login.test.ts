@@ -7,6 +7,8 @@ describe('Connexion parent par numéro', () => {
     expect(normalizeSnPhone('77 61 11 463')).toBe('776111463');
     expect(normalizeSnPhone('+221 77 61 11 463')).toBe('776111463');
     expect(normalizeSnPhone('221776111463')).toBe('776111463');
+    expect(normalizeSnPhone('00221 77 61 11 463')).toBe('776111463');
+    expect(normalizeSnPhone(776111463)).toBe('776111463');
     expect(normalizeSnPhone('123')).toBe('');
   });
 
