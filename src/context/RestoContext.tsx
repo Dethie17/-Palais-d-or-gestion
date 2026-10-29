@@ -410,6 +410,8 @@ interface RestoContextType {
   confirmManualPayment: (paymentId: string) => boolean;
   // Annule un abonnement en attente (et son paiement en attente)
   cancelSubscription: (subscriptionId: string) => void;
+  deactivateSubscription: (subscriptionId: string) => void;
+  reactivateSubscription: (subscriptionId: string) => void;
   // Renouvelle : même règles que paySubscription (mobile = code à confirmer).
   renewSubscription: (
     subscriptionId: string,
@@ -1833,6 +1835,30 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       }
     },
     [subscriptions],
+  );
+
+  // Desactivation d'un abonnement actif (bouton "Inactif" du registre).
+  const deactivateSubscription = useCallback(
+    (subscriptionId: string) => {
+      setSubscriptions((prev) => prev.map((s) => (s.id === subscriptionId ? { ...s, status: 'cancelled' as const } : s)));
+      setPayments((prev) => prev.map((p) => (p.subscriptionId === subscriptionId && p.status === 'pending' ? { ...p, status: 'cancelled' as const } : p)));
+      persist('subscriptions', supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', subscriptionId));
+      persist('oresto_payments', supabase.from('oresto_payments').update({ status: 'cancelled' }).eq('subscription_id', subscriptionId));
+    },
+    [subscriptions],
+  );
+
+  const reactivateSubscription = useCallback(
+    (subscriptionId: string) => {
+      const sub = subscriptions.find((s) => s.id === subscriptionId);
+      if (!sub) return;
+      const start = sub.startDate ? new Date(sub.startDate) : new Date();
+      const end = endOfThatMonth(start);
+      const formula = formulas.find((f) => f.id === sub.formulaId);
+      setSubscriptions((prev) => prev.map((s) => (s.id === subscriptionId ? { ...s, status: 'active' as const, endDate: end.toISOString(), mealsRemaining: formula?.mealsIncluded ?? s.mealsRemaining } : s)));
+      persist('subscriptions', supabase.from('subscriptions').update({ status: 'active', end_date: end.toISOString() }).eq('id', subscriptionId));
+    },
+    [subscriptions, formulas],
   );
 
   /**
@@ -3714,6 +3740,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         collectCashPayment,
         confirmManualPayment,
         cancelSubscription,
+        deactivateSubscription,
+        reactivateSubscription,
         renewSubscription,
         buyTicket,
         buyDayMenu,

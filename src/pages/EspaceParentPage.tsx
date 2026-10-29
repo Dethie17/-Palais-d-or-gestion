@@ -3,7 +3,10 @@ import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { formatCurrency } from '@/lib/utils';
 import { isMobileMethod, isValidSnPhone, type WavePaymentRequest } from '@/lib/wave';
+import { supabase } from '@/lib/supabase';
 import { officialPrice } from '@/lib/aboTariffs';
+import { cycleOfClass } from '@/lib/schoolCycles';
+import { officialAboForCycle } from '@/lib/aboTariffs';
 import { dayPhoto } from '@/data/cantineWeek';
 import type {
   Complaint, ComplaintCategory, ComplaintStatus,
@@ -213,21 +216,40 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
    * paiement SycaPay, débit recalculé ici (jamais une saisie du parent).
    */
   const startBundlePayment = async (
-    childId: string,
-    formulaId: string,
+    childIds: string[],
     count: number,
     firstMonthIso: string,
     method: 'wave' | 'mobile_money',
     phone?: string,
   ) => {
-    const formula = formulas.find((f) => f.id === formulaId);
-    if (!formula) throw new Error('Formule introuvable — choisissez un enfant dont la classe est couverte.');
-    const sub = subscribeBundle(username, formulaId, childId, count, firstMonthIso);
-    // Tarif officiel ancré (F2 27 000 / F3 32 000) × nombre de mois.
-    const montant = officialPrice(formulaId, formulas) * count;
-    const { payment } = paySubscription(sub.id, method, sub, montant);
+    if (childIds.length === 0) throw new Error('Choisissez au moins un enfant.');
+    const children = myChildren(username).filter((child) => childIds.includes(child.id));
+    if (children.length !== childIds.length) throw new Error('Un enfant sélectionné est introuvable.');
+
+    const subscriptionsToPay: Subscription[] = [];
+    let montant = 0;
+    for (const child of children) {
+      const formulaId = officialAboForCycle(cycleOfClass(child.className));
+      if (!formulaId) throw new Error(`Classe de ${child.firstName} ${child.lastName} non couverte par une formule.`);
+      const sub = subscribeBundle(username, formulaId, child.id, count, firstMonthIso);
+      subscriptionsToPay.push(sub);
+      montant += officialPrice(formulaId, formulas) * count;
+    }
+
+    const firstSub = subscriptionsToPay[0];
+    const { payment } = paySubscription(firstSub.id, method, firstSub, montant);
+
+    void supabase.from('oresto_payment_groups').upsert({
+      payment_reference: payment.reference,
+      subscription_ids: subscriptionsToPay.map((sub) => sub.id),
+      child_ids: children.map((child) => child.id),
+      parent_username: username,
+    }).then(({ error }) => {
+      if (error) console.warn('oresto_payment_groups indisponible:', error.message);
+    });
+
     const session = await openProviderPayment(
-      { reference: payment.reference, amount: payment.amount, method, phone },
+      { reference: payment.reference, amount: montant, method, phone },
       'sub',
       payment.id,
     );

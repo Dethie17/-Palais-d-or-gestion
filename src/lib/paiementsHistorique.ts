@@ -131,6 +131,7 @@ function baseQueryOr(
   if (orConstraint) q = q.or(orConstraint);
   void conn;
   return q
+    .order('settled_at', { ascending: false, nullsFirst: false })
     .order('paid_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false });
 }

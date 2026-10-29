@@ -79,6 +79,18 @@ export async function settle(args: SettleArgs, db: SupabaseClient = adminClient(
     p_event_id: args.eventId ?? null,
   };
 
+  // Paiement combiné multi-enfants : le groupe a priorité sur le règlement
+  // standard afin d'activer tous les abonnements liés à une transaction unique.
+  const { data: groupData, error: groupError } = await db.rpc('oresto_settle_payment_group', {
+    p_reference: args.reference,
+    p_tag: tag,
+    p_provider_tx: args.providerTx ?? null,
+    p_event_id: args.eventId ?? null,
+  });
+  if (!groupError && groupData && (groupData as SettleOutcome).outcome !== 'unknown') {
+    return groupData as SettleOutcome;
+  }
+
   // Une recharge porte sa référence dans wallet_transactions ; on tente
   // d'abord oresto_payments, et « unknown » bascule alors sur le wallet.
   const first = await settleWithRpc(db, 'oresto_settle_payment', { ...common, p_event_type: args.eventType ?? null });

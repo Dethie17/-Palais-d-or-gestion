@@ -38,14 +38,15 @@ const UsersPage = () => {
   const { user } = useAuth();
   const {
     subscriptions, formulas, validations, myChildren, parentProfiles,
-    deleteParent, inactiveParents, isParentInactive, setParentActive, cancelSubscription,
+    deleteParent, inactiveParents, isParentInactive, setParentActive, cancelSubscription, deactivateSubscription, reactivateSubscription,
   } = useResto();
   const me = getRoleDef(user?.role);
   /** Suppression définitive d'un parent : Superviseur et DG seulement. */
   const peutSupprimer = peutSupprimerParent(user?.role);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'none' | 'low'>('all');
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleteTargets, setDeleteTargets] = useState<string[] | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   /** Fiche détaillée d'un parent : identifiant (username) courant. */
   const [detailParent, setDetailParent] = useState<string | null>(null);
@@ -297,7 +298,7 @@ const UsersPage = () => {
                           </button>
                           {peutSupprimer && (
                             <button
-                              onClick={() => setConfirmDelete(c)}
+                              onClick={() => setDeleteTargets([c])}
                               className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
                               title="Supprimer ce parent (Superviseur / DG)"
                             >
@@ -315,22 +316,22 @@ const UsersPage = () => {
         )}
       </div>
 
-      {confirmDelete && (
+      {deleteTargets && deleteTargets.length > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <button aria-label="Fermer" onClick={() => setConfirmDelete(null)} className="absolute inset-0 bg-slate-900/50" />
+          <button aria-label="Fermer" onClick={() => setDeleteTargets(null)} className="absolute inset-0 bg-slate-900/50" />
           <div className="relative bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6">
             <div className="flex items-center gap-2 text-red-600">
               <ShieldAlert className="w-5 h-5" />
               <p className="font-black">Supprimer ce parent ?</p>
             </div>
              <p className="mt-2 text-sm text-slate-600">
-              Le compte <strong>{formatPhone(confirmDelete)}</strong>, ses enfants, ses réclamations et ses cartes seront retirés définitivement. Les règlements réglés restent dans la comptabilité.
+              Le compte <strong>{formatPhone(deleteTargets[0])}</strong>, ses enfants, ses réclamations et ses cartes seront retirés définitivement. Les règlements réglés restent dans la comptabilité.
             </p>
             <div className="mt-4 flex gap-2">
               <button
                 onClick={async () => {
-                  const target = confirmDelete;
-                  setConfirmDelete(null);
+                  const target = deleteTargets[0];
+                  setDeleteTargets(null);
                   const result = await deleteParent(target);
                   if (!result.ok) setDeleteError(result.error ?? 'Suppression impossible.');
                 }}
@@ -339,7 +340,7 @@ const UsersPage = () => {
                 Supprimer définitivement
               </button>
               <button
-                onClick={() => setConfirmDelete(null)}
+                onClick={() => setDeleteTargets(null)}
                 className="flex-1 py-2.5 rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50"
               >
                 Annuler

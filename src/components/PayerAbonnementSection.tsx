@@ -32,8 +32,7 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
   kids: Child[];
   /** Ouvre la souscription multi-mois puis la session opérateur (page). */
   start: (
-    childId: string,
-    formulaId: string,
+    childIds: string[],
     count: number,
     firstMonthIso: string,
     method: 'wave' | 'mobile_money',
@@ -42,7 +41,7 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
   onError: (text: string) => void;
 }) => {
   const { formulas, subscriptions, payments, cancelSubscription } = useResto();
-  const [childId, setChildId] = useState(kids[0]?.id ?? '');
+  const [childIds, setChildIds] = useState<string[]>(kids[0]?.id ? [kids[0].id] : []);
   const [selected, setSelected] = useState<MoisCle[]>([]);
   const [phone, setPhone] = useState('');
   const [method, setMethod] = useState<'wave' | 'mobile_money'>('wave');
@@ -50,9 +49,9 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const child = kids.find((k) => k.id === childId);
+  const selectedChildren = useMemo(() => kids.filter((k) => childIds.includes(k.id)), [kids, childIds]);
 
-  /** Formule officielle du cycle de la classe de l'enfant : F2 ou F3, tarif ancré. */
+  /** Formule officielle du cycle de la classe de chaque enfant : F2 ou F3. */
   const aboOfChild = useMemo(() => {
     const map = new Map<string, { id: AboId; name: string; price: number; description: string }>();
     kids.forEach((k) => {
@@ -69,9 +68,7 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
     });
     return map;
   }, [formulas, kids]);
-  const formula = child ? aboOfChild.get(child.id) : undefined;
-
-  /** Abonnements de l'enfant qui portent un paiement réglé : seuls ces mois-là sont « Payé ». */
+  /** Abonnements des enfants sélectionnés qui portent un paiement réglé. */
   const paidSubIds = useMemo(
     () => new Set(
       payments
@@ -80,25 +77,26 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
     ),
     [payments],
   );
-  const subsOfChild = useMemo(
-    () => (child ? subscriptions.filter((s) => s.childId === child.id) : []),
-    [child, subscriptions],
+  const subsOfChildren = useMemo(
+    () => subscriptions.filter((s) => s.childId && childIds.includes(s.childId)),
+    [childIds, subscriptions],
   );
 
-  /** Mois offerts : les 8 prochains, avec leur état (payé / en attente / libre). */
+  /** Mois communs disponibles pour tous les enfants sélectionnés. */
   const months = useMemo(
-    () => etatMoisPourAbonnements(subsOfChild, paidSubIds, prochainsMois(8)),
-    [subsOfChild, paidSubIds],
+    () => etatMoisPourAbonnements(subsOfChildren, paidSubIds, prochainsMois(8)),
+    [subsOfChildren, paidSubIds],
   );
 
-  // Changement d'enfant / changement d'état d'un mois : on retire de la
-  // sélection les mois qui ne sont plus libres.
   useEffect(() => {
     setSelected((prev) => prev.filter((k) => months.some((m) => m.cle === k && m.etat === 'libre')));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [childId, months.map((m) => `${m.cle}:${m.etat}`).join(',')]);
+    // eslint-disable-next-next-line react-hooks/exhaustive-deps
+  }, [childIds.join(','), months.map((m) => `${m.cle}:${m.etat}`).join(',')]);
 
-  const total = (formula ? officialPrice(formula.id, formulas) : 0) * selected.length;
+  const total = selectedChildren.reduce((sum, child) => {
+    const formula = aboOfChild.get(child.id);
+    return sum + (formula ? officialPrice(formula.id, formulas) : 0);
+  }, 0) * selected.length;
   const consecutif = selectionConsecutive(selected);
 
   const toggleMois = (cle: MoisCle) => {
@@ -121,8 +119,8 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
 
   const lancerPaiement = async () => {
     setError('');
-    if (!child || !formula) {
-      setError('Choisissez d’abord un enfant.');
+    if (selectedChildren.length === 0) {
+      setError('Choisissez au moins un enfant.');
       return;
     }
     if (selected.length === 0) {
@@ -141,8 +139,7 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
     setBusy(true);
     try {
       await start(
-        child.id,
-        formula.id,
+        childIds,
         selected.length,
         debutDeMoisIso(tries[0]),
         method,
@@ -171,23 +168,26 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
       {/* Étape 1 : enfant + mois */}
       <div className="bg-white rounded-2xl border p-4 md:p-5 space-y-3">
         <div>
-          <label htmlFor="abo-enfant" className="text-xs font-bold text-slate-600">Enfant à abonner</label>
-          <select
-            id="abo-enfant"
-            data-testid="abo-enfant"
-            value={childId}
-            onChange={(e) => setChildId(e.target.value)}
-            className="mt-1 w-full px-3 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm bg-white outline-none focus:border-emerald-600"
-          >
-            {kids.map((k) => (
-              <option key={k.id} value={k.id}>{k.firstName} {k.lastName} · {k.className}</option>
-            ))}
-          </select>
-          {child && (
-            <p className="text-[11px] text-slate-400 mt-1">
-              Cycle {cycleOfClass(child.className) ? CYCLE_LABEL[cycleOfClass(child.className)] : '—'} · formule {formula ? `« ${formula.name} » — ${formatCurrency(formula.price)}/mois` : 'indisponible'}
-            </p>
-          )}
+          <p className="text-xs font-bold text-slate-600">Enfants à abonner</p>
+          <div className="mt-2 grid gap-2" data-testid="abo-enfants">
+            {kids.map((kid) => {
+              const checked = childIds.includes(kid.id);
+              const formula = aboOfChild.get(kid.id);
+              return (
+                <button
+                  type="button"
+                  key={kid.id}
+                  data-testid={`abo-enfant-${kid.id}`}
+                  aria-pressed={checked}
+                  onClick={() => setChildIds((prev) => checked ? prev.filter((id) => id !== kid.id) : [...prev, kid.id])}
+                  className={`flex items-center justify-between gap-3 px-3 py-2.5 min-h-[44px] rounded-xl border-2 text-sm text-left ${checked ? 'border-emerald-600 bg-emerald-50' : 'border-slate-200 bg-white'}`}
+                >
+                  <span className="flex items-center gap-2"><span className={`w-4 h-4 rounded border-2 flex items-center justify-center ${checked ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'}`}>{checked && <Check className="w-3 h-3 text-white" strokeWidth={3} />}</span>{kid.firstName} {kid.lastName} · {kid.className}</span>
+                  <span className="text-xs font-black text-emerald-700 whitespace-nowrap">{formula ? formatCurrency(officialPrice(formula.id, formulas)) : '—'}/mois</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div>
@@ -252,8 +252,8 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
       <div className="bg-white rounded-2xl border p-4 md:p-5 space-y-3">
         <p className="text-xs font-black uppercase tracking-widest text-slate-400">Récapitulatif avant validation</p>
         <div className="rounded-xl bg-slate-50 border p-3 text-sm space-y-1" data-testid="abo-recap">
-          <p><strong className="text-slate-500">Enfant :</strong> {child ? `${child.firstName} ${child.lastName}` : '—'} <span className="text-slate-400">({child?.className ?? '—'})</span></p>
-          <p><strong className="text-slate-500">Formule :</strong> {formula?.name ?? '—'}</p>
+          <p><strong className="text-slate-500">Enfants :</strong> {selectedChildren.map((c) => `${c.firstName} ${c.lastName}`).join(', ') || '—'}</p>
+          <p><strong className="text-slate-500">Nombre d'enfants :</strong> {selectedChildren.length}</p>
           <p><strong className="text-slate-500">Mois choisis :</strong> {selected.slice().sort().map(labelMois).join(' · ') || '—'}</p>
           <p className="flex items-center justify-between border-t border-slate-200 pt-2 mt-2">
             <strong className="text-slate-600">Total à payer</strong>
@@ -303,7 +303,7 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
               type="button"
               data-testid="abo-payer"
               onClick={lancerPaiement}
-              disabled={busy || !formula || total <= 0 || !isValidSnPhone(phone)}
+              disabled={busy || selectedChildren.length === 0 || total <= 0 || !isValidSnPhone(phone)}
               className="w-full py-3 min-h-[48px] rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 disabled:opacity-50 inline-flex items-center justify-center gap-2"
             >
               <Smartphone className="w-4 h-4" /> Payer via {methodLabel} · {formatCurrency(total)} pour {selected.length} mois

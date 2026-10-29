@@ -56,10 +56,14 @@ export function moisSuivant(yyyyMM: MoisCle, n: number): MoisCle {
   return cleMois(d) as MoisCle;
 }
 
-/** Liste des N mois suivants en partant du mois courant : {cle, label}. */
-export function prochainsMois(n: number): { cle: MoisCle; label: string }[] {
+/**
+ * Liste des N prochains mois. À partir de novembre 2026, octobre 2026 ne doit plus
+ * être proposé même si l'utilisateur consulte l'application dans ce mois.
+ */
+export function prochainsMois(n: number, now: Date = new Date(), minimum = '2026-11'): { cle: MoisCle; label: string }[] {
   const out: { cle: MoisCle; label: string }[] = [];
-  const base = cleMois(new Date()) as MoisCle;
+  const courant = cleMois(now) as MoisCle;
+  const base = courant < minimum ? minimum : courant;
   for (let i = 0; i < n; i += 1) {
     const cle = moisSuivant(base, i);
     out.push({ cle, label: labelMois(cle) });

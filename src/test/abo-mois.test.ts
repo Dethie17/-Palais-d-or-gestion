@@ -22,11 +22,11 @@ describe('aboMois — clés et libellés', () => {
     expect(moisSuivant('2026-12', 1)).toBe('2027-01');
   });
 
-  it('liste des N prochains mois (mois courant inclus)', () => {
-    const l = prochainsMois(3);
+  it('liste novembre 2026 sans octobre pour les paiements', () => {
+    const l = prochainsMois(3, new Date('2026-10-29T12:00:00Z'));
     expect(l).toHaveLength(3);
-    expect(l[0].cle).toBe(cleMois(new Date()));
-    expect(l[1].cle).toBe(moisSuivant(l[0].cle, 1));
+    expect(l[0].cle).toBe('2026-11');
+    expect(l[1].cle).toBe('2026-12');
   });
 });
 
