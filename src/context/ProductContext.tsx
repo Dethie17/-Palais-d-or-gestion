@@ -104,6 +104,12 @@ export function ProductProvider({ children }: { children: ReactNode }) {
   const loadProducts = async () => {
     try {
       setLoading(true);
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        setOffline(true);
+        setProducts(readLocalProducts() ?? mockProducts);
+        return;
+      }
       const { data, error } = await supabase
         .from('products')
         .select('*')
@@ -165,6 +171,14 @@ export function ProductProvider({ children }: { children: ReactNode }) {
 
   const loadKioskOrders = async () => {
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        try {
+          const raw = localStorage.getItem(LS_KIOSK_ORDERS_KEY);
+          if (raw) setKioskOrders(JSON.parse(raw));
+        } catch { /* copie locale illisible */ }
+        return;
+      }
       const { data, error } = await supabase
         .from('kiosk_orders')
         .select('*')

@@ -48,6 +48,31 @@ function clientIp(req: IncomingMessage): string {
   return req.socket.remoteAddress ?? 'inconnu';
 }
 
+async function migrateLegacyParentIdentity(db: ReturnType<typeof adminClient>, legacyUsername: string, phone: string): Promise<void> {
+  if (!legacyUsername || legacyUsername === phone) return;
+  await Promise.allSettled([
+    db.from('children').update({ parent_username: phone }).eq('parent_username', legacyUsername),
+    db.from('subscriptions').update({ client_username: phone }).eq('client_username', legacyUsername),
+    db.from('oresto_payments').update({ client_username: phone }).eq('client_username', legacyUsername),
+    db.from('validations').update({ client_username: phone }).eq('client_username', legacyUsername),
+    db.from('reclamations').update({ client_username: phone }).eq('client_username', legacyUsername),
+    db.from('kiosk_orders').update({ parent_username: phone }).eq('parent_username', legacyUsername),
+    db.from('reclamation_messages').update({ author_username: phone }).eq('author_username', legacyUsername),
+  ]);
+
+  const { data: canonicalUser } = await db.from('users')
+    .select('username').eq('username', phone).eq('role', 'client').maybeSingle();
+  if (!canonicalUser) {
+    await db.from('users').update({ username: phone })
+      .eq('username', legacyUsername).eq('role', 'client');
+  } else {
+    await db.from('users').delete().eq('username', legacyUsername).eq('role', 'client');
+  }
+
+  await db.from('parent_profiles').update({ parent_username: phone, phone })
+    .eq('parent_username', legacyUsername);
+}
+
 function rateLimited(ip: string, now: number): boolean {
   const kept = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
   if (kept.length >= MAX_PER_IP) {
@@ -101,7 +126,28 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     .eq('username', phone)
     .maybeSingle();
 
-  // 2. Repli pour les parents importés sous un ancien identifiant (« awa »,
+  // 2. Repli universel : certains imports ont conservé le numéro avec espaces,
+  // +221, 221 ou un ancien identifiant dans users. On normalise tous les profils.
+  if (!profileError && !profile) {
+    const { data: clientRows } = await db
+      .from('users')
+      .select('username, role')
+      .eq('role', 'client')
+      .limit(10000);
+    const legacyUser = (clientRows ?? []).find((row: { username?: unknown }) =>
+      normalizeSnPhone(row.username) === phone,
+    );
+    if (legacyUser?.username && legacyUser.username !== phone) {
+      await migrateLegacyParentIdentity(db, String(legacyUser.username).trim(), phone);
+      ({ data: profile, error: profileError } = await db
+        .from('users')
+        .select('username, role')
+        .eq('username', phone)
+        .maybeSingle());
+    }
+  }
+
+  // 3. Repli pour les parents importés sous un ancien identifiant (« awa »,
   // « parent1 », etc.). Leur numéro est conservé dans parent_profiles.
   if (!profileError && !profile) {
     const { data: importedProfiles } = await db
@@ -121,17 +167,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       const lastName = typeof imported.last_name === 'string' ? imported.last_name.trim() : '';
 
       if (legacyUsername && legacyUsername !== phone) {
-        await Promise.allSettled([
-          db.from('children').update({ parent_username: phone }).eq('parent_username', legacyUsername),
-          db.from('subscriptions').update({ client_username: phone }).eq('client_username', legacyUsername),
-          db.from('oresto_payments').update({ client_username: phone }).eq('client_username', legacyUsername),
-          db.from('validations').update({ client_username: phone }).eq('client_username', legacyUsername),
-          db.from('reclamations').update({ client_username: phone }).eq('client_username', legacyUsername),
-          db.from('kiosk_orders').update({ parent_username: phone }).eq('parent_username', legacyUsername),
-          db.from('reclamation_messages').update({ author_username: phone }).eq('author_username', legacyUsername),
-        ]);
-        await db.from('users').delete().eq('username', legacyUsername).eq('role', 'client');
-        await db.from('parent_profiles').delete().eq('parent_username', legacyUsername);
+        await migrateLegacyParentIdentity(db, legacyUsername, phone);
       }
 
       ({ data: profile, error: profileError } = await db

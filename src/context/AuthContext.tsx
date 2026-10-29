@@ -44,7 +44,11 @@ export async function healMissingClientProfile(
   // créé à son nom — et se verrait retirer son rôle.
   const flag = (session.user.app_metadata as { oresto?: string } | undefined)?.oresto;
   if (flag !== 'parent') return null;
-  const username = usernameFromAuthEmail(session.user.email);
+  let username = usernameFromAuthEmail(session.user.email);
+  if (!username) {
+    const emailLocal = (session.user.email ?? '').trim().toLowerCase().split('@')[0] ?? '';
+    if (/^[67]\d{8}$/.test(emailLocal)) username = emailLocal;
+  }
   if (!username || !isValidUsername(username)) return null;
   try {
     const { error } = await client
@@ -465,7 +469,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Auth forgé ailleurs ne peut donc pas prendre un rôle élevé.
     const managedFlag = (session.user.app_metadata as { oresto?: string } | undefined)?.oresto;
     if (!row && (managedFlag === 'parent' || managedFlag === 'staff')) {
-      const username = usernameFromAuthEmail(session.user.email);
+      let username = usernameFromAuthEmail(session.user.email);
+      if (!username && managedFlag === 'parent') {
+        const emailLocal = (session.user.email ?? '').trim().toLowerCase().split('@')[0] ?? '';
+        if (/^[67]\d{8}$/.test(emailLocal)) username = emailLocal;
+      }
       if (username) {
         const byName = await withAuthTimeout(
           Promise.resolve(
@@ -765,7 +773,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     clearAllSessions();
     try {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
     } catch {
       /* le jeton local est déjà purgé */
     }

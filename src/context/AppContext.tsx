@@ -25,6 +25,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadOrders = async () => {
     try {
       setLoading(true);
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        setOrders([]);
+        return;
+      }
       const { data, error } = await supabase
         .from('orders')
         .select('*')

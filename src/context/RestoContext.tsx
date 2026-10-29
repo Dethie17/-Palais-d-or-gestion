@@ -779,7 +779,25 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   // d'attente, l'état local est en retard et doit être rechargé.
   const refreshRemote = useCallback(async () => {
       try {
-        const [estRes, formRes, subRes, payRes, valRes, childRes, walletRes, txRes, setRes, expRes, weekRes, profRes, reclRes, reclMsgRes, kioskRes] = await Promise.all([
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) return;
+        const parentSession = sessionData.session.user.app_metadata?.oresto === 'parent';
+        const ignored = { data: null, error: null } as const;
+        const [estRes, formRes, subRes, payRes, valRes, childRes, walletRes, txRes, setRes, expRes, weekRes, profRes, reclRes, reclMsgRes, kioskRes] = await Promise.all(parentSession ? [
+          Promise.resolve(ignored),
+          Promise.resolve(ignored),
+          supabase.from('subscriptions').select('*').order('created_at', { ascending: false }).limit(500),
+          supabase.from('oresto_payments').select('*').order('created_at', { ascending: false }).limit(500),
+          supabase.from('validations').select('*').order('validated_at', { ascending: false }).limit(500),
+          supabase.from('children').select('*').order('created_at', { ascending: false }).limit(500),
+          supabase.from('wallets').select('*').limit(500),
+          supabase.from('wallet_transactions').select('*').order('created_at', { ascending: false }).limit(500),
+          Promise.resolve(ignored), Promise.resolve(ignored), Promise.resolve(ignored),
+          supabase.from('parent_profiles').select('*').limit(500),
+          supabase.from('reclamations').select('*').order('updated_at', { ascending: false }).limit(500),
+          supabase.from('reclamation_messages').select('*').order('created_at', { ascending: true }).limit(2000),
+          supabase.from('kiosk_orders').select('*').order('created_at', { ascending: false }).limit(300),
+        ] : [
           supabase.from('establishments').select('*'),
           supabase.from('formulas').select('*'),
           supabase.from('subscriptions').select('*').order('created_at', { ascending: false }).limit(500),
@@ -1031,6 +1049,9 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const flag = sessionData.session?.user.app_metadata?.oresto;
+        if (!sessionData.session || flag === 'parent') return;
         if (localStorage.getItem('o-resto-remote-heal-2026e')) return;
         const fullRows = Object.values(OFFICIAL_TARIFFS_2026).map((f) => ({
           id: f.id, name: f.name, description: f.description, price: f.price,
@@ -1111,6 +1132,9 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const roleFlag = sessionData.session?.user.app_metadata?.oresto;
+        if (!sessionData.session || roleFlag === 'parent') return;
         await supabase.from('establishments').upsert(
           establishments.map((e) => ({ id: e.id, name: e.name, address: e.address ?? null, manager: e.manager ?? null, phone: e.phone ?? null })),
         );

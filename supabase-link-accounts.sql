@@ -1,10 +1,8 @@
 -- =============================================================================
--- O RESTO — RATTACHEMENT AUTOMATIQUE UNIVERSNEL DE TOUS LES PARENTS
--- =============================================================================
--- Identité canonique : 9 chiffres Sénégalais + connexion par <numero>@oresto-sn.com
--- Ce script ne doit plus afficher la liste des parents : il ne fait que les réparer.
--- À exécuter une fois après la migration ; l'application crée aussi les comptes
--- automatiquement lors des créations/imports futurs.
+-- O RESTO — RATTACHEMENT UNIVERSAL DES PARENTS
+-- Compatible comptes créés et parents importés, formats 77..., 22177..., +221...
+-- À exécuter APRÈS chaque import dans Supabase SQL Editor.
+-- Idempotent.
 -- =============================================================================
 
 BEGIN;
@@ -13,48 +11,58 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS auth_id uuid;
 CREATE UNIQUE INDEX IF NOT EXISTS users_auth_id_key
   ON public.users(auth_id) WHERE auth_id IS NOT NULL;
 
-CREATE OR REPLACE FUNCTION public.oresto_normalize_phone(value text)
-RETURNS text
-LANGUAGE sql IMMUTABLE STRICT AS $$
-  SELECT right(regexp_replace(COALESCE(value, ''), '[^0-9]', '', 'g'), 9)
-$$;
+CREATE TEMP TABLE oresto_parent_phone_map ON COMMIT DROP AS
+SELECT
+  pp.parent_username,
+  right(
+    CASE
+      WHEN regexp_replace(coalesce(pp.phone::text, ''), '[^0-9]', '', 'g') LIKE '221%' 
+      THEN substring(regexp_replace(coalesce(pp.phone::text, ''), '[^0-9]', '', 'g') from 4)
+      ELSE regexp_replace(coalesce(pp.phone::text, ''), '[^0-9]', '', 'g')
+    END,
+    9
+  ) AS phone
+FROM public.parent_profiles pp;
 
--- 1. Fiches dont l'identifiant utilisateur est déjà le numéro.
-UPDATE public.users AS u
+-- Rattache les fiches legacy via parent_profiles.
+UPDATE public.users u
 SET auth_id = a.id
-FROM auth.users AS a
+FROM oresto_parent_phone_map m
+JOIN auth.users a
+  ON lower(a.email) = lower(m.phone || '@oresto-sn.com')
+WHERE u.role = 'client'
+  AND u.username = m.parent_username
+  AND u.auth_id IS NULL;
+
+-- Rattache les fiches dont le username est déjà le numéro normalisé.
+UPDATE public.users u
+SET auth_id = a.id
+FROM auth.users a
 WHERE u.role = 'client'
   AND u.auth_id IS NULL
-  AND lower(a.email) = lower(public.oresto_normalize_phone(u.username) || '@oresto-sn.com');
+  AND lower(a.email) = lower(right(regexp_replace(coalesce(u.username::text, ''), '[^0-9]', '', 'g'), 9) || '@oresto-sn.com');
 
--- 2. Fiches héritées/importées : identifier le numéro dans parent_profiles.
-UPDATE public.users AS u
-SET auth_id = a.id
-FROM public.parent_profiles AS pp
-JOIN auth.users AS a
-  ON lower(a.email) = lower(public.oresto_normalize_phone(pp.phone) || '@oresto-sn.com')
-WHERE u.role = 'client'
-  AND u.auth_id IS NULL
-  AND u.username = pp.parent_username;
-
--- 3. Marquer tous les comptes Auth parents reliés.
-UPDATE auth.users AS a
+-- Marque tous les comptes Auth liés comme parents.
+UPDATE auth.users a
 SET raw_app_meta_data = coalesce(a.raw_app_meta_data, '{}'::jsonb) || '{"oresto":"parent"}'::jsonb
-FROM public.users AS u
+FROM public.users u
 WHERE u.role = 'client'
   AND u.auth_id = a.id;
 
--- 4. Résumé unique uniquement : aucun listing de tous les numéros.
-DO $$
-DECLARE
-  v_total integer;
-  v_linked integer;
-BEGIN
-  SELECT count(*) INTO v_total FROM public.users WHERE role = 'client';
-  SELECT count(*) INTO v_linked FROM public.users WHERE role = 'client' AND auth_id IS NOT NULL;
-  RAISE NOTICE 'O RESTO parents: % total, % comptes reliés, % à compléter via l’import ou la création.',
-    v_total, v_linked, GREATEST(v_total - v_linked, 0);
-END
-$$;
-
 COMMIT;
+
+-- Diagnostic : comptes parents liés ou non liés.
+SELECT u.username, u.role, u.auth_id IS NOT NULL AS rattache,
+       a.email AS email_auth
+FROM public.users u
+LEFT JOIN auth.users a ON a.id = u.auth_id
+WHERE u.role = 'client'
+ORDER BY u.username;
+
+SELECT pp.parent_username, pp.first_name, pp.last_name, pp.phone,
+       right(CASE WHEN regexp_replace(coalesce(pp.phone::text, ''), '[^0-9]', '', 'g') LIKE '221%' THEN substring(regexp_replace(coalesce(pp.phone::text, ''), '[^0-9]', '', 'g') from 4) ELSE regexp_replace(coalesce(pp.phone::text, ''), '[^0-9]', '', 'g') END, 9) || '@oresto-sn.com' AS compte_attendu,
+       u.auth_id IS NOT NULL AS rattache
+FROM public.parent_profiles pp
+LEFT JOIN public.users u ON u.username = pp.parent_username AND u.role = 'client'
+WHERE u.auth_id IS NULL
+ORDER BY pp.phone;

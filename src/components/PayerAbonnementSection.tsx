@@ -83,10 +83,10 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
   );
 
   /** Mois communs disponibles pour tous les enfants sélectionnés. */
-  const months = useMemo(
-    () => etatMoisPourAbonnements(subsOfChildren, paidSubIds, prochainsMois(8)),
-    [subsOfChildren, paidSubIds],
-  );
+  const months = useMemo(() => {
+    const disponibles = prochainsMois(8).filter((mois) => mois.cle >= '2026-11');
+    return etatMoisPourAbonnements(subsOfChildren, paidSubIds, disponibles);
+  }, [subsOfChildren, paidSubIds]);
 
   useEffect(() => {
     setSelected((prev) => prev.filter((k) => months.some((m) => m.cle === k && m.etat === 'libre')));

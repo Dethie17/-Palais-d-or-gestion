@@ -1,4 +1,4 @@
-const CACHE = 'o-resto-v2';
+const CACHE = 'o-resto-v3-parent-fixes';
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(

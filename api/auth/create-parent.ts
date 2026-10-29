@@ -210,16 +210,17 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     // Réconciliation : une fiche héritée porte peut-être déjà ce numéro.
     // Ses données (enfants, abonnements…) passent sous le numéro, et son
     // ancien compte disparaît : le parent garde UNE seule identité.
-    const { data: legacyRows } = await db
+    const { data: importedProfiles } = await db
       .from('parent_profiles')
-      .select('parent_username')
-      .eq('phone', username)
-      .neq('parent_username', username)
-      .limit(5);
+      .select('parent_username, phone')
+      .limit(10000);
     let reconciled = false;
-    for (const legacy of legacyRows ?? []) {
-      const legacyUsername = legacy?.parent_username;
-      if (legacyUsername) {
+    for (const legacy of importedProfiles ?? []) {
+      const legacyUsername = typeof legacy?.parent_username === 'string'
+        ? legacy.parent_username.trim()
+        : '';
+      const legacyPhone = normalizeSnPhone(legacy?.phone);
+      if (legacyUsername && legacyUsername !== username && legacyPhone === username) {
         await reconcileLegacyProfile(db, legacyUsername, username);
         reconciled = true;
       }
