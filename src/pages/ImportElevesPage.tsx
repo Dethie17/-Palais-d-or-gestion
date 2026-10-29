@@ -129,7 +129,7 @@ const ImportElevesPage = () => {
       </h1>
       <p className="text-sm text-slate-500 mt-1">
         Parents : le numéro de téléphone est l’identifiant de connexion — aucun mot de passe.
-        Les élèves sont créés automatiquement avec leur parent.
+        Le modèle Excel peut aussi importer les colonnes Prénom enfant, Nom enfant et Classe enfant.
       </p>
 
       <ParentsImport
@@ -444,6 +444,34 @@ function ParentsImport({
         collect(res.data.activated, 'activated', 'Accès activé (fiche existante).');
         collect(res.data.duplicates, 'duplicate', 'Compte déjà actif.');
         collect(res.data.errors, 'error', 'Création impossible.');
+
+        // Colonnes enfants optionnelles : chaque ligne crée automatiquement
+        // un enfant, même si le même parent apparaît sur plusieurs lignes.
+        for (const row of chunk) {
+          const hasChild = row.prenomEnfant && row.nomEnfant && row.classeEnfant;
+          if (!hasChild) continue;
+          const cycle = cycleOfClass(row.classeEnfant!);
+          try {
+            await importStudentRow({
+              parentUsername: row.telephone,
+              parentNom: row.nom,
+              parentPrenom: row.prenom,
+              parentTel: row.telephone,
+              prenom: row.prenomEnfant!,
+              nom: row.nomEnfant!,
+              classe: canonicalClassName(row.classeEnfant!),
+              cycle,
+            });
+          } catch (err) {
+            entries.push({
+              line: row.line,
+              label: `${row.prenomEnfant} ${row.nomEnfant}`,
+              phone: row.telephone,
+              status: 'error',
+              detail: err instanceof Error ? err.message : 'Création de l’enfant impossible.',
+            });
+          }
+        }
       }
       done += chunk.length;
       setProgress({ done, total: list.length });

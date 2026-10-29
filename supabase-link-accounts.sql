@@ -1,13 +1,10 @@
 -- =============================================================================
--- O RESTO — RATTACHEMENT AUTOMATIQUE DE TOUS LES PARENTS
+-- O RESTO — RATTACHEMENT AUTOMATIQUE UNIVERSNEL DE TOUS LES PARENTS
 -- =============================================================================
--- Domaine Auth attendu : <numéro>@oresto-sn.com
--- Exemple : 776111463@oresto-sn.com
---
--- À exécuter dans Supabase SQL Editor APRÈS chaque import ou création de parents.
--- Ce script est idempotent : il peut être rejoué sans effet supplémentaire.
--- Il rattache les fiches existantes, mais ne crée pas les comptes Auth.
--- Les nouveaux parents doivent être créés via Import → Import Parent / API.
+-- Identité canonique : 9 chiffres Sénégalais + connexion par <numero>@oresto-sn.com
+-- Ce script ne doit plus afficher la liste des parents : il ne fait que les réparer.
+-- À exécuter une fois après la migration ; l'application crée aussi les comptes
+-- automatiquement lors des créations/imports futurs.
 -- =============================================================================
 
 BEGIN;
@@ -16,58 +13,48 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS auth_id uuid;
 CREATE UNIQUE INDEX IF NOT EXISTS users_auth_id_key
   ON public.users(auth_id) WHERE auth_id IS NOT NULL;
 
--- 1. Cas standard : le nom métier du parent est déjà son numéro normalisé.
+CREATE OR REPLACE FUNCTION public.oresto_normalize_phone(value text)
+RETURNS text
+LANGUAGE sql IMMUTABLE STRICT AS $$
+  SELECT right(regexp_replace(COALESCE(value, ''), '[^0-9]', '', 'g'), 9)
+$$;
+
+-- 1. Fiches dont l'identifiant utilisateur est déjà le numéro.
 UPDATE public.users AS u
 SET auth_id = a.id
 FROM auth.users AS a
 WHERE u.role = 'client'
   AND u.auth_id IS NULL
-  AND lower(a.email) = lower(regexp_replace(u.username, '[^0-9]', '', 'g') || '@oresto-sn.com');
+  AND lower(a.email) = lower(public.oresto_normalize_phone(u.username) || '@oresto-sn.com');
 
--- 2. Cas importé/ancien : parent_profiles porte le numéro canonique, users porte
---    un ancien identifiant. Le script répare le lien sans fusionner les données.
+-- 2. Fiches héritées/importées : identifier le numéro dans parent_profiles.
 UPDATE public.users AS u
 SET auth_id = a.id
 FROM public.parent_profiles AS pp
 JOIN auth.users AS a
-  ON lower(a.email) = lower(regexp_replace(pp.phone, '[^0-9]', '', 'g') || '@oresto-sn.com')
+  ON lower(a.email) = lower(public.oresto_normalize_phone(pp.phone) || '@oresto-sn.com')
 WHERE u.role = 'client'
-  AND u.username = pp.parent_username
-  AND u.auth_id IS NULL;
+  AND u.auth_id IS NULL
+  AND u.username = pp.parent_username;
 
--- 3. Marquer tous les comptes Auth parents avec le marqueur attendu par l'app.
+-- 3. Marquer tous les comptes Auth parents reliés.
 UPDATE auth.users AS a
 SET raw_app_meta_data = coalesce(a.raw_app_meta_data, '{}'::jsonb) || '{"oresto":"parent"}'::jsonb
 FROM public.users AS u
 WHERE u.role = 'client'
-  AND a.id = u.auth_id;
+  AND u.auth_id = a.id;
+
+-- 4. Résumé unique uniquement : aucun listing de tous les numéros.
+DO $$
+DECLARE
+  v_total integer;
+  v_linked integer;
+BEGIN
+  SELECT count(*) INTO v_total FROM public.users WHERE role = 'client';
+  SELECT count(*) INTO v_linked FROM public.users WHERE role = 'client' AND auth_id IS NOT NULL;
+  RAISE NOTICE 'O RESTO parents: % total, % comptes reliés, % à compléter via l’import ou la création.',
+    v_total, v_linked, GREATEST(v_total - v_linked, 0);
+END
+$$;
 
 COMMIT;
-
--- -----------------------------------------------------------------------------
--- Diagnostic complet
--- -----------------------------------------------------------------------------
-SELECT
-  u.username,
-  u.role,
-  u.auth_id IS NOT NULL AS rattache,
-  a.email AS email_auth
-FROM public.users AS u
-LEFT JOIN auth.users AS a ON a.id = u.auth_id
-WHERE u.role = 'client'
-ORDER BY u.username;
-
--- Parents importés dont le numéro existe dans parent_profiles, mais dont aucun
--- compte Auth correspond à <numéro>@oresto-sn.com.
-SELECT
-  pp.parent_username,
-  pp.first_name,
-  pp.last_name,
-  pp.phone,
-  regexp_replace(pp.phone, '[^0-9]', '', 'g') || '@oresto-sn.com' AS compte_attendu,
-  u.auth_id IS NOT NULL AS rattache
-FROM public.parent_profiles AS pp
-LEFT JOIN public.users AS u
-  ON u.username = pp.parent_username AND u.role = 'client'
-WHERE u.auth_id IS NULL
-ORDER BY pp.phone;

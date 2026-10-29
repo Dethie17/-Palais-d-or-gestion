@@ -173,20 +173,28 @@ describe('Import parents (accès par numéro)', () => {
     ]);
   });
 
-  it('rejette numéro invalide, nom manquant et numéro répété', async () => {
+  it('importe plusieurs lignes d’enfants pour le même parent', async () => {
+    const headers = [...PHEAD, 'prenom_enfant', 'nom_enfant', 'classe_enfant'];
     const parsed = await parseParentImportFile(await workbook([
-        PHEAD,
-        ['Awa', 'Diallo', '123'],
-        ['', 'Sow', '771234567'],
-        ['Moussa', 'Ndiaye', '771234567'],
-        ['Aminata', 'Ba', '771234567'],
-      ]),
-    );
-    expect(parsed.rows).toHaveLength(1);
-    expect(parsed.rows[0].line).toBe(4);
-    expect(parsed.rows[0].telephone).toBe('771234567');
-    expect(parsed.issues.map((i) => i.line)).toEqual([2, 3, 5]);
-    expect(parsed.issues[2].message).toMatch(/répété/);
+      headers,
+      ['Awa', 'Diallo', '771234567', 'Fatou', 'Diallo', 'CI'],
+      ['Awa', 'Diallo', '771234567', 'Moussa', 'Diallo', '6A'],
+    ]));
+    expect(parsed.issues).toHaveLength(0);
+    expect(parsed.rows).toHaveLength(2);
+    expect(parsed.rows[0].prenomEnfant).toBe('Fatou');
+    expect(parsed.rows[0].classeEnfant).toBe('CI');
+    expect(parsed.rows[1].prenomEnfant).toBe('Moussa');
+  });
+
+  it('rejette numéro invalide et nom parent manquant', async () => {
+    const parsed = await parseParentImportFile(await workbook([
+      PHEAD,
+      ['Awa', 'Diallo', '123'],
+      ['', 'Sow', '771234567'],
+    ]));
+    expect(parsed.rows).toHaveLength(0);
+    expect(parsed.issues.map((i) => i.line)).toEqual([2, 3]);
   });
 
   it('sépare les parents déjà enregistrés des nouveaux', () => {

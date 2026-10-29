@@ -305,16 +305,19 @@ export async function buildTemplateBlob(): Promise<Blob> {
 /* Import PARENTS (accès par numéro de téléphone, sans mot de passe)   */
 /* ------------------------------------------------------------------ */
 
-/** En-têtes exacts du modèle parents. */
-export const PARENT_IMPORT_HEADERS = ['prenom', 'nom', 'telephone'] as const;
+/** En-têtes exacts du modèle parents. Les trois colonnes enfants sont optionnelles. */
+export const PARENT_IMPORT_HEADERS = ['prenom', 'nom', 'telephone', 'prenom_enfant', 'nom_enfant', 'classe_enfant'] as const;
 
 export interface ParentImportRow {
-  /** N° de ligne dans le fichier (1 = en-têtes). */
+  /** N° de ligne du fichier (1 = en-têtes). */
   line: number;
   prenom: string;
   nom: string;
   /** Numéro normalisé : 9 chiffres (ex 771234567). */
   telephone: string;
+  prenomEnfant?: string;
+  nomEnfant?: string;
+  classeEnfant?: string;
 }
 
 export interface ParsedParentImport {
@@ -343,15 +346,18 @@ export async function parseParentImportFile(file: File | Blob): Promise<ParsedPa
   }
   const grid = await readSheetGrid(file);
   if (grid.length === 0) throw new Error('Feuille vide.');
-  const header = grid[0].map((h) => cleanCell(h).toLowerCase());
-  const missing = PARENT_IMPORT_HEADERS.filter((h) => !header.includes(h));
+  const header = grid[0].map((h) => cleanCell(h).toLowerCase()
+    .normalize('NFD').replace(/[ - ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '_'));
+  const required = ['prenom', 'nom', 'telephone'] as const;
+  const missing = required.filter((h) => !header.includes(h));
   if (missing.length > 0) {
     throw new Error(`En-têtes manquants : ${missing.join(', ')}. Téléchargez le modèle.`);
   }
   const idx = (name: string) => header.indexOf(name);
   const rows: ParentImportRow[] = [];
   const issues: RowIssue[] = [];
-  const seenPhones = new Set<string>();
   const body = grid.slice(1, MAX_IMPORT_ROWS + 1);
   for (let i = 0; i < body.length; i += 1) {
     const cells = body[i];
@@ -361,6 +367,9 @@ export async function parseParentImportFile(file: File | Blob): Promise<ParsedPa
     const prenom = get('prenom').slice(0, 60);
     const nom = get('nom').slice(0, 60);
     const phone = parentPhone(get('telephone'));
+    const prenomEnfant = get('prenom_enfant').slice(0, 60);
+    const nomEnfant = get('nom_enfant').slice(0, 60);
+    const classeEnfant = get('classe_enfant').slice(0, 60);
     if (!prenom) {
       issues.push({ line, message: 'prénom manquant.' });
       continue;
@@ -373,12 +382,15 @@ export async function parseParentImportFile(file: File | Blob): Promise<ParsedPa
       issues.push({ line, message: `téléphone invalide (« ${get('telephone') || 'vide'} » : 9 chiffres, ex 77 123 45 67).` });
       continue;
     }
-    if (seenPhones.has(phone)) {
-      issues.push({ line, message: `numéro ${phone} répété dans le fichier.` });
-      continue;
-    }
-    seenPhones.add(phone);
-    rows.push({ line, prenom, nom, telephone: phone });
+    rows.push({
+      line,
+      prenom,
+      nom,
+      telephone: phone,
+      ...(prenomEnfant ? { prenomEnfant } : {}),
+      ...(nomEnfant ? { nomEnfant } : {}),
+      ...(classeEnfant ? { classeEnfant } : {}),
+    });
   }
   if (grid.length - 1 > MAX_IMPORT_ROWS) {
     issues.push({ line: MAX_IMPORT_ROWS + 2, message: `Fichier tronqué à ${MAX_IMPORT_ROWS} lignes.` });
