@@ -347,15 +347,19 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         auth_id: authUser.id,
         qr_token: personalQrToken(phone),
       }, passwordForProfile);
-      if (!createdProfile) {
-        await db.from('parent_profiles').upsert({
-          parent_username: phone,
-          first_name: 'Parent',
-          last_name: phone,
-          phone,
-        }, { onConflict: 'parent_username' });
-        profile = { username: phone, role: 'client', auth_id: authUser.id };
-      }
+      await db.from('users').upsert({
+        username: phone,
+        role: 'client',
+        auth_id: authUser.id,
+        qr_token: personalQrToken(phone),
+      }, { onConflict: 'username' });
+      await db.from('parent_profiles').upsert({
+        parent_username: phone,
+        first_name: 'Parent',
+        last_name: phone,
+        phone,
+      }, { onConflict: 'parent_username' });
+      profile = { username: phone, role: 'client', auth_id: authUser.id };
     }
   }
 
