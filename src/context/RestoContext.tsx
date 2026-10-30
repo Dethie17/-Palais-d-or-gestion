@@ -984,7 +984,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           setParentProfiles(
             profRes.data.map((r) => ({
               parentUsername: r.parent_username, firstName: r.first_name,
-              lastName: r.last_name, phone: r.phone ?? '', updatedAt: r.updated_at,
+              lastName: r.last_name, phone: r.phone ?? '',
+              authUsername: r.auth_username ?? undefined, updatedAt: r.updated_at,
             })),
           );
         }

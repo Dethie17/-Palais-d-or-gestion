@@ -598,8 +598,8 @@ begin
   if exists (select 1 from information_schema.tables
              where table_schema='public' and table_name='parent_profiles') then
     perform private.lock_table('parent_profiles', 'parent_profiles_access', 'all',
-      'public.is_admin() or username = public.current_app_username()',
-      'public.is_admin() or username = public.current_app_username()');
+      'public.is_admin() or parent_username = public.current_app_username()',
+      'public.is_admin() or parent_username = public.current_app_username()');
   end if;
 
   if exists (select 1 from information_schema.tables

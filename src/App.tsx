@@ -2,13 +2,12 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import SpaceTopNav from './components/layout/SpaceTopNav';
 import SplashScreen from './components/SplashScreen';
-import ParentGate from './components/ParentGate';
 import { getRoleDef } from './lib/roleTasks';
 import { PageName, CartItem, Order } from './types/menu';
 import { canAccess, ROLE_PAGES, PAGE_LABEL } from './lib/permissions';
 import { AppProvider, useApp } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { RestoProvider, useResto } from './context/RestoContext';
+import { RestoProvider } from './context/RestoContext';
 import { ProductProvider } from './context/ProductContext';
 
 // Chargement différé : chaque page = un chunk séparé → premier affichage rapide,
@@ -58,7 +57,8 @@ function PageLoader() {
 function AppContent() {
   const { addOrder } = useApp();
   const { isAuthenticated, loading, user } = useAuth();
-  const { parentProfileOf } = useResto();
+  // La donnée métier est chargée par RestoProvider ; aucune fiche secondaire
+  // ne doit empêcher un parent Auth valide d'entrer dans son espace.
   const [currentPage, setCurrentPage] = useState<PageName>('home');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
@@ -142,14 +142,10 @@ function AppContent() {
     );
   }
 
-  // Portail parent : en guise de login, fiche nom/prénom/téléphone obligatoire
-  if (user?.role === 'client' && user?.username && !parentProfileOf(user.username)) {
-    return (
-      <Suspense fallback={<PageLoader />}>
-        <ParentGate username={user.username} />
-      </Suspense>
-    );
-  }
+  // Les parents authentifiés accèdent directement à leur espace. La présence
+  // de parent_profiles n'est pas un prérequis de connexion : le serveur Auth
+  // et la table users sont la source de vérité. Le portail de saisie de nom
+  // ne doit plus bloquer les 25 parents déjà enregistrés par la DAF.
 
   const handleProceedToPayment = (items: CartItem[]) => {
     setCart(items);
