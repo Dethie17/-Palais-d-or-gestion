@@ -141,12 +141,68 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     throw e;
   }
 
-  // 1. Recherche canonique puis universelle par contenu normalisé.
-  let { data: profile, error: profileError } = await db
+  // Rattachement prioritaire du téléphone à sa fiche parent. Cette étape rend
+  // la connexion indépendante du format ancien, de l'identifiant métier et
+  // du contenu de users : parent_profiles est la source métier du numéro.
+  const { data: phoneProfiles } = await db
+    .from('parent_profiles')
+    .select('*')
+    .limit(10000);
+  const phoneProfile = (phoneProfiles ?? []).find((row: { phone?: unknown }) =>
+    normalizeSnPhone(row.phone) === phone || rowContainsPhone(row, phone),
+  );
+
+  let profile: { username?: unknown; role?: unknown; auth_id?: unknown } | null = null;
+  let profileError: { message: string } | null = null;
+
+  if (phoneProfile) {
+    const legacyUsername = typeof phoneProfile.parent_username === 'string'
+      ? phoneProfile.parent_username.trim()
+      : '';
+    if (legacyUsername && legacyUsername !== phone) {
+      await migrateLegacyParentIdentity(db, legacyUsername, phone);
+    }
+
+    const { data: canonical, error: canonicalError } = await db
+      .from('users')
+      .select('username, role, auth_id')
+      .eq('username', phone)
+      .maybeSingle();
+    profile = canonical;
+    profileError = canonicalError;
+
+    if (!profile && !canonicalError) {
+      const passwordForProfile = parentPassword(parentAuthSecret(), phone);
+      const emailForProfile = authEmailForUser(phone);
+      let authUser = await findAuthUserByEmail(db, emailForProfile);
+      if (!authUser) {
+        const createdAuth = await db.auth.admin.createUser({
+          email: emailForProfile,
+          password: passwordForProfile,
+          email_confirm: true,
+          app_metadata: { oresto: PARENT_SIGNUP_FLAG },
+        });
+        if (!createdAuth.error && createdAuth.data?.user) {
+          authUser = { id: createdAuth.data.user.id };
+        }
+      }
+      if (authUser) {
+        const createError = await insertUserProfile(db, {
+          username: phone,
+          role: 'client',
+          auth_id: authUser.id,
+          qr_token: personalQrToken(phone),
+        }, passwordForProfile);
+        if (!createError) profile = { username: phone, role: 'client' };
+      }
+    }
+  }
+
+  ({ data: profile, error: profileError } = await db
     .from('users')
     .select('username, role, auth_id')
     .eq('username', phone)
-    .maybeSingle();
+    .maybeSingle());
   if (!profile && !profileError) {
     const { data: allUsers, error: allUsersError } = await db.from('users').select('username, role, auth_id').limit(10000);
     if (!allUsersError) {
@@ -340,8 +396,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   });
 
   await db.from('users').update({ auth_id: authUser.id })
-    .eq('username', phone)
-    .eq('role', 'client');
+    .eq('username', phone);
 
   let { data, error } = await db.auth.signInWithPassword({ email: authUserEmail, password });
 
@@ -371,8 +426,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const { error: linkError } = await db
       .from('users')
       .update({ auth_id: authId })
-      .eq('username', phone)
-      .eq('role', 'client');
+      .eq('username', phone);
     if (linkError) console.error('[login-parent] liaison auth_id :', linkError.message);
   }
 
