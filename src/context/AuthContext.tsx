@@ -439,24 +439,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * section 8) n'est pas faite.
    */
   const profileFromSession = useCallback(async (session: Session): Promise<User | null> => {
-    const isParent =
-      (session.user.app_metadata as { oresto?: string } | undefined)?.oresto === 'parent';
-
     // Voie normale : lien direct identité ↔ Auth (colonne `auth_id`).
     // Un parent passe directement par le pont ci-dessous : la colonne n'existe
     // pas encore sur le schéma déployé, et l'interroger faisait échouer une
     // requête (HTTP 400) à chaque connexion, visible dans la console.
-    const byAuthId = isParent
-      ? { data: null, error: null }
-      : await withAuthTimeout(
-          Promise.resolve(
-            supabase
-              .from('users')
-              .select('username, role, establishment_id')
-              .eq('auth_id', session.user.id)
-              .maybeSingle(),
-          ),
-        );
+    // Le rattachement Auth est fiable pour tous les profils modernes, parents
+    // compris. Garder cette lecture autorise une reconnexion même si l'adresse
+    // technique historique du parent n'est plus égale à son numéro.
+    const byAuthId = await withAuthTimeout(
+      Promise.resolve(
+        supabase
+          .from('users')
+          .select('username, role, establishment_id')
+          .eq('auth_id', session.user.id)
+          .maybeSingle(),
+      ),
+    );
 
     let row = (byAuthId.error ? null : byAuthId.data) as
       | { username?: unknown; role?: unknown; establishment_id?: string | null }

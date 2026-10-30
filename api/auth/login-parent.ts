@@ -390,12 +390,17 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return sendError(res, 500, 'Impossible de configurer le compte parent. Réessayez.');
   }
 
-  await db.auth.admin.updateUserById(authUser.id, {
+  // Adresse technique canonique : même numéro, même compte, quel que soit
+  // l'ancien email ou l'ancien domaine utilisé lors de l'import.
+  const canonicalAuthUpdate = await db.auth.admin.updateUserById(authUser.id, {
+    email,
+    email_confirm: true,
     password,
     app_metadata: { oresto: PARENT_SIGNUP_FLAG },
   });
+  if (!canonicalAuthUpdate.error) authUserEmail = email;
 
-  await db.from('users').update({ auth_id: authUser.id })
+  await db.from('users').update({ auth_id: authUser.id, role: 'client' })
     .eq('username', phone);
 
   let { data, error } = await db.auth.signInWithPassword({ email: authUserEmail, password });
