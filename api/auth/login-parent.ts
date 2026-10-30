@@ -141,12 +141,21 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     throw e;
   }
 
-  // 1. Recherche du profil canonique (identifiant = numéro de téléphone).
+  // 1. Recherche canonique puis universelle par contenu normalisé.
   let { data: profile, error: profileError } = await db
     .from('users')
     .select('username, role, auth_id')
     .eq('username', phone)
     .maybeSingle();
+  if (!profile && !profileError) {
+    const { data: allUsers, error: allUsersError } = await db.from('users').select('username, role, auth_id').limit(10000);
+    if (!allUsersError) {
+      profile = (allUsers ?? []).find((row: { username?: unknown; role?: unknown }) => {
+        const role = typeof row.role === 'string' ? row.role.trim().toLowerCase() : '';
+        return ['client', 'parent'].includes(role) && rowContainsPhone(row, phone);
+      }) as typeof profile;
+    }
+  }
 
   // 2. Repli universel : certains imports ont conservé le numéro avec espaces,
   // +221, 00221 ou un ancien identifiant dans users. On normalise tous les
@@ -280,8 +289,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   const profileRole = typeof profile?.role === 'string' ? profile.role.trim().toLowerCase() : '';
-  if (profileError || !profile || !['client', 'parent'].includes(profileRole)) {
+  if (profileError || !profile) {
     return sendError(res, 401, 'Numéro non enregistré ou aucun profil parent associé. Adressez-vous à la cantine.');
+  }
+  if (profileRole !== 'client' && profileRole !== 'parent') {
+    await db.from('users').update({ role: 'client' }).eq('username', phone);
   }
 
   const email = authEmailForUser(phone);
