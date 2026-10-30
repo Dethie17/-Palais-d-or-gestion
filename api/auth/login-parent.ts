@@ -322,6 +322,43 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
   }
 
+  // Dernier recours volontaire : l'inscription parent fonctionne à partir du
+  // numéro seul. Cela évite qu'un parent valide reste bloqué si une ancienne
+  // importation n'a créé ni users ni parent_profiles de manière complète.
+  // Le profil est créé canonique (client), puis le compte Auth est créé/rattaché
+  // immédiatement par la suite de cette API.
+  if (!profile && !profileError) {
+    const passwordForProfile = parentPassword(parentAuthSecret(), phone);
+    const emailForProfile = authEmailForUser(phone);
+    let authUser = await findAuthUserByEmail(db, emailForProfile);
+    if (!authUser) {
+      const createdAuth = await db.auth.admin.createUser({
+        email: emailForProfile,
+        password: passwordForProfile,
+        email_confirm: true,
+        app_metadata: { oresto: PARENT_SIGNUP_FLAG },
+      });
+      if (!createdAuth.error && createdAuth.data?.user) authUser = { id: createdAuth.data.user.id };
+    }
+    if (authUser) {
+      const createdProfile = await insertUserProfile(db, {
+        username: phone,
+        role: 'client',
+        auth_id: authUser.id,
+        qr_token: personalQrToken(phone),
+      }, passwordForProfile);
+      if (!createdProfile) {
+        await db.from('parent_profiles').upsert({
+          parent_username: phone,
+          first_name: 'Parent',
+          last_name: phone,
+          phone,
+        }, { onConflict: 'parent_username' });
+        profile = { username: phone, role: 'client', auth_id: authUser.id };
+      }
+    }
+  }
+
   const profileRole = typeof profile?.role === 'string' ? profile.role.trim().toLowerCase() : '';
   if (profileError || !profile) {
     return sendError(res, 401, 'Numéro non enregistré ou aucun profil parent associé. Adressez-vous à la cantine.');
