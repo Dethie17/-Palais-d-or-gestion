@@ -203,6 +203,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     .select('username, role, auth_id')
     .eq('username', phone)
     .maybeSingle());
+
+  // Certaines vues/imports peuvent masquer ponctuellement la fiche users
+  // après avoir déjà confirmé parent_profiles. On garde alors l'accès parent
+  // comme source métier et la suite crée/rattache la fiche canonique.
+  if (!profile && !profileError && phoneProfile) {
+    profile = { username: phone, role: 'client' };
+  }
+
   if (!profile && !profileError) {
     const { data: allUsers, error: allUsersError } = await db.from('users').select('username, role, auth_id').limit(10000);
     if (!allUsersError) {
