@@ -151,7 +151,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   // 2. Repli universel : certains imports ont conservé le numéro avec espaces,
   // +221, 00221 ou un ancien identifiant dans users. On normalise tous les
   // profils client/parent, sans dépendre du format enregistré en base.
-  if (!profileError && !profile) {
+  if (!profile) {
     const { data: userRows } = await db
       .from('users')
       .select('*')
@@ -173,7 +173,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
   // 3. Repli pour les parents importés sous un ancien identifiant (« awa »,
   // « parent1 », etc.). Leur numéro est conservé dans parent_profiles.
-  if (!profileError && !profile) {
+  if (!profile) {
     const { data: importedProfiles } = await db
       .from('parent_profiles')
       .select('*')
@@ -241,7 +241,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   // 4. Dernier recours : certains imports ne créent que les enfants ou les
   // abonnements. Si le numéro apparaît dans cette liaison, on récupère son
   // ancien identifiant parent puis on crée la fiche canonique du numéro.
-  if (!profileError && !profile) {
+  if (!profile) {
     for (const table of ['children', 'subscriptions', 'oresto_payments']) {
       const { data: rows } = await db.from(table).select('*').limit(10000);
       const linked = (rows ?? []).find((row: Record<string, unknown>) => rowContainsPhone(row, phone));
