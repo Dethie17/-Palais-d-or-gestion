@@ -10,8 +10,8 @@
  * Corps : { "phone": "77 123 45 67" }
  * Réponse : { ok: true, accessToken, refreshToken }
  *
- * Limite : 30 tentatives / 10 min par IP — un numéro connu ouvre l'accès,
- * donc on ralentit l'énumération.
+ * Le numéro ouvre uniquement une fiche parent existante ; aucune limite
+ * client IP locale ne doit bloquer plusieurs parents partageant une connexion.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -33,10 +33,6 @@ import {
 import { insertUserProfile } from '../_lib/profile.js';
 import { personalQrToken } from '../_lib/qrToken.js';
 import { PARENT_SIGNUP_FLAG } from '../_lib/username.js';
-
-const WINDOW_MS = 10 * 60_000;
-const MAX_PER_IP = 30;
-const hits = new Map<string, number[]>();
 
 interface LoginBody {
   phone?: unknown;
@@ -60,12 +56,6 @@ function identityFromRow(row: Record<string, unknown>): string {
   );
   const preferred = preferredKey ? String(row[preferredKey]).trim() : '';
   return preferred || '';
-}
-
-function clientIp(req: IncomingMessage): string {
-  const fwd = req.headers['x-forwarded-for'];
-  if (typeof fwd === 'string' && fwd.trim()) return fwd.split(',')[0]!.trim();
-  return req.socket.remoteAddress ?? 'inconnu';
 }
 
 async function migrateLegacyParentIdentity(db: ReturnType<typeof adminClient>, legacyUsername: string, phone: string): Promise<void> {
@@ -95,29 +85,9 @@ async function migrateLegacyParentIdentity(db: ReturnType<typeof adminClient>, l
     .eq('parent_username', legacyUsername);
 }
 
-function rateLimited(ip: string, now: number): boolean {
-  const kept = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
-  if (kept.length >= MAX_PER_IP) {
-    hits.set(ip, kept);
-    return true;
-  }
-  kept.push(now);
-  hits.set(ip, kept);
-  if (hits.size > 5000) {
-    for (const [key, times] of hits) {
-      if (times.every((t) => now - t >= WINDOW_MS)) hits.delete(key);
-    }
-  }
-  return false;
-}
-
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   if (req.method === 'OPTIONS') return handlePreflight(req, res);
   if (req.method !== 'POST') return methodNotAllowed(req, res, ['POST']);
-
-  if (rateLimited(clientIp(req), Date.now())) {
-    return sendError(res, 429, 'Trop de tentatives. Attendez quelques minutes puis réessayez.');
-  }
 
   let body: LoginBody;
   try {
