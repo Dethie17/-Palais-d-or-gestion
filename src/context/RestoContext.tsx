@@ -956,7 +956,9 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           );
         }
         if (weekRes.data && weekRes.data.length > 0) {
-          const byDay = new Map(weekRes.data.map((r) => [r.day, r]));
+          const byDay = new Map<string, { name?: string; description?: string; items?: unknown; price?: unknown }>(
+            weekRes.data.map((r) => [String((r as { day?: unknown }).day ?? ''), r as { name?: string; description?: string; items?: unknown; price?: unknown }]),
+          );
           const cleanItems = (raw: unknown): WeeklyMenuItem[] => {
             if (!Array.isArray(raw)) return [];
             return raw

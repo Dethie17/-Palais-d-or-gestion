@@ -721,6 +721,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const loginParent = async (phone: string): Promise<{ ok: boolean; error?: string }> => {
     let digits = phone.replace(/\D/g, '');
+    if (digits.startsWith('00221') && digits.length === 14) digits = digits.slice(5);
     if (digits.startsWith('221') && digits.length === 12) digits = digits.slice(3);
     if (!/^[67]\d{8}$/.test(digits)) {
       return { ok: false, error: 'Numéro invalide : 9 chiffres (ex : 77 123 45 67).' };

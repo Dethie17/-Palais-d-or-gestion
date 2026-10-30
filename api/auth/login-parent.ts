@@ -42,6 +42,17 @@ interface LoginBody {
   phone?: unknown;
 }
 
+function rowContainsPhone(row: unknown, phone: string): boolean {
+  if (typeof row === 'string' || typeof row === 'number') {
+    return normalizeSnPhone(row) === phone;
+  }
+  if (!row || typeof row !== 'object') return false;
+  for (const value of Object.values(row as Record<string, unknown>)) {
+    if (rowContainsPhone(value, phone)) return true;
+  }
+  return false;
+}
+
 function clientIp(req: IncomingMessage): string {
   const fwd = req.headers['x-forwarded-for'];
   if (typeof fwd === 'string' && fwd.trim()) return fwd.split(',')[0]!.trim();
@@ -61,12 +72,14 @@ async function migrateLegacyParentIdentity(db: ReturnType<typeof adminClient>, l
   ]);
 
   const { data: canonicalUser } = await db.from('users')
-    .select('username').eq('username', phone).eq('role', 'client').maybeSingle();
+    .select('username, role').eq('username', phone).maybeSingle();
   if (!canonicalUser) {
-    await db.from('users').update({ username: phone })
-      .eq('username', legacyUsername).eq('role', 'client');
+    await db.from('users').update({ username: phone, role: 'client' })
+      .eq('username', legacyUsername);
   } else {
-    await db.from('users').delete().eq('username', legacyUsername).eq('role', 'client');
+    await db.from('users').update({ role: 'client' })
+      .eq('username', phone);
+    await db.from('users').delete().eq('username', legacyUsername);
   }
 
   await db.from('parent_profiles').update({ parent_username: phone, phone })
@@ -122,26 +135,28 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   // 1. Recherche du profil canonique (identifiant = numéro de téléphone).
   let { data: profile, error: profileError } = await db
     .from('users')
-    .select('username, role')
+    .select('username, role, auth_id')
     .eq('username', phone)
     .maybeSingle();
 
   // 2. Repli universel : certains imports ont conservé le numéro avec espaces,
-  // +221, 221 ou un ancien identifiant dans users. On normalise tous les profils.
+  // +221, 00221 ou un ancien identifiant dans users. On normalise tous les
+  // profils client/parent, sans dépendre du format enregistré en base.
   if (!profileError && !profile) {
-    const { data: clientRows } = await db
+    const { data: userRows } = await db
       .from('users')
-      .select('username, role')
-      .eq('role', 'client')
+      .select('*')
       .limit(10000);
-    const legacyUser = (clientRows ?? []).find((row: { username?: unknown }) =>
-      normalizeSnPhone(row.username) === phone,
-    );
-    if (legacyUser?.username && legacyUser.username !== phone) {
+    const legacyUser = (userRows ?? []).find((row: { username?: unknown; role?: unknown }) => {
+      const role = typeof row.role === 'string' ? row.role.trim().toLowerCase() : '';
+      return (role === 'client' || role === 'parent' || role === '')
+        && (normalizeSnPhone(row.username) === phone || rowContainsPhone(row, phone));
+    });
+    if (legacyUser?.username && String(legacyUser.username).trim() !== phone) {
       await migrateLegacyParentIdentity(db, String(legacyUser.username).trim(), phone);
       ({ data: profile, error: profileError } = await db
         .from('users')
-        .select('username, role')
+        .select('username, role, auth_id')
         .eq('username', phone)
         .maybeSingle());
     }
@@ -152,11 +167,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   if (!profileError && !profile) {
     const { data: importedProfiles } = await db
       .from('parent_profiles')
-      .select('parent_username, first_name, last_name, phone')
+      .select('*')
       .limit(10000);
 
     const imported = (importedProfiles ?? []).find((row: { phone?: unknown }) =>
-      normalizeSnPhone(row.phone) === phone,
+      normalizeSnPhone(row.phone) === phone || rowContainsPhone(row, phone),
     );
 
     if (imported) {
@@ -214,14 +229,33 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
   }
 
-  if (profileError || !profile || profile.role !== 'client') {
+  const profileRole = typeof profile?.role === 'string' ? profile.role.trim().toLowerCase() : '';
+  if (profileError || !profile || !['client', 'parent'].includes(profileRole)) {
     return sendError(res, 401, 'Numéro non enregistré ou aucun profil parent associé. Adressez-vous à la cantine.');
   }
 
   const email = authEmailForUser(phone);
   const password = parentPassword(parentAuthSecret(), phone);
 
+  let authUserEmail = email;
   let authUser = await findAuthUserByEmail(db, email);
+
+  // Un compte importé peut exister avec son ancienne adresse technique ou
+  // son ancien domaine Auth. Le numéro reste l'identifiant métier : on répare
+  // alors le mot de passe et l'adresse connue de cet utilisateur Auth existant.
+  if (!authUser && typeof (profile as { auth_id?: unknown }).auth_id === 'string') {
+    const authId = String((profile as { auth_id: string }).auth_id).trim();
+    if (authId) {
+      const existing = await db.auth.admin.getUserById(authId);
+      const existingEmail = typeof existing.data?.user?.email === 'string'
+        ? existing.data.user.email.trim().toLowerCase()
+        : '';
+      if (!existing.error && existing.data?.user) {
+        authUser = { id: existing.data.user.id };
+        if (existingEmail) authUserEmail = existingEmail;
+      }
+    }
+  }
   if (!authUser) {
     const created = await db.auth.admin.createUser({
       email,
@@ -247,7 +281,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     .eq('username', phone)
     .eq('role', 'client');
 
-  let { data, error } = await db.auth.signInWithPassword({ email, password });
+  let { data, error } = await db.auth.signInWithPassword({ email: authUserEmail, password });
 
   if (error) {
     // Dernier essai après alignement complet du mot de passe technique.
@@ -255,7 +289,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (updated.error) {
       return sendError(res, 500, 'Connexion impossible pour le moment. Réessayez.');
     }
-    ({ data, error } = await db.auth.signInWithPassword({ email, password }));
+    ({ data, error } = await db.auth.signInWithPassword({ email: authUserEmail, password }));
   }
 
   if (error || !data?.session) {
