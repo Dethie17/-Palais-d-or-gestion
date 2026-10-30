@@ -327,7 +327,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   // importation n'a créé ni users ni parent_profiles de manière complète.
   // Le profil est créé canonique (client), puis le compte Auth est créé/rattaché
   // immédiatement par la suite de cette API.
-  if (!profile && !profileError) {
+  if (!profile) {
     const passwordForProfile = parentPassword(parentAuthSecret(), phone);
     const emailForProfile = authEmailForUser(phone);
     let authUser = await findAuthUserByEmail(db, emailForProfile);
@@ -364,7 +364,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   const profileRole = typeof profile?.role === 'string' ? profile.role.trim().toLowerCase() : '';
-  if (profileError || !profile) {
+  if (!profile) {
     return sendError(res, 401, 'Numéro non enregistré ou aucun profil parent associé. Adressez-vous à la cantine.');
   }
   if (profileRole !== 'client' && profileRole !== 'parent') {
