@@ -53,6 +53,15 @@ function rowContainsPhone(row: unknown, phone: string): boolean {
   return false;
 }
 
+function identityFromRow(row: Record<string, unknown>): string {
+  const preferredKey = Object.keys(row).find((key) =>
+    /(parent.*username|client.*username|parent_id|owner)/i.test(key)
+    && typeof row[key] === 'string'
+  );
+  const preferred = preferredKey ? String(row[preferredKey]).trim() : '';
+  return preferred || '';
+}
+
 function clientIp(req: IncomingMessage): string {
   const fwd = req.headers['x-forwarded-for'];
   if (typeof fwd === 'string' && fwd.trim()) return fwd.split(',')[0]!.trim();
@@ -226,6 +235,47 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           phone,
         }, { onConflict: 'parent_username' });
       }
+    }
+  }
+
+  // 4. Dernier recours : certains imports ne créent que les enfants ou les
+  // abonnements. Si le numéro apparaît dans cette liaison, on récupère son
+  // ancien identifiant parent puis on crée la fiche canonique du numéro.
+  if (!profileError && !profile) {
+    for (const table of ['children', 'subscriptions', 'oresto_payments']) {
+      const { data: rows } = await db.from(table).select('*').limit(10000);
+      const linked = (rows ?? []).find((row: Record<string, unknown>) => rowContainsPhone(row, phone));
+      if (!linked) continue;
+      const legacyUsername = identityFromRow(linked);
+      if (legacyUsername && legacyUsername !== phone) {
+        await migrateLegacyParentIdentity(db, legacyUsername, phone);
+      }
+      const passwordForProfile = parentPassword(parentAuthSecret(), phone);
+      const emailForProfile = authEmailForUser(phone);
+      let authUser = await findAuthUserByEmail(db, emailForProfile);
+      if (!authUser) {
+        const createdAuth = await db.auth.admin.createUser({
+          email: emailForProfile,
+          password: passwordForProfile,
+          email_confirm: true,
+          app_metadata: { oresto: PARENT_SIGNUP_FLAG },
+        });
+        if (!createdAuth.error && createdAuth.data?.user) {
+          authUser = { id: createdAuth.data.user.id };
+        }
+      }
+      if (authUser) {
+        const profileErrorCreate = await insertUserProfile(db, {
+          username: phone,
+          role: 'client',
+          auth_id: authUser.id,
+          qr_token: personalQrToken(phone),
+        }, passwordForProfile);
+        if (!profileErrorCreate) {
+          profile = { username: phone, role: 'client' };
+        }
+      }
+      if (profile) break;
     }
   }
 
