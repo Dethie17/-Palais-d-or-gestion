@@ -87,6 +87,14 @@ export function formatDateJJMMAAAA(iso: string | null | undefined): string {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
+/** HH:MM (heure du navigateur — Dakar = GMT) pour l'heure du paiement. */
+export function formatHeureHHMM(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return '—';
+  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
 /**
  * Contrainte `or` PostgREST : la ligne correspond si le paiement porte
  * l'un des enfants, l'un des abonnements, ou le compte du parent.
@@ -165,7 +173,7 @@ export function paiementsErreurMessage(err: unknown): string {
     return 'La table des paiements n’existe pas encore : ouvrez la base Supabase et exécutez la migration (supabase-o-resto-final-2026.sql).';
   }
   if (/JWT|401|403|permission|permission/i.test(raw)) {
-    return 'Accès refusé : connectez-vous avec un compte Espace ISM (DAF).';
+    return 'Accès refusé : connectez-vous avec un compte Superviseur ou Espace ISM.';
   }
   return `Impossible de lire l’historique des paiements : ${raw}`;
 }

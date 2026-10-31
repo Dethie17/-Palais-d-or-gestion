@@ -8,6 +8,7 @@ import {
   paiementsStatusLabel,
   paiementDate,
   formatDateJJMMAAAA,
+  formatHeureHHMM,
   moisDeIsoDate,
   moisLibelle,
   contraintePaiements,
@@ -35,11 +36,12 @@ interface HistoLigne {
   classe: string;
   mois: string;
   date: string;
+  heure: string;
   statut: string;
 }
 
 /**
- * Espace ISM — Historique des paiements (parents ↔ école).
+ * Superviseur & Espace ISM — Historique des paiements (parents ↔ école).
  * Lecture paginée CÔTÉ SERVEUR de `oresto_payments`, filtres (période,
  * classe, recherche) et export Excel/PDF de TOUTES les lignes filtrées
  * (pas seulement la page affichée). L'enrichissement (identités des
@@ -186,6 +188,7 @@ const HistoriquePaiementsPage = () => {
       classe: child?.className ?? '—',
       mois: moisLibelle(sub?.startDate ? moisDeIsoDate(sub.startDate) : null),
       date: formatDateJJMMAAAA(paiementDate(p)),
+      heure: formatHeureHHMM(paiementDate(p)),
       statut: paiementsStatusLabel(p.status),
     };
   };
@@ -223,15 +226,15 @@ const HistoriquePaiementsPage = () => {
       ['Historique des paiements — O RESTO'],
       [genereSousTitre()],
       [],
-      ['Nom parent', 'Prénom parent', 'Téléphone', 'Montant (FCFA)', 'Nom enfant bénéficiaire', 'Prénom enfant', 'Classe', 'Mois payé', 'Date du paiement', 'Statut'],
+      ['Nom parent', 'Prénom parent', 'Téléphone', 'Montant (FCFA)', 'Nom enfant bénéficiaire', 'Prénom enfant', 'Classe', 'Mois payé', 'Date du paiement', 'Heure', 'Statut'],
       ...lignes.map((l) => [
         l.nomParent, l.prenomParent, l.telephone, l.montant,
-        l.enfantNom, l.enfantPrenom, l.classe, l.mois, l.date, l.statut,
+        l.enfantNom, l.enfantPrenom, l.classe, l.mois, l.date, l.heure, l.statut,
       ]),
     ]);
     const blob = await writeXlsxFile(sheet, {
       sheet: 'Paiements',
-      columns: [22, 16, 16, 14, 18, 18, 14, 16, 16, 12].map((w) => ({ width: w })),
+      columns: [22, 16, 16, 14, 18, 18, 14, 16, 16, 8, 12].map((w) => ({ width: w })),
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -248,8 +251,8 @@ const HistoriquePaiementsPage = () => {
     doc.text('Historique des paiements — O RESTO', 12, 14);
     doc.setFontSize(9);
     doc.text(genereSousTitre(), 12, 20);
-    const avaient: string[] = ['Date du paiement', 'Statut', 'Montant', 'Nom parent', 'Prénom parent', 'Téléphone', 'Enfant bénéficiaire', 'Classe', 'Mois payé'];
-    const xs = [10, 28, 50, 80, 150, 174, 198, 230, 254];
+    const avaient: string[] = ['Date du paiement', 'Heure', 'Statut', 'Montant', 'Nom parent', 'Prénom parent', 'Téléphone', 'Enfant bénéficiaire', 'Classe', 'Mois payé'];
+    const xs = [10, 34, 48, 68, 96, 146, 186, 210, 246, 266];
     const entete = (y: number) => {
       doc.setFont(undefined, 'bold');
       avaient.forEach((h, i) => doc.text(h, xs[i], y));
@@ -267,14 +270,15 @@ const HistoriquePaiementsPage = () => {
         y += 7;
       }
       doc.text(l.date, xs[0], y);
-      doc.text(l.statut, xs[1], y);
-      doc.text(formatCurrency(l.montant), xs[2], y);
-      doc.text(l.nomParent || '—', xs[3], y);
-      doc.text(l.prenomParent || '—', xs[4], y);
-      doc.text(l.telephone, xs[5], y);
-      doc.text([l.enfantPrenom, l.enfantNom].filter(Boolean).join(' ') || '—', xs[6], y);
-      doc.text(l.classe, xs[7], y);
-      doc.text(l.mois, xs[8], y);
+      doc.text(l.heure, xs[1], y);
+      doc.text(l.statut, xs[2], y);
+      doc.text(formatCurrency(l.montant), xs[3], y);
+      doc.text(l.nomParent || '—', xs[4], y);
+      doc.text(l.prenomParent || '—', xs[5], y);
+      doc.text(l.telephone, xs[6], y);
+      doc.text([l.enfantPrenom, l.enfantNom].filter(Boolean).join(' ') || '—', xs[7], y);
+      doc.text(l.classe, xs[8], y);
+      doc.text(l.mois, xs[9], y);
       y += 5.5;
     });
     doc.save(`historique-paiements-${applied.du ?? 'debut'}_${applied.au ?? 'fin'}.pdf`);
@@ -292,10 +296,10 @@ const HistoriquePaiementsPage = () => {
         <div className="relative flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-300 flex items-center gap-1.5">
-              <ReceiptText className="w-4 h-4" /> Espace ISM · Suivi
+              <ReceiptText className="w-4 h-4" /> Suivi des encaissements
             </p>
             <h1 className="mt-1 text-3xl md:text-4xl font-black tracking-tight">Historique des paiements</h1>
-            <p className="text-sm text-slate-300 mt-1">Parents ↔ école : abonnements, tickets et paiements, paginés depuis la base.</p>
+            <p className="text-sm text-slate-300 mt-1">Parents ↔ école : abonnements, tickets et paiements, avec date et heure d’encaissement.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -423,6 +427,7 @@ const HistoriquePaiementsPage = () => {
                 <th className="text-left p-3 font-black">Classe</th>
                 <th className="text-left p-3 font-black">Mois payé</th>
                 <th className="text-left p-3 font-black">Date du paiement</th>
+                <th className="text-left p-3 font-black">Heure</th>
                 <th className="text-left p-3 font-black">Statut</th>
               </tr>
             </thead>
@@ -439,6 +444,7 @@ const HistoriquePaiementsPage = () => {
                     <td className="p-3 text-xs text-slate-600">{l.classe}</td>
                     <td className="p-3 text-xs font-bold text-slate-700">{l.mois}</td>
                     <td className="p-3 text-xs whitespace-nowrap tabular-nums text-slate-600">{l.date}</td>
+                    <td className="p-3 text-xs whitespace-nowrap tabular-nums text-slate-600">{l.heure}</td>
                     <td className="p-3">
                       <span className={`px-2 py-1 rounded-full text-[11px] font-black whitespace-nowrap ${
                         p.status === 'paid' ? 'bg-emerald-100 text-emerald-700'
@@ -451,10 +457,10 @@ const HistoriquePaiementsPage = () => {
                 );
               })}
               {(rows ?? []).length === 0 && !loading && !error && (
-                <tr><td colSpan={9} className="p-8 text-center text-slate-400">Aucun paiement pour ces critères.</td></tr>
+                <tr><td colSpan={10} className="p-8 text-center text-slate-400">Aucun paiement pour ces critères.</td></tr>
               )}
               {loading && (
-                <tr><td colSpan={9} className="p-8 text-center text-slate-400">Chargement de l’historique…</td></tr>
+                <tr><td colSpan={10} className="p-8 text-center text-slate-400">Chargement de l’historique…</td></tr>
               )}
             </tbody>
           </table>
@@ -495,7 +501,7 @@ const HistoriquePaiementsPage = () => {
               </div>
               <p className="text-xs text-slate-500 flex flex-wrap justify-between gap-1">
                 <span>Mois payé : <strong className="text-slate-700">{l.mois}</strong></span>
-                <span>Le {l.date}</span>
+                <span>Le {l.date} à {l.heure}</span>
               </p>
             </div>
           );

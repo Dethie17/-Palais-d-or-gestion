@@ -53,7 +53,9 @@ import {
   paiementsStatusLabel,
   contraintePaiements,
   formatDateJJMMAAAA,
+  formatHeureHHMM,
 } from '@/lib/paiementsHistorique';
+import { canAccess } from '@/lib/permissions';
 
 describe('Historique des paiements — helpers', () => {
   it('forme le libellé du mois payé', () => {
@@ -66,6 +68,19 @@ describe('Historique des paiements — helpers', () => {
   it('formate la date du paiement en JJ/MM/AAAA', () => {
     expect(formatDateJJMMAAAA('2026-10-05T18:30:00Z')).toBe('05/10/2026');
     expect(formatDateJJMMAAAA(null)).toBe('—');
+  });
+
+  it('formate l’heure du paiement en HH:MM', () => {
+    expect(formatHeureHHMM('2026-10-05T18:30:00Z')).toMatch(/^\d{2}:\d{2}$/);
+    expect(formatHeureHHMM(null)).toBe('—');
+    expect(formatHeureHHMM('pas une date')).toBe('—');
+  });
+
+  it('ouvre l’historique des paiements au Superviseur et à l’Espace ISM', () => {
+    expect(canAccess('personnel', 'paiements')).toBe(true);
+    expect(canAccess('admin', 'paiements')).toBe(true);
+    expect(canAccess('gestionnaire', 'paiements')).toBe(false);
+    expect(canAccess('client', 'paiements')).toBe(false);
   });
 
   it('étiquette les statuts en français', () => {

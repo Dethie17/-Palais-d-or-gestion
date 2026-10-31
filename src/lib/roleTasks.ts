@@ -72,6 +72,7 @@ const SUPERVISOR_TASKS: RoleTask[] = [
   ...SERVICE_TASKS,
   { label: 'Tableau de bord', page: 'dashboard', detail: 'Repas servis, CA, abonnés actifs, alertes' },
   { label: 'Traiter les réclamations', page: 'reclamations', detail: 'Répondre aux parents, publier une annonce' },
+  { label: 'Historique des paiements', page: 'paiements', detail: 'Encaissements parents ↔ école : date, heure, statut et export' },
   { label: 'Suivi financier', page: 'finance', detail: 'Ventes, abonnements, solde ISM' },
 ];
 
