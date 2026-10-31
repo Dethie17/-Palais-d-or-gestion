@@ -32,9 +32,32 @@ export function adminClient(env: NodeJS.ProcessEnv = process.env): SupabaseClien
   if (cached && cachedKey === `${url}|${key}`) return cached;
   cached = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    // Verrouille la clé de service : même si une session utilisateur était
+    // posée sur ce client, les requêtes resteraient en service_role et ne
+    // passeraient jamais sous RLS.
+    global: { headers: { Authorization: `Bearer ${key}` } },
   });
   cachedKey = `${url}|${key}`;
   return cached;
+}
+
+/**
+ * Client éphémère réservé aux connexions par mot de passe.
+ *
+ * `signInWithPassword` mémorise la session dans le client. Si on l'exécute sur
+ * le client admin partagé, toutes les requêtes suivantes utilisent le jeton du
+ * dernier utilisateur connecté (RLS) : les autres fiches deviennent invisibles
+ * et les écritures sont refusées. Ce client ne doit donc jamais être partagé.
+ */
+export function passwordAuthClient(env: NodeJS.ProcessEnv = process.env): SupabaseClient {
+  const url = (env.SUPABASE_URL ?? env.VITE_SUPABASE_URL ?? '').trim();
+  const key = (env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
+  if (!url || !key) {
+    throw new SupabaseAdminConfigError([!url ? 'SUPABASE_URL' : '', !key ? 'SUPABASE_SERVICE_ROLE_KEY' : ''].filter(Boolean));
+  }
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
 /** Raised par les fonctions SQL quand la ligne visée n'existe pas. */

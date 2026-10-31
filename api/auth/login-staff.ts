@@ -26,7 +26,7 @@
 
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { adminClient } from '../_lib/supabaseAdmin.js';
+import { adminClient, passwordAuthClient } from '../_lib/supabaseAdmin.js';
 import { authEmailForUser, findAuthUserByEmail } from '../_lib/parentAuth.js';
 import { STAFF_SIGNUP_FLAG } from '../_lib/username.js';
 import {
@@ -83,8 +83,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   let db;
+  let authDb;
   try {
     db = adminClient();
+    authDb = passwordAuthClient();
   } catch {
     return sendError(res, 503, 'Connexion momentanément indisponible.');
   }
@@ -161,8 +163,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return sendError(res, 500, 'Ouverture de la session impossible.');
   }
 
-  // 4) Session.
-  const { data, error } = await db.auth.signInWithPassword({ email, password });
+  // 4) Session. Client dédié : ne jamais poser la session sur le client admin
+  // partagé (le jeton utilisateur remplacerait la clé de service).
+  const { data, error } = await authDb.auth.signInWithPassword({ email, password });
   if (error || !data?.session) {
     return sendError(res, 500, 'Connexion impossible pour le moment. Réessayez.');
   }
