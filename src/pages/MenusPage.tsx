@@ -22,7 +22,7 @@ const MenusPage = ({ onNavigate }: MenusPageProps) => {
   const canBuy = user?.role === 'client';
   const isStaffReadOnly = user?.role !== 'client';
 
-  // Seuls les jours composés par le DG (au moins un plat) sont affichés.
+  // Seuls les jours composés par le DG (plat, description ou dessert) sont affichés.
   // Semaine vide tant que rien n'est publié → bel état vide, aucune fausse liste.
   const published = publishedDays(weeklyMenus);
   const menuDuJour = published.find((m) => m.day === todayName);
@@ -68,12 +68,12 @@ const MenusPage = ({ onNavigate }: MenusPageProps) => {
                   dessert={menuDuJour.dessert}
                   total={menuTicketTotal(menuDuJour)}
                   highlight
-                  action={canBuy ? (
+                  action={canBuy && menuTicketTotal(menuDuJour) > 0 ? (
                     <button onClick={() => onNavigate('subscription')} className="w-full flex items-center justify-center gap-1 px-4 py-2.5 rounded-xl bg-green-700 text-white text-sm font-bold hover:bg-green-800">
                       <Ticket className="w-4 h-4" /> Acheter ce ticket
                     </button>
                   ) : (
-                    <span className="block text-center text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-2.5 rounded-xl">Lecture seule</span>
+                    <span className="block text-center text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-2.5 rounded-xl">{canBuy ? 'Menu consultable' : 'Lecture seule'}</span>
                   )}
                 />
               </div>
@@ -96,7 +96,7 @@ const MenusPage = ({ onNavigate }: MenusPageProps) => {
                   items={m.items}
                   dessert={m.dessert}
                   total={menuTicketTotal(m)}
-                  action={canBuy ? (
+                  action={canBuy && menuTicketTotal(m) > 0 ? (
                     <button onClick={() => onNavigate('subscription')} className="w-full flex items-center justify-center gap-1 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700">
                       <Ticket className="w-4 h-4" /> Ticket
                     </button>

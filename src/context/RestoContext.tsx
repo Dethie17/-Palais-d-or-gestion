@@ -51,7 +51,7 @@ import { settlePaymentOnServer } from '@/lib/financeApi';
 import { normalizeParentPhone, isValidParentPhone, formatParentPhone } from '@/lib/parentIdentity';
 import { dedupeChildren, childNaturalKey } from '@/lib/childIdentity';
 import { inferCycleFromClass, normalizeCycle, canonicalClassName } from '@/lib/schoolCycles';
-import { decodeMenuDescription, encodeMenuDescription, foldDayPriceIntoItems } from '@/lib/menus';
+import { decodeMenuDescription, encodeMenuDescription, foldDayPriceIntoItems, publishedDays } from '@/lib/menus';
 import { referenceWeek } from '@/data/cantineWeek';
 
 /**
@@ -982,7 +982,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           });
           // La base distante est la vérité quand le Personnel a publié ;
           // sinon (première installation) on présente la semaine de référence.
-          if (remote.some((m) => m.items.length > 0)) {
+          if (publishedDays(remote).length > 0) {
             setWeeklyMenus(remote);
           } else if (!hasStoredWeek()) {
             setWeeklyMenus(referenceWeek());

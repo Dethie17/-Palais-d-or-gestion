@@ -6,6 +6,7 @@ import { Html5Qrcode, Html5QrcodeSupportedFormats, Html5QrcodeScannerState } fro
 import { pickBackCameraId, isSecureScanContext, friendlyScanError, scanErrorName } from '@/lib/qrScan';
 import { formatCurrency } from '@/lib/utils';
 import { ABO_OFFICIAL } from '@/lib/aboTariffs';
+import { publishedDays } from '@/lib/menus';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
 function sameDay(a: Date, b: Date) {
@@ -204,15 +205,16 @@ const ValidationPage = () => {
 
   // Plat du jour : publié par le Personnel (menus cantine). Sert de référence
   // affichée sur chaque ligne — sans menu publié, on sert par abonnement/solde.
-  const publishedMenus = weeklyMenus.filter((m) => (m.items ?? []).length > 0);
+  const publishedMenus = publishedDays(weeklyMenus);
   const menuOfDate = (d: Date) => publishedMenus.find((m) => m.day === DAY_NAMES[d.getDay()]);
   const dishOfDate = (d: Date) => {
     const m = menuOfDate(d);
     if (!m) return null;
     return m.name || `Menu du ${m.day}`;
   };
+  const todayMenu = menuOfDate(new Date());
   const todayDish = dishOfDate(new Date());
-  const todayItems = menuOfDate(new Date())?.items ?? [];
+  const todayItems = todayMenu?.items ?? [];
 
   // Nom d'élève d'un passage : prénom + nom de l'enfant, sinon compte.
   const eleveOfValidation = (v: { childId?: string; clientUsername: string }) => {
@@ -653,6 +655,7 @@ const ValidationPage = () => {
                 {todayDish ? (
                   <>
                     <p className="font-black text-slate-900 mt-1">{todayDish}</p>
+                    {todayMenu?.description && <p className="text-xs text-slate-600 mt-1">{todayMenu.description}</p>}
                     {todayItems.length > 0 && (
                       <p className="text-xs text-slate-600 mt-1 flex flex-wrap gap-1.5">
                         {todayItems.map((it) => (
@@ -660,6 +663,7 @@ const ValidationPage = () => {
                         ))}
                       </p>
                     )}
+                    {todayMenu?.dessert && <p className="text-xs font-semibold text-amber-700 mt-1">Dessert : {todayMenu.dessert}</p>}
                   </>
                 ) : (
                   <p className="text-sm text-slate-500 mt-1">Aucun menu publié aujourd’hui — repas standard décompté de l’abonnement ou de la carte.</p>

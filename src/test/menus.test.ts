@@ -84,13 +84,26 @@ describe('composition des menus du jour (DG)', () => {
     expect(isWeekPublishable([{ day: 'Lundi', items: [] }])).toBe(false);
   });
 
-  it('jours publiés = ceux avec au moins un plat', () => {
+  it('description ou dessert suffisent pour publier 4 à 5 jours', () => {
+    const four = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi'].map((day, i) => ({
+      day,
+      items: [],
+      description: i % 2 === 0 ? 'Tacos + Jus' : '',
+      dessert: i % 2 === 0 ? '' : 'Fruit de saison',
+    }));
+    expect(isWeekPublishable(four)).toBe(true);
+    expect(publishedDays(four).map((m) => m.day)).toEqual(['Lundi', 'Mardi', 'Mercredi', 'Jeudi']);
+    expect(isWeekPublishable([{ day: 'Lundi', items: [], description: '  ', dessert: '' }])).toBe(false);
+  });
+
+  it('jours publiés = ceux avec un plat, une description ou un dessert', () => {
     const menus = [
       { day: 'Lundi', items: [{ name: 'A', price: 500 }] },
-      { day: 'Mardi', items: [] },
-      { day: 'Mercredi', items: null as never },
+      { day: 'Mardi', items: [], description: 'Tacos + Jus' },
+      { day: 'Mercredi', items: [], dessert: 'Fruit de saison' },
+      { day: 'Jeudi', items: null as never },
     ];
-    expect(publishedDays(menus).map((m) => m.day)).toEqual(['Lundi']);
+    expect(publishedDays(menus).map((m) => m.day)).toEqual(['Lundi', 'Mardi', 'Mercredi']);
     expect(publishedDays([])).toEqual([]);
   });
 });

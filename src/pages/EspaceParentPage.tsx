@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { officialPrice } from '@/lib/aboTariffs';
 import { cycleOfClass } from '@/lib/schoolCycles';
 import { officialAboForCycle } from '@/lib/aboTariffs';
+import { publishedDays } from '@/lib/menus';
 import { dayPhoto } from '@/data/cantineWeek';
 import type {
   Complaint, ComplaintCategory, ComplaintStatus,
@@ -396,9 +397,9 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
   }, [myPayments, username, kids, childTxs, histChild, myValidations, allMine, soldeAfterByTx]);
 
   const sortedMenus = [...weeklyMenus].sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day));
-  // Seuls les jours publiés par le Personnel (au moins un plat) existent.
+  // Seuls les jours publiés par le Personnel (plat, description ou dessert) existent.
   // Semaine vide = bel état vide, aucun contenu inventé.
-  const publishedMenus = sortedMenus.filter((m) => (m.items ?? []).length > 0);
+  const publishedMenus = publishedDays(sortedMenus);
   const menuDuJour = publishedMenus.find((m) => m.day === todayName)
     ?? publishedMenus[0];
 
@@ -472,7 +473,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
         <section id="menu" className="scroll-mt-24">
           <SectionTitle step="2" title="Menu du jour" sub="Consultation — le menu du jour est servi à la cantine, sans achat en ligne" />
 
-          {menuDuJour && (menuDuJour.items ?? []).length > 0 ? (
+          {menuDuJour ? (
             <div className="mt-4 max-w-md">
               <p className="font-bold text-slate-800 mb-2">Menu du jour — {menuDuJour.day} : {menuDuJour.name || `Menu du ${menuDuJour.day}`}</p>
               <div className="bg-white rounded-2xl border-2 border-green-500 ring-2 ring-green-200 shadow-sm overflow-hidden">
@@ -485,11 +486,14 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
                 <div className="p-4">
                   <p className="font-extrabold text-slate-900">{menuDuJour.name || `Menu du ${menuDuJour.day}`}</p>
                   {menuDuJour.description && <p className="text-xs text-slate-500 mt-0.5">{menuDuJour.description}</p>}
-                  <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
-                    {menuDuJour.items.map((it, i) => (
-                      <li key={`${it.name}-${i}`} className="truncate">{it.name}</li>
-                    ))}
-                  </ul>
+                  {menuDuJour.dessert && <p className="text-sm font-semibold text-amber-700 mt-1">Dessert : {menuDuJour.dessert}</p>}
+                  {menuDuJour.items.length > 0 && (
+                    <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
+                      {menuDuJour.items.map((it, i) => (
+                        <li key={`${it.name}-${i}`} className="truncate">{it.name}</li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </div>
             </div>

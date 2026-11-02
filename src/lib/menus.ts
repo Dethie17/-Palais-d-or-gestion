@@ -46,16 +46,33 @@ export function isWeekComplete(menus: { day: string; items: WeeklyMenuItem[] | n
   });
 }
 
-/** Jours composés (au moins un plat) — seuls ceux-là sont affichés aux parents. */
-export function publishedDays<T extends { day: string; items: WeeklyMenuItem[] | null | undefined }>(menus: T[]): T[] {
-  return menus.filter((m) => Array.isArray(m.items) && m.items.length > 0);
+/** Contenu minimal d'un menu : un plat, une description ou un dessert. */
+export type MenuContent = {
+  day: string;
+  items?: WeeklyMenuItem[] | null;
+  description?: string | null;
+  dessert?: string | null;
+};
+
+/** Un jour est composé dès qu'il porte au moins un plat, une description ou un dessert. */
+export function hasMenuContent(menu: MenuContent): boolean {
+  return (
+    (Array.isArray(menu.items) && menu.items.length > 0) ||
+    !!menu.description?.trim() ||
+    !!menu.dessert?.trim()
+  );
+}
+
+/** Jours composés — seuls ceux-là sont affichés aux parents. */
+export function publishedDays<T extends MenuContent>(menus: T[]): T[] {
+  return menus.filter(hasMenuContent);
 }
 
 /**
  * Publication autorisée dès qu'au moins un jour est composé : une semaine
  * partielle (4 jours, jour férié, vendredi sans cantine…) reste publiable.
  */
-export function isWeekPublishable(menus: { day: string; items: WeeklyMenuItem[] | null | undefined }[]): boolean {
+export function isWeekPublishable(menus: MenuContent[]): boolean {
   return publishedDays(menus).length > 0;
 }
 

@@ -186,14 +186,13 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
               <div className="flex items-center gap-2 text-sm font-black text-slate-800">
                 <span className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center"><CalendarDays className="w-4 h-4 text-slate-600" /></span>
                 Menu de la semaine
-                {weeklyMenus.some((m) => (m.items ?? []).length > 0) && (
+                {published.length > 0 && (
                   <span className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
-                    {weeklyMenus.filter((m) => (m.items ?? []).length > 0).length}/5 jours publiés
+                    {published.length}/5 jours publiés
                   </span>
                 )}
               </div>
               {(() => {
-                const published = weeklyMenus.filter((m) => (m.items ?? []).length > 0);
                 if (published.length === 0) {
                   return (
                     <div className="mt-3 text-center py-5 px-4 rounded-2xl bg-slate-50 border border-dashed border-slate-200">
@@ -214,7 +213,7 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block font-bold text-sm text-slate-800 truncate">{m.name || `Menu du ${m.day}`}</span>
-                          <span className="block text-xs text-slate-500 truncate">{m.items.map((it) => it.name).join(' • ')}{m.dessert ? ` • Dessert : ${m.dessert}` : ''}</span>
+                          <span className="block text-xs text-slate-500 truncate">{m.items.length > 0 ? m.items.map((it) => it.name).join(' • ') : m.description}{m.dessert ? `${m.items.length > 0 || m.description ? ' • ' : ''}Dessert : ${m.dessert}` : ''}</span>
                         </span>
                         <span className="font-black text-sm text-slate-700 whitespace-nowrap flex-shrink-0">{formatCurrency(menuTicketTotal(m))}</span>
                       </li>
@@ -281,7 +280,7 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
               </div>
               <ul className="mt-3 space-y-2">
                 {weeklyMenus.map((m) => {
-                  const ok = (m.items ?? []).length > 0;
+                  const ok = published.some((p) => p.day === m.day);
                   return (
                     <li key={m.day} className="flex items-center gap-2.5 text-sm">
                       <span className={`text-[11px] font-black px-2 py-1 rounded-lg whitespace-nowrap ${ok ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
@@ -323,7 +322,7 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard label="Repas servis (jour)" value={acceptedToday.length} />
             <StatCard label="Abonnements actifs" value={stats.activeClients} />
-            <StatCard label="Menus publiés" value={`${weeklyMenus.filter((m) => (m.items ?? []).length > 0).length}/5`} />
+            <StatCard label="Menus publiés" value={`${published.length}/5`} />
             <StatCard label="Plats récréation" value={products.filter((p) => p.available).length} />
           </div>
 
