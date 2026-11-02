@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { weeklyMenuTotal, menuTicketTotal, sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete, publishedDays, foldDayPriceIntoItems, encodeMenuDescription, decodeMenuDescription } from '@/lib/menus';
+import { weeklyMenuTotal, menuTicketTotal, sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete, isWeekPublishable, publishedDays, foldDayPriceIntoItems, encodeMenuDescription, decodeMenuDescription } from '@/lib/menus';
 
 describe('composition des menus du jour (DG)', () => {
   it('total = somme des prix (négatifs ignorés)', () => {
@@ -71,6 +71,17 @@ describe('composition des menus du jour (DG)', () => {
     expect(isWeekComplete(full.slice(0, 4))).toBe(false);
     expect(isWeekComplete(full.map((m) => (m.day === 'Mardi' ? { ...m, items: [] } : m)))).toBe(false);
     expect(isWeekComplete([])).toBe(false);
+  });
+
+  it('semaine publiable même partielle : 4 jours suffisent', () => {
+    const four = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi'].map((day) => ({
+      day,
+      items: [{ name: 'Plat', price: 1000 }],
+    }));
+    expect(isWeekPublishable(four)).toBe(true);
+    expect(isWeekPublishable(four.slice(0, 1))).toBe(true);
+    expect(isWeekPublishable([])).toBe(false);
+    expect(isWeekPublishable([{ day: 'Lundi', items: [] }])).toBe(false);
   });
 
   it('jours publiés = ceux avec au moins un plat', () => {

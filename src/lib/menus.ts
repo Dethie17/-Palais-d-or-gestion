@@ -51,6 +51,14 @@ export function publishedDays<T extends { day: string; items: WeeklyMenuItem[] |
   return menus.filter((m) => Array.isArray(m.items) && m.items.length > 0);
 }
 
+/**
+ * Publication autorisée dès qu'au moins un jour est composé : une semaine
+ * partielle (4 jours, jour férié, vendredi sans cantine…) reste publiable.
+ */
+export function isWeekPublishable(menus: { day: string; items: WeeklyMenuItem[] | null | undefined }[]): boolean {
+  return publishedDays(menus).length > 0;
+}
+
 /** Normalise un plat saisi par le DG : nom requis, prix entier ≥ 0, sinon null. */
 export function sanitizeMenuItem(name: string, price: number): WeeklyMenuItem | null {
   const clean = name.trim().slice(0, 60);

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Product, ProductExtra, WEEK_DAYS, WeeklyMenuItem } from '@/types/menu';
 import { categories } from '@/data/mockData';
 import { formatCurrency } from '@/lib/utils';
-import { sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete } from '@/lib/menus';
+import { sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekPublishable } from '@/lib/menus';
 import { Plus, Edit2, Trash2, X, Check, CalendarDays, Eye } from 'lucide-react';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useProducts } from '@/context/ProductContext';
@@ -75,9 +75,9 @@ const MenuManagement = () => {
     setDay(day, { items: cur.items.filter((_, i) => i !== idx) });
   };
   const composedCount = WEEK_DAYS.filter((d) => (weekForm[d]?.items ?? []).length > 0).length;
-  const weekComplete = isWeekComplete(WEEK_DAYS.map((d) => ({ day: d, items: weekForm[d]?.items ?? [] })));
+  const canPublish = isWeekPublishable(WEEK_DAYS.map((d) => ({ day: d, items: weekForm[d]?.items ?? [] })));
   const saveWeekMenus = () => {
-    if (!weekComplete) return;
+    if (!canPublish) return;
     WEEK_DAYS.forEach((d) => {
       const row = weekForm[d];
       if (!row) return;
@@ -114,7 +114,7 @@ const MenuManagement = () => {
         <p className="font-bold text-slate-800 flex items-center gap-2">
           <CalendarDays className="w-5 h-5 text-slate-500" /> Menus du jour — composition
         </p>
-        <p className="text-xs text-slate-500 mt-1">Composez chaque menu : plats, dessert et description. La semaine s’affiche — Accès Abonné ET Espace Repas (caisse) — une fois les 5 jours composés et publiés.</p>
+        <p className="text-xs text-slate-500 mt-1">Composez chaque menu : plats, dessert et description. La semaine s’affiche — Accès Abonné ET Espace Repas (caisse) — dès qu’au moins un jour est composé et publié.</p>
         {isDG && (
           <p className="mt-2 text-xs font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-1.5">
             <Eye className="w-4 h-4 flex-shrink-0" /> Suivi Direction : composition modifiable uniquement par le Superviseur.
@@ -196,14 +196,14 @@ const MenuManagement = () => {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             onClick={saveWeekMenus}
-            disabled={!weekComplete}
-            title={weekComplete ? 'Publier la semaine (Accès Abonné + Espace Repas)' : 'Composez les 5 jours pour publier'}
+            disabled={!canPublish}
+            title={canPublish ? 'Publier la semaine (Accès Abonné + Espace Repas)' : 'Ajoutez au moins un plat pour publier'}
             className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-700 disabled:bg-slate-200 disabled:text-slate-400"
           >
             Publier les menus (parents + Espace Repas)
           </button>
-          <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${weekComplete ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-            {composedCount}/5 jours prêts{weekComplete ? '' : ' — au moins un plat par jour requis pour publier'}
+          <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${canPublish ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+            {composedCount}/5 jours composés{canPublish ? ' — publication possible' : ' — ajoutez au moins un plat'}
           </span>
           {weekSaved && <span className="text-xs font-bold text-green-700">Menus publiés ✓ (visibles Accès Abonné + Espace Repas)</span>}
         </div>
