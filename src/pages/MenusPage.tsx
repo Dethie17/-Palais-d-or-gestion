@@ -65,6 +65,7 @@ const MenusPage = ({ onNavigate }: MenusPageProps) => {
                   name={menuDuJour.name || `Menu du ${menuDuJour.day}`}
                   description={menuDuJour.description}
                   items={menuDuJour.items}
+                  dessert={menuDuJour.dessert}
                   total={menuTicketTotal(menuDuJour)}
                   highlight
                   action={canBuy ? (
@@ -93,6 +94,7 @@ const MenusPage = ({ onNavigate }: MenusPageProps) => {
                   name={m.name || `Menu du ${m.day}`}
                   description={m.description}
                   items={m.items}
+                  dessert={m.dessert}
                   total={menuTicketTotal(m)}
                   action={canBuy ? (
                     <button onClick={() => onNavigate('subscription')} className="w-full flex items-center justify-center gap-1 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700">

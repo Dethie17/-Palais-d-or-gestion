@@ -27,9 +27,11 @@ import {
   handlePreflight,
   methodNotAllowed,
   readJson,
+  rejectForeignOrigin,
   sendError,
   sendJson,
 } from '../_lib/http.js';
+import { enforceIpRateLimit, enforceKeyRateLimit } from '../_lib/rateLimit.js';
 import { insertUserProfile } from '../_lib/profile.js';
 import { personalQrToken } from '../_lib/qrToken.js';
 import { PARENT_SIGNUP_FLAG } from '../_lib/username.js';
@@ -88,6 +90,11 @@ async function migrateLegacyParentIdentity(db: ReturnType<typeof adminClient>, l
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   if (req.method === 'OPTIONS') return handlePreflight(req, res);
   if (req.method !== 'POST') return methodNotAllowed(req, res, ['POST']);
+  if (rejectForeignOrigin(req, res)) return;
+
+  // Plusieurs parents peuvent partager une même connexion (cantine, cybercafé) :
+  // la limite par IP est volontairement large ; c'est le numéro qui est borné.
+  if (!enforceIpRateLimit(req, res, 'auth:login-parent', 60, 5 * 60_000)) return;
 
   let body: LoginBody;
   try {
@@ -100,6 +107,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   if (!phone) {
     return sendError(res, 400, 'Numéro invalide : 9 chiffres (ex : 77 123 45 67).');
   }
+  if (!enforceKeyRateLimit(res, 'auth:login-parent', phone, 10, 15 * 60_000)) return;
 
   let db;
   let authDb;

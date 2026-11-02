@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { xlsxFile } from '@/test/helpers/xlsxFixture';
 import {
   IMPORT_HEADERS,
+  PARENT_IMPORT_HEADERS,
   analyzeImport,
   analyzeParentImport,
   buildParentTemplateBlob,
@@ -11,6 +12,7 @@ import {
   parseImportFile,
   parseParentImportFile,
 } from '@/lib/excelImport';
+import { childNaturalKey } from '@/lib/childIdentity';
 
 /**
  * L'import Excel ne doit jamais écrire de travers : en-têtes imposés,
@@ -157,23 +159,27 @@ describe('Analyse avant écriture', () => {
 
 describe('Import parents (accès par numéro)', () => {
   const PHEAD = ['prenom', 'nom', 'telephone'];
+  const PCHEAD = [...PARENT_IMPORT_HEADERS];
 
-  it('le modèle parents ne contient que les en-têtes attendus', async () => {
+  it('le modèle parents contient les colonnes parent ET enfant', async () => {
     const parsed = await parseParentImportFile(await buildParentTemplateBlob());
     expect(parsed.rows).toHaveLength(0);
     expect(parsed.issues).toHaveLength(0);
+    expect(parsed.withChildren).toBe(true);
+    expect(PCHEAD).toEqual(['prenom', 'nom', 'telephone', 'enfant_prenom', 'enfant_nom', 'enfant_classe']);
   });
 
-  it('normalise le numéro (+221, espaces) et nettoie les noms', async () => {
+  it('normalise le numéro (+221, espaces) et nettoie les noms (ancien modèle)', async () => {
     const parsed = await parseParentImportFile(await workbook([PHEAD, ['  Awa ', 'Diallo', '+221 77 123 45 67']]),
     );
     expect(parsed.issues).toHaveLength(0);
+    expect(parsed.withChildren).toBe(false);
     expect(parsed.rows).toEqual([
       { line: 2, prenom: 'Awa', nom: 'Diallo', telephone: '771234567' },
     ]);
   });
 
-  it('rejette numéro invalide, nom manquant et numéro répété', async () => {
+  it('rejette numéro invalide, nom manquant et numéro répété (ancien modèle)', async () => {
     const parsed = await parseParentImportFile(await workbook([
         PHEAD,
         ['Awa', 'Diallo', '123'],
@@ -197,5 +203,61 @@ describe('Import parents (accès par numéro)', () => {
     const analysis = analyzeParentImport(rows, new Set(['760000000']));
     expect(analysis.toCreate.map((r) => r.telephone)).toEqual(['771234567']);
     expect(analysis.duplicates.map((d) => d.line)).toEqual([3]);
+  });
+
+  it('lit parent + enfant dans le même fichier et accepte la fratrie', async () => {
+    const parsed = await parseParentImportFile(await workbook([
+      PCHEAD,
+      ['Awa', 'Diallo', '771234567', 'Moussa', 'Diallo', 'ce2'],
+      ['Awa', 'Diallo', '77 123 45 67', 'Aminata', 'Diallo', 'CM1'],
+    ]));
+    expect(parsed.issues).toHaveLength(0);
+    expect(parsed.withChildren).toBe(true);
+    expect(parsed.rows).toHaveLength(2);
+    expect(parsed.rows[0]).toEqual({
+      line: 2, prenom: 'Awa', nom: 'Diallo', telephone: '771234567',
+      enfantPrenom: 'Moussa', enfantNom: 'Diallo', enfantClasse: 'CE2',
+    });
+    expect(parsed.rows[1].enfantClasse).toBe('CM1');
+  });
+
+  it('signale les champs enfant manquants et l’enfant répété', async () => {
+    const parsed = await parseParentImportFile(await workbook([
+      PCHEAD,
+      ['Awa', 'Diallo', '771234567', '', 'Diallo', 'CE2'],
+      ['Awa', 'Diallo', '771234567', 'Moussa', 'Diallo', ''],
+      ['Awa', 'Diallo', '771234567', 'Moussa', 'Diallo', 'CE2'],
+      ['Awa', 'Diallo', '771234567', 'Moussa', 'Diallo', 'ce2'],
+    ]));
+    expect(parsed.rows).toHaveLength(1);
+    expect(parsed.issues.map((i) => i.line)).toEqual([2, 3, 5]);
+    expect(parsed.issues[0].message).toMatch(/prénom de l’enfant/);
+    expect(parsed.issues[1].message).toMatch(/classe de l’enfant/);
+    expect(parsed.issues[2].message).toMatch(/répété/);
+  });
+
+  it('refuse un fichier avec des colonnes enfant incomplètes', async () => {
+    await expect(parseParentImportFile(await workbook([
+      ['prenom', 'nom', 'telephone', 'enfant_prenom'],
+      ['Awa', 'Diallo', '771234567', 'Moussa'],
+    ]))).rejects.toThrow(/enfant_nom, enfant_classe/);
+  });
+
+  it('un parent déjà connu avec un NOUVEL enfant reste à créer', () => {
+    const rows = [{
+      line: 2, prenom: 'Awa', nom: 'Diallo', telephone: '771234567',
+      enfantPrenom: 'Moussa', enfantNom: 'Diallo', enfantClasse: 'CE2',
+    }];
+    const fresh = analyzeParentImport(rows, new Set(['771234567']), new Set());
+    expect(fresh.toCreate).toHaveLength(1);
+    expect(fresh.duplicates).toHaveLength(0);
+
+    const known = analyzeParentImport(
+      rows,
+      new Set(['771234567']),
+      new Set([childNaturalKey('771234567', 'moussa', 'DIALLO', 'ce2')]),
+    );
+    expect(known.toCreate).toHaveLength(0);
+    expect(known.duplicates).toHaveLength(1);
   });
 });

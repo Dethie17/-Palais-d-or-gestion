@@ -71,7 +71,7 @@ const SpaceTopNav = ({ currentPage, onNavigate }: { currentPage: PageName; onNav
                 key={item.page}
                 onClick={() => onNavigate(item.page)}
                 aria-current={isActive ? 'page' : undefined}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 whitespace-nowrap rounded-full text-xs font-bold transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-3 py-2 min-h-[44px] whitespace-nowrap rounded-full text-xs font-bold transition-colors ${
                   isActive
                     ? 'bg-green-700 text-white shadow-sm'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -87,7 +87,7 @@ const SpaceTopNav = ({ currentPage, onNavigate }: { currentPage: PageName; onNav
         <button
           onClick={() => void logout()}
           data-testid="space-logout"
-          className="ml-auto flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 border-slate-200 text-xs font-black text-slate-700 hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+          className="ml-auto flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-xs font-black text-slate-700 hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-colors"
         >
           <LogOut aria-hidden className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Déconnexion</span>

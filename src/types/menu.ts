@@ -344,8 +344,10 @@ export interface WeeklyMenu {
   day: WeekDay;
   name: string;
   description: string;
-  /** Plats du jour (noms — sans prix unitaires côté composition). */
+  /** Plats du jour (noms - sans prix unitaires côté composition). */
   items: WeeklyMenuItem[];
+  /** Dessert du jour (texte libre, affiché séparément des plats). */
+  dessert?: string;
   /** Prix UNIQUE du ticket du jour (FCFA), saisi par le Personnel. */
   price?: number;
 }

@@ -20,9 +20,11 @@ const TOAST_ID = 'o-resto-session-expiry';
 
 const envIdleMinutes = Number(import.meta.env.VITE_SESSION_IDLE_MINUTES as string | undefined);
 const envMaxHours = Number(import.meta.env.VITE_SESSION_MAX_HOURS as string | undefined);
-const IDLE_MS = Math.max(1, Number.isFinite(envIdleMinutes) && envIdleMinutes > 0 ? envIdleMinutes : 20) * 60_000;
-const MAX_MS = Math.max(1, Number.isFinite(envMaxHours) && envMaxHours > 0 ? envMaxHours : 12) * 3_600_000;
-const WARN_MS = 60_000;
+export const SESSION_IDLE_MS =
+  Math.max(1, Number.isFinite(envIdleMinutes) && envIdleMinutes > 0 ? envIdleMinutes : 20) * 60_000;
+export const SESSION_MAX_MS =
+  Math.max(1, Number.isFinite(envMaxHours) && envMaxHours > 0 ? envMaxHours : 12) * 3_600_000;
+export const SESSION_WARN_MS = 60_000;
 const TICK_MS = 15_000;
 const WRITE_THROTTLE_MS = 30_000;
 
@@ -30,9 +32,44 @@ const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'touchstart', 'scroll', 'wheel'
 
 export type SessionExpiryReason = 'inactivity' | 'max-duration';
 
-interface SessionClock {
+export interface SessionClock {
   startedAt: number;
   lastActivity: number;
+}
+
+export type SessionClockState =
+  | { status: 'active'; remainingMs: number }
+  | { status: 'warning'; remainingMs: number }
+  | { status: 'expired'; reason: SessionExpiryReason; remainingMs: 0 };
+
+/**
+ * État d'une session à un instant donné — sans horloge ni effet de bord.
+ *
+ * L'ordre compte : la durée maximale prime sur l'inactivité. Une session
+ * laissée ouverte 12 h doit se fermer même si l'utilisateur clique encore.
+ */
+export function evaluateSessionClock(
+  clock: SessionClock,
+  now: number,
+  idleMs = SESSION_IDLE_MS,
+  maxMs = SESSION_MAX_MS,
+  warnMs = SESSION_WARN_MS,
+): SessionClockState {
+  if (now - clock.startedAt >= maxMs) {
+    return { status: 'expired', reason: 'max-duration', remainingMs: 0 };
+  }
+
+  const idleFor = now - clock.lastActivity;
+  if (idleFor >= idleMs) {
+    return { status: 'expired', reason: 'inactivity', remainingMs: 0 };
+  }
+
+  const remainingMs = Math.max(0, idleMs - idleFor);
+  if (remainingMs <= warnMs) {
+    return { status: 'warning', remainingMs };
+  }
+
+  return { status: 'active', remainingMs };
 }
 
 function readClock(): SessionClock | null {
@@ -122,25 +159,19 @@ export function useSessionExpiry(active: boolean, onExpire: (reason: SessionExpi
         current = { startedAt: Date.now(), lastActivity: Date.now() };
         writeClock(current);
       }
-      const now = Date.now();
-      if (now - current.startedAt >= MAX_MS) {
-        finish('max-duration');
+      const state = evaluateSessionClock(current, Date.now());
+      if (state.status === 'expired') {
+        finish(state.reason);
         return;
       }
-      const idleFor = now - current.lastActivity;
-      if (idleFor >= IDLE_MS) {
-        finish('inactivity');
-        return;
-      }
-      const remainingMs = IDLE_MS - idleFor;
-      if (remainingMs <= WARN_MS) {
+      if (state.status === 'warning') {
         warned = true;
-        const seconds = Math.max(1, Math.ceil(remainingMs / 1000));
+        const seconds = Math.max(1, Math.ceil(state.remainingMs / 1000));
         toast.warning(
           `Session expirée dans ${seconds} s — « Rester connecté » pour continuer.`,
           {
             id: TOAST_ID,
-            duration: WARN_MS,
+            duration: SESSION_WARN_MS,
             action: {
               label: 'Rester connecté',
               onClick: () => {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ImportElevesPage from '@/pages/ImportElevesPage';
 import { postAdminJson } from '@/lib/adminApi';
+import { xlsxFile } from '@/test/helpers/xlsxFixture';
 import type { SchoolCycle } from '@/types/menu';
 
 vi.mock('@/lib/adminApi', () => ({ postAdminJson: vi.fn() }));
@@ -26,7 +27,7 @@ vi.mock('@/context/RestoContext', () => ({
     parentProfiles: [
       { parentUsername: '776000001', firstName: 'Aminata', lastName: 'Fall', phone: '776000001' },
     ],
-    children: [{ parentUsername: '776000001', firstName: 'Adama', lastName: 'Fall' }],
+    children: [{ parentUsername: '776000001', firstName: 'Adama', lastName: 'Fall', className: 'CE2' }],
     importStudentRow: (...a: unknown[]) => importStudentRow(...a),
     refreshRemote: () => refreshRemote(),
   }),
@@ -41,6 +42,7 @@ describe('Import Parent — interface d’inscription des enfants', () => {
   const creerAcces = () => screen.getByRole('button', { name: /créer l’accès/i });
 
   beforeEach(() => {
+    vi.mocked(postAdminJson).mockClear();
     importStudentRow.mockReset();
     refreshRemote.mockClear();
   });
@@ -111,5 +113,43 @@ describe('Import Parent — interface d’inscription des enfants', () => {
 
     await screen.findByText(/déjà enregistré et actif/i);
     expect(screen.queryByTestId('child-create-panel')).not.toBeInTheDocument();
+  });
+
+  it('un fichier avec colonnes enfant crée le parent ET l’enfant en une seule fois', async () => {
+    vi.mocked(postAdminJson).mockResolvedValueOnce({
+      ok: true,
+      data: { created: [{ phone: '770334444', name: 'Ibra Ndiaye' }] },
+    } as never);
+    importStudentRow.mockResolvedValue({ childId: 'C-9', parentCreated: false, duplicate: false });
+
+    const { container } = render(<ImportElevesPage />);
+    const file = await xlsxFile([
+      ['prenom', 'nom', 'telephone', 'enfant_prenom', 'enfant_nom', 'enfant_classe'],
+      ['Ibra', 'Ndiaye', '77 033 44 44', 'Mariama', 'Ndiaye', 'cm2'],
+    ], 'parents.xlsx', 'Parents');
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    // L'aperçu montre l'enfant et la classe avant toute écriture.
+    expect(await screen.findByText(/Confirmer : créer 1 parent \+ élève/)).toBeInTheDocument();
+    expect(screen.getByText('Mariama Ndiaye')).toBeInTheDocument();
+    expect(screen.getByText('CM2')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /confirmer/i }));
+
+    await waitFor(() => expect(importStudentRow).toHaveBeenCalledTimes(1));
+    expect(importStudentRow.mock.calls[0][0]).toMatchObject({
+      parentUsername: '770334444',
+      parentNom: 'Ndiaye',
+      parentPrenom: 'Ibra',
+      parentTel: '770334444',
+      prenom: 'Mariama',
+      nom: 'Ndiaye',
+      classe: 'CM2',
+      cycle: 'primaire' as SchoolCycle,
+    });
+    // Le parent n'est PAS recréé : l'API a déjà ouvert son accès.
+    expect(postAdminJson).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/1 élève inscrit/)).toBeInTheDocument();
   });
 });

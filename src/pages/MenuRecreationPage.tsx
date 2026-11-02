@@ -172,6 +172,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
                 description={todayMenu.description}
                 image={dayPhoto(todayMenu.day)}
                 items={todayMenu.items ?? []}
+                dessert={todayMenu.dessert}
                 total={menuTicketTotal(todayMenu)}
                 highlight
                 highlightLabel="AUJOURD’HUI"
@@ -199,6 +200,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
                     description={menu.description}
                     image={dayPhoto(menu.day)}
                     items={menu.items ?? []}
+                    dessert={menu.dessert}
                     total={menuTicketTotal(menu)}
                     action={
                       <button
@@ -225,6 +227,7 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
                 <p className="text-sm text-slate-500">{selectedMenu.day}</p>
                 <h3 className="text-xl font-bold text-slate-800">{selectedMenu.name || `Menu du ${selectedMenu.day}`}</h3>
                 <p className="text-sm text-slate-500 mt-1">{formatMenuItems(selectedMenu.items ?? [])}</p>
+                {selectedMenu.dessert && <p className="text-sm font-semibold text-amber-700 mt-1">Dessert : {selectedMenu.dessert}</p>}
               </div>
               <div className="text-right">
                 <p className="text-3xl font-bold text-slate-600">{formatCurrency(selectedMenu.price ?? 0)}</p>

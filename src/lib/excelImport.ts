@@ -305,8 +305,14 @@ export async function buildTemplateBlob(): Promise<Blob> {
 /* Import PARENTS (accès par numéro de téléphone, sans mot de passe)   */
 /* ------------------------------------------------------------------ */
 
-/** En-têtes exacts du modèle parents. */
-export const PARENT_IMPORT_HEADERS = ['prenom', 'nom', 'telephone'] as const;
+/** En-têtes historiques (parents seuls), toujours acceptés. */
+export const PARENT_BASE_HEADERS = ['prenom', 'nom', 'telephone'] as const;
+
+/** Colonnes enfant : le parent ET l'enfant sont créés dans le même import. */
+export const PARENT_CHILD_HEADERS = ['enfant_prenom', 'enfant_nom', 'enfant_classe'] as const;
+
+/** En-têtes exacts du modèle parents (avec enfant). */
+export const PARENT_IMPORT_HEADERS = [...PARENT_BASE_HEADERS, ...PARENT_CHILD_HEADERS] as const;
 
 export interface ParentImportRow {
   /** N° de ligne dans le fichier (1 = en-têtes). */
@@ -315,11 +321,17 @@ export interface ParentImportRow {
   nom: string;
   /** Numéro normalisé : 9 chiffres (ex 771234567). */
   telephone: string;
+  /** Enfant à inscrire dans le même import (absent = ancien modèle). */
+  enfantPrenom?: string;
+  enfantNom?: string;
+  enfantClasse?: string;
 }
 
 export interface ParsedParentImport {
   rows: ParentImportRow[];
   issues: RowIssue[];
+  /** Vrai si le fichier contient les trois colonnes enfant. */
+  withChildren: boolean;
 }
 
 /** Ne garde que les chiffres d'un numéro (tolère espaces, points, +221…). */
@@ -334,8 +346,13 @@ function parentPhone(value: string): string {
 }
 
 /**
- * Lit un classeur de parents : `prenom | nom | telephone`.
- * Les numéros sont l'identifiant unique ; un numéro répété est signalé.
+ * Lit un classeur de parents : `prenom | nom | telephone`, avec en option
+ * `enfant_prenom | enfant_nom | enfant_classe`.
+ *
+ * Le numéro est l'identifiant unique du parent. Sans colonnes enfant, un
+ * numéro répété est signalé (ancien modèle). Avec colonnes enfant, plusieurs
+ * lignes peuvent partager un numéro (fratrie) tant que l'enfant diffère :
+ * la clé anti-doublon est parent + prénom + nom + classe.
  */
 export async function parseParentImportFile(file: File | Blob): Promise<ParsedParentImport> {
   if (file.size > MAX_FILE_BYTES) {
@@ -344,14 +361,20 @@ export async function parseParentImportFile(file: File | Blob): Promise<ParsedPa
   const grid = await readSheetGrid(file);
   if (grid.length === 0) throw new Error('Feuille vide.');
   const header = grid[0].map((h) => cleanCell(h).toLowerCase());
-  const missing = PARENT_IMPORT_HEADERS.filter((h) => !header.includes(h));
+  const missing = PARENT_BASE_HEADERS.filter((h) => !header.includes(h));
   if (missing.length > 0) {
     throw new Error(`En-têtes manquants : ${missing.join(', ')}. Téléchargez le modèle.`);
   }
+  const childColumns = PARENT_CHILD_HEADERS.filter((h) => header.includes(h));
+  if (childColumns.length > 0 && childColumns.length < PARENT_CHILD_HEADERS.length) {
+    const missingChild = PARENT_CHILD_HEADERS.filter((h) => !header.includes(h));
+    throw new Error(`En-têtes manquants : ${missingChild.join(', ')}. Téléchargez le modèle.`);
+  }
+  const withChildren = childColumns.length === PARENT_CHILD_HEADERS.length;
   const idx = (name: string) => header.indexOf(name);
   const rows: ParentImportRow[] = [];
   const issues: RowIssue[] = [];
-  const seenPhones = new Set<string>();
+  const seen = new Set<string>();
   const body = grid.slice(1, MAX_IMPORT_ROWS + 1);
   for (let i = 0; i < body.length; i += 1) {
     const cells = body[i];
@@ -373,17 +396,42 @@ export async function parseParentImportFile(file: File | Blob): Promise<ParsedPa
       issues.push({ line, message: `téléphone invalide (« ${get('telephone') || 'vide'} » : 9 chiffres, ex 77 123 45 67).` });
       continue;
     }
-    if (seenPhones.has(phone)) {
+    if (withChildren) {
+      const enfantPrenom = get('enfant_prenom').slice(0, 60);
+      const enfantNom = get('enfant_nom').slice(0, 60);
+      const enfantClasse = canonicalClassName(get('enfant_classe').slice(0, 40));
+      if (!enfantPrenom) {
+        issues.push({ line, message: 'prénom de l’enfant manquant.' });
+        continue;
+      }
+      if (!enfantNom) {
+        issues.push({ line, message: 'nom de l’enfant manquant.' });
+        continue;
+      }
+      if (!enfantClasse) {
+        issues.push({ line, message: 'classe de l’enfant manquante.' });
+        continue;
+      }
+      const key = childNaturalKey(phone, enfantPrenom, enfantNom, enfantClasse);
+      if (seen.has(key)) {
+        issues.push({ line, message: `enfant ${enfantPrenom} ${enfantNom} (${enfantClasse}) répété dans le fichier.` });
+        continue;
+      }
+      seen.add(key);
+      rows.push({ line, prenom, nom, telephone: phone, enfantPrenom, enfantNom, enfantClasse });
+      continue;
+    }
+    if (seen.has(phone)) {
       issues.push({ line, message: `numéro ${phone} répété dans le fichier.` });
       continue;
     }
-    seenPhones.add(phone);
+    seen.add(phone);
     rows.push({ line, prenom, nom, telephone: phone });
   }
   if (grid.length - 1 > MAX_IMPORT_ROWS) {
     issues.push({ line: MAX_IMPORT_ROWS + 2, message: `Fichier tronqué à ${MAX_IMPORT_ROWS} lignes.` });
   }
-  return { rows, issues };
+  return { rows, issues, withChildren };
 }
 
 export interface ParentImportAnalysis {
@@ -391,14 +439,33 @@ export interface ParentImportAnalysis {
   duplicates: { line: number; reason: string }[];
 }
 
-/** Sépare les parents nouveaux de ceux déjà enregistrés (numéro déjà connu). */
+/**
+ * Sépare les lignes nouvelles de celles déjà enregistrées.
+ *
+ * - ligne AVEC enfant : doublon seulement si l'enfant (parent + prénom + nom
+ *   + classe) existe déjà ; un parent connu avec un nouvel enfant reste à créer ;
+ * - ligne SANS enfant (ancien modèle) : doublon si le numéro est déjà connu.
+ */
 export function analyzeParentImport(
   rows: ParentImportRow[],
   existingPhones: Set<string>,
+  existingChildKeys: Set<string> = new Set(),
 ): ParentImportAnalysis {
   const toCreate: ParentImportRow[] = [];
   const duplicates: { line: number; reason: string }[] = [];
   for (const row of rows) {
+    if (row.enfantPrenom && row.enfantNom && row.enfantClasse) {
+      const key = childNaturalKey(row.telephone, row.enfantPrenom, row.enfantNom, row.enfantClasse);
+      if (existingChildKeys.has(key)) {
+        duplicates.push({
+          line: row.line,
+          reason: `${row.enfantPrenom} ${row.enfantNom} (${row.enfantClasse}) déjà inscrit pour ${row.telephone}.`,
+        });
+        continue;
+      }
+      toCreate.push(row);
+      continue;
+    }
     if (existingPhones.has(row.telephone)) {
       duplicates.push({ line: row.line, reason: `${row.prenom} ${row.nom} — ${row.telephone} déjà enregistré.` });
       continue;

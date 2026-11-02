@@ -6,9 +6,12 @@ import { methodLabel } from '@/lib/wave';
 import { CYCLE_LABEL } from '@/lib/schoolCycles';
 import { cycleOfFormula } from '@/lib/formulas';
 import { fetchValidatedFinance, type ValidatedFinance } from '@/lib/financeApi';
+import { listeEnfantsInscrits, type EnfantInscrit } from '@/lib/enfantsInscrits';
+import { toSheetData } from '@/lib/excelImport';
+import writeXlsxFile from 'write-excel-file';
 import {
   Users, Banknote, CheckCircle, XCircle, Receipt,
-  GraduationCap, Baby, QrCode,
+  GraduationCap, Baby, QrCode, FileSpreadsheet,
 } from 'lucide-react';
 import PaymentReceiptModal from '@/components/PaymentReceiptModal';
 import { formatCurrency } from '@/lib/utils';
@@ -47,6 +50,7 @@ const SubscriptionsAdminPage = () => {
   const [filter, setFilter] = useState<'all' | SubscriptionStatus>('all');
   const [message, setMessage] = useState('');
   const [receipt, setReceipt] = useState<ORestoPayment | null>(null);
+  const [exportingAbonnes, setExportingAbonnes] = useState(false);
 
   const formulaName = (id: string) => formulas.find((f) => f.id === id)?.name ?? id;
   const cycleBadge = (formulaId: string) => {
@@ -134,6 +138,61 @@ const SubscriptionsAdminPage = () => {
   const activeSubs = paidSubs.filter((s) => s.status === 'active').length;
   const pendingSubs = paidSubs.filter((s) => s.status === 'pending').length;
 
+  /**
+   * Enfants réellement abonnés : abonnement actif, réglé, dédoublonné.
+   * C'est la liste que le superviseur remet à la cantine pour le service.
+   */
+  const enfantsAbonnes = useMemo(() => {
+    const byId = new Map<string, EnfantInscrit>();
+    for (const s of subscriptions) {
+      if (s.status !== 'active' || !s.childId || !settledSubIds.has(s.id)) continue;
+      const kid = kids.find((k) => k.id === s.childId);
+      if (kid) {
+        byId.set(kid.id, {
+          firstName: kid.firstName,
+          lastName: kid.lastName,
+          className: kid.className,
+        });
+      }
+    }
+    return listeEnfantsInscrits([...byId.values()]);
+  }, [subscriptions, settledSubIds, kids]);
+
+  /**
+   * Télécharge uniquement les enfants abonnés (nom, prénom, classe), triés
+   * par classe puis nom. La feuille Excel ne contient que ces trois colonnes.
+   */
+  const telechargerAbonnes = async () => {
+    if (exportingAbonnes) return;
+    if (enfantsAbonnes.length === 0) {
+      setMessage('Aucun enfant abonné à exporter.');
+      return;
+    }
+    setExportingAbonnes(true);
+    try {
+      const sheet = toSheetData([
+        ['Enfants abonnés — O RESTO'],
+        [new Date().toLocaleDateString('fr-FR')],
+        [],
+        ['Nom', 'Prénom', 'Classe'],
+        ...enfantsAbonnes.map((l) => [l.nom, l.prenom, l.classe]),
+      ]);
+      const blob = await writeXlsxFile(sheet, {
+        sheet: 'Enfants abonnés',
+        columns: [24, 24, 14].map((width) => ({ width })),
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'enfants-abonnes.xlsx';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setMessage(`${enfantsAbonnes.length} enfant(s) abonné(s) exporté(s) — enfants-abonnes.xlsx.`);
+    } finally {
+      setExportingAbonnes(false);
+    }
+  };
+
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
       <div className="rounded-3xl bg-slate-950 text-white p-6 md:p-8 relative overflow-hidden shadow-xl">
@@ -152,7 +211,7 @@ const SubscriptionsAdminPage = () => {
             </span>
           )}
         </div>
-        <div className="relative mt-4 grid grid-cols-3 gap-2 max-w-lg">
+        <div className="relative mt-4 grid grid-cols-1 min-[420px]:grid-cols-3 gap-2 max-w-lg">
           <div className="rounded-2xl bg-white/10 border border-white/15 px-4 py-3">
             <p className="text-2xl font-black">{activeSubs}</p>
             <p className="text-[11px] font-bold text-slate-300">abos actifs</p>
@@ -204,6 +263,18 @@ const SubscriptionsAdminPage = () => {
                 {s === 'all' ? 'Tous' : SUB_STATUS[s].label}
               </button>
             ))}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => void telechargerAbonnes()}
+                disabled={exportingAbonnes || enfantsAbonnes.length === 0}
+                data-testid="abonnes-export-excel"
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-green-700 text-white text-xs font-bold hover:bg-green-800 disabled:opacity-40"
+                title="Enfants abonnés : nom, prénom et classe"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                {exportingAbonnes ? 'Préparation…' : `Télécharger les enfants abonnés (${enfantsAbonnes.length})`}
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

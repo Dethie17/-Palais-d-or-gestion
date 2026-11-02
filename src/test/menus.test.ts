@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { weeklyMenuTotal, menuTicketTotal, sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete, publishedDays, foldDayPriceIntoItems } from '@/lib/menus';
+import { weeklyMenuTotal, menuTicketTotal, sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete, publishedDays, foldDayPriceIntoItems, encodeMenuDescription, decodeMenuDescription } from '@/lib/menus';
 
 describe('composition des menus du jour (DG)', () => {
   it('total = somme des prix (négatifs ignorés)', () => {
@@ -52,6 +52,15 @@ describe('composition des menus du jour (DG)', () => {
     expect(foldDayPriceIntoItems(items, 0)).toEqual(items);
   });
 
+
+  it('dessert empaqueté dans description (colonne distante absente) puis restitué', () => {
+    const stored = encodeMenuDescription('Tacos + Jus', 'Fruit de saison');
+    expect(stored).not.toBe('Tacos + Jus');
+    expect(decodeMenuDescription(stored)).toEqual({ description: 'Tacos + Jus', dessert: 'Fruit de saison' });
+    expect(decodeMenuDescription('Tacos + Jus')).toEqual({ description: 'Tacos + Jus', dessert: '' });
+    expect(encodeMenuDescription('Tacos + Jus', '   ')).toBe('Tacos + Jus');
+    expect(decodeMenuDescription(null)).toEqual({ description: '', dessert: '' });
+  });
 
   it('semaine complète = 5 jours avec au moins un plat', () => {
     const full = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'].map((day) => ({

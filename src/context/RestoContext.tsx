@@ -51,7 +51,7 @@ import { settlePaymentOnServer } from '@/lib/financeApi';
 import { normalizeParentPhone, isValidParentPhone, formatParentPhone } from '@/lib/parentIdentity';
 import { dedupeChildren, childNaturalKey } from '@/lib/childIdentity';
 import { inferCycleFromClass, normalizeCycle, canonicalClassName } from '@/lib/schoolCycles';
-import { foldDayPriceIntoItems } from '@/lib/menus';
+import { decodeMenuDescription, encodeMenuDescription, foldDayPriceIntoItems } from '@/lib/menus';
 import { referenceWeek } from '@/data/cantineWeek';
 
 /**
@@ -539,7 +539,7 @@ interface RestoContextType {
   deleteExpense: (id: string) => void;
   // ---- Menu de la semaine (informatif) ----
   weeklyMenus: WeeklyMenu[];
-  updateWeeklyMenu: (day: WeeklyMenu['day'], name: string, description: string, items?: WeeklyMenuItem[], price?: number) => void;
+  updateWeeklyMenu: (day: WeeklyMenu['day'], name: string, description: string, items?: WeeklyMenuItem[], price?: number, dessert?: string) => void;
   // ---- Ticket visiteur (walk-in) ----
   walkInTickets: { token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string }[];
   createWalkInTicket: (menu: WeeklyMenu, method: 'cash' | 'wave' | 'mobile_money') => { token: string; reference: string; ticket: { token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string } };
@@ -956,8 +956,8 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           );
         }
         if (weekRes.data && weekRes.data.length > 0) {
-          const byDay = new Map<string, { name?: string; description?: string; items?: unknown; price?: unknown }>(
-            weekRes.data.map((r) => [String((r as { day?: unknown }).day ?? ''), r as { name?: string; description?: string; items?: unknown; price?: unknown }]),
+          const byDay = new Map<string, { name?: string; description?: string; items?: unknown; price?: unknown; dessert?: unknown }>(
+            weekRes.data.map((r) => [String((r as { day?: unknown }).day ?? ''), r as { name?: string; description?: string; items?: unknown; price?: unknown; dessert?: unknown }]),
           );
           const cleanItems = (raw: unknown): WeeklyMenuItem[] => {
             if (!Array.isArray(raw)) return [];
@@ -968,9 +968,17 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           };
           const remote = WEEK_DAYS.map((d) => {
             const r = byDay.get(d);
-            return r
-              ? { day: d, name: r.name ?? '', description: r.description ?? '', items: cleanItems((r as { items?: unknown }).items), price: Math.max(0, Math.floor(Number((r as { price?: unknown }).price) || 0)) }
-              : { day: d, name: '', description: '', items: [] as WeeklyMenuItem[], price: 0 };
+            if (!r) return { day: d, name: '', description: '', items: [] as WeeklyMenuItem[], price: 0 };
+            const decoded = decodeMenuDescription(r.description);
+            const dessert = typeof r.dessert === 'string' && r.dessert.trim() ? r.dessert.trim().slice(0, 60) : decoded.dessert;
+            return {
+              day: d,
+              name: r.name ?? '',
+              description: decoded.description,
+              items: cleanItems(r.items),
+              dessert,
+              price: Math.max(0, Math.floor(Number(r.price) || 0)),
+            };
           });
           // La base distante est la vérité quand le Personnel a publié ;
           // sinon (première installation) on présente la semaine de référence.
@@ -3706,27 +3714,31 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     [complaintMessages],
   );
 
-  const updateWeeklyMenu = useCallback((day: WeeklyMenu['day'], name: string, description: string, items: WeeklyMenuItem[] = [], price?: number) => {
+  const updateWeeklyMenu = useCallback((day: WeeklyMenu['day'], name: string, description: string, items: WeeklyMenuItem[] = [], price?: number, dessert?: string) => {
     const clean = items
       .filter((it) => it && typeof it.name === 'string')
       .map((it) => ({ name: it.name.trim().slice(0, 60), price: Math.max(0, Math.floor(Number(it.price) || 0)) }))
       .filter((it) => it.name)
       .slice(0, 8);
     const dayPrice = Math.max(0, Math.floor(Number(price) || 0));
-    setWeeklyMenus((prev) => prev.map((m) => (m.day === day ? { ...m, name, description, items: clean, price: dayPrice } : m)));
+    const cleanDessert = (dessert ?? '').trim().slice(0, 60);
+    // La colonne `dessert` n'existe pas encore en base : on l'empaquette dans
+    // `description` (marqueur interne) pour que la publication reste partagée.
+    const storedDescription = encodeMenuDescription(description, cleanDessert);
+    setWeeklyMenus((prev) => prev.map((m) => (m.day === day ? { ...m, name, description, dessert: cleanDessert, items: clean, price: dayPrice } : m)));
     // Persistance : l'état local est optimiste (affichage immédiat). On écrit
     // en base sans jamais avaler l'erreur en silence.
     void (async () => {
       const { error } = await supabase
         .from('weekly_menus')
-        .upsert({ day, name, description, items: clean, price: dayPrice });
+        .upsert({ day, name, description: storedDescription, items: clean, price: dayPrice });
       if (!error) return;
       // Colonne `price` absente (base non migrée) : on réessaie sans elle, en
       // repliant le prix du jour dans les plats pour que les parents / la
       // caisse voient le bon total et que la publication soit bien partagée.
       const { error: retryError } = await supabase
         .from('weekly_menus')
-        .upsert({ day, name, description, items: foldDayPriceIntoItems(clean, dayPrice) });
+        .upsert({ day, name, description: storedDescription, items: foldDayPriceIntoItems(clean, dayPrice) });
       if (retryError) {
         console.warn(`[menus] Publication de ${day} non enregistrée en base :`, retryError.message);
       }

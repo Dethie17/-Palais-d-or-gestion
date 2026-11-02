@@ -12,6 +12,7 @@ import {
   type RowIssue,
 } from '@/lib/excelImport';
 import { postAdminJson } from '@/lib/adminApi';
+import { childNaturalKey } from '@/lib/childIdentity';
 import { recordImportBatch, fetchImportBatches, type ImportBatchRow } from '@/lib/importBatches';
 import { toSheetData } from '@/lib/excelImport';
 import { CYCLES, cycleOfClass, canonicalClassName, isKnownClass, allClasses, CYCLE_LABEL } from '@/lib/schoolCycles';
@@ -26,12 +27,15 @@ import {
 /**
  * Import des parents depuis Excel — administrateur uniquement.
  *
- * La DAF enregistre les parents (nom, prénom, téléphone). Le numéro EST
- * l'identifiant de connexion : aucun mot de passe n'est créé, affiché ni
- * communiqué. Saisie manuelle ou fichier Excel. Les élèves ne sont PAS
- * importés ici : dès qu'un parent est créé, une interface d'inscription
- * s'ouvre automatiquement pour enregistrer ses enfants, un par un, avec un
- * champ CLASSE libre (hint du référentiel, cycle déduit de la classe).
+ * La DAF enregistre les parents (nom, prénom, téléphone) ET, si le fichier
+ * contient les colonnes enfant, leurs enfants (prénom, nom, classe) dans le
+ * même passage. Le numéro EST l'identifiant de connexion : aucun mot de
+ * passe n'est créé, affiché ni communiqué. Dès l'import, le parent peut se
+ * connecter avec son numéro et payer l'abonnement de son enfant.
+ *
+ * Le modèle historique `prenom | nom | telephone` reste accepté : les
+ * enfants peuvent alors être ajoutés un par un via l'interface qui s'ouvre
+ * après la création du parent.
  */
 interface ReportEntry {
   line: number;
@@ -232,7 +236,7 @@ function ParentsImport({
   importStudentRow,
 }: {
   parentProfiles: { parentUsername: string; firstName: string; lastName: string; phone: string }[];
-  children: { parentUsername: string; firstName: string; lastName: string }[];
+  children: { parentUsername: string; firstName: string; lastName: string; className: string }[];
   refreshRemote: () => Promise<void>;
   /** Compte qui fait l'import (traçabilité du journal). */
   importedBy: string | null;
@@ -278,6 +282,7 @@ function ParentsImport({
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [report, setReport] = useState<ParentReportEntry[] | null>(null);
+  const [studentReport, setStudentReport] = useState<{ created: number; duplicate: number; error: number } | null>(null);
 
   const existingPhones = useMemo(() => {
     const set = new Set<string>();
@@ -290,9 +295,24 @@ function ParentsImport({
     return set;
   }, [parentProfiles]);
 
+  const existingChildKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const child of children) {
+      set.add(childNaturalKey(child.parentUsername, child.firstName, child.lastName, child.className));
+    }
+    return set;
+  }, [children]);
+
   const analysis = useMemo(
-    () => (parentRows.length > 0 ? analyzeParentImport(parentRows, existingPhones) : null),
-    [parentRows, existingPhones],
+    () => (parentRows.length > 0
+      ? analyzeParentImport(parentRows, existingPhones, existingChildKeys)
+      : null),
+    [parentRows, existingPhones, existingChildKeys],
+  );
+
+  const withChildren = useMemo(
+    () => analysis?.toCreate.some((row) => row.enfantPrenom) ?? false,
+    [analysis],
   );
 
   const childrenOf = useMemo(() => {
@@ -378,6 +398,7 @@ function ParentsImport({
   const handleFile = async (file: File) => {
     setParseError(null);
     setReport(null);
+    setStudentReport(null);
     setParentRows([]);
     setParseIssues([]);
     setFileName(file.name);
@@ -404,12 +425,25 @@ function ParentsImport({
     if (!analysis || analysis.toCreate.length === 0 || importing) return;
     setImporting(true);
     setReport(null);
+    setStudentReport(null);
     const entries: ParentReportEntry[] = analysis.duplicates.map((d) => ({
       line: d.line, label: '', phone: '', status: 'duplicate' as const, detail: d.reason,
     }));
     const list = analysis.toCreate;
     setProgress({ done: 0, total: list.length });
     let done = 0;
+    let studentsCreated = 0;
+    let studentsDuplicate = 0;
+    let studentsError = 0;
+    /** Résultat consolidé par parent (fratrie = un seul accès). */
+    const parentOutcome = new Map<string, ParentReportEntry['status']>();
+    const outcomeRank: Record<ParentReportEntry['status'], number> = {
+      created: 0, activated: 1, error: 2, duplicate: 3,
+    };
+    const noteOutcome = (phone: string, status: ParentReportEntry['status']) => {
+      const prev = parentOutcome.get(phone);
+      if (!prev || outcomeRank[status] < outcomeRank[prev]) parentOutcome.set(phone, status);
+    };
     for (let i = 0; i < list.length; i += PARENT_BATCH) {
       const chunk = list.slice(i, i + PARENT_BATCH);
       const res = await postAdminJson<CreateParentPayload>('/api/auth/create-parent', {
@@ -419,47 +453,123 @@ function ParentsImport({
           phone: row.telephone,
         })),
       });
-      if (!res.ok || !res.data) {
-        chunk.forEach((row) => entries.push({
-          line: row.line,
-          label: `${row.prenom} ${row.nom}`,
-          phone: row.telephone,
-          status: 'error',
-          detail: res.error ?? 'Écriture impossible.',
-        }));
-      } else {
-        const lineOf = new Map(chunk.map((row) => [row.telephone, row.line]));
-        const collect = (rows: ParentResultRow[] | undefined, status: ParentReportEntry['status'], fallback: string) => {
+      // Un parent peut avoir plusieurs enfants : on indexe les résultats par
+      // numéro, puis on traite CHAQUE ligne du fichier séparément.
+      const resultByPhone = new Map<string, { status: ParentReportEntry['status']; row: ParentResultRow }>();
+      if (res.ok && res.data) {
+        const collect = (rows: ParentResultRow[] | undefined, status: ParentReportEntry['status']) => {
           for (const row of rows ?? []) {
-            entries.push({
-              line: lineOf.get(row.phone) ?? 0,
-              label: row.name,
-              phone: row.phone,
-              status,
-              detail: row.reason ?? fallback,
-            });
+            const prev = resultByPhone.get(row.phone);
+            if (!prev || outcomeRank[status] < outcomeRank[prev.status]) {
+              resultByPhone.set(row.phone, { status, row });
+            }
           }
         };
-        collect(res.data.created, 'created', 'Accès créé.');
-        collect(res.data.activated, 'activated', 'Accès activé (fiche existante).');
-        collect(res.data.duplicates, 'duplicate', 'Compte déjà actif.');
-        collect(res.data.errors, 'error', 'Création impossible.');
+        collect(res.data.created, 'created');
+        collect(res.data.activated, 'activated');
+        collect(res.data.duplicates, 'duplicate');
+        collect(res.data.errors, 'error');
       }
-      done += chunk.length;
-      setProgress({ done, total: list.length });
+      for (const row of chunk) {
+        const label = `${row.prenom} ${row.nom}`;
+        const parentResult = res.ok && res.data ? resultByPhone.get(row.telephone) : undefined;
+        if (!parentResult) {
+          noteOutcome(row.telephone, 'error');
+          entries.push({
+            line: row.line, label, phone: row.telephone, status: 'error',
+            detail: res.error ?? 'Écriture impossible.',
+          });
+        } else if (parentResult.status === 'error') {
+          noteOutcome(row.telephone, 'error');
+          entries.push({
+            line: row.line, label, phone: row.telephone, status: 'error',
+            detail: parentResult.row.reason ?? 'Création impossible.',
+          });
+        } else if (row.enfantPrenom && row.enfantNom && row.enfantClasse) {
+          // L'accès parent existe : on inscrit l'enfant dans la foulée, avec
+          // sa carte QR. Le parent peut payer l'abonnement dès maintenant.
+          noteOutcome(row.telephone, parentResult.status);
+          const childLabel = `${row.enfantPrenom} ${row.enfantNom} (${row.enfantClasse})`;
+          try {
+            const child = await importStudentRow({
+              parentUsername: row.telephone,
+              parentNom: row.nom,
+              parentPrenom: row.prenom,
+              parentTel: row.telephone,
+              prenom: row.enfantPrenom,
+              nom: row.enfantNom,
+              classe: row.enfantClasse,
+              cycle: cycleOfClass(row.enfantClasse),
+            });
+            if (child.duplicate) {
+              studentsDuplicate += 1;
+              entries.push({
+                line: row.line, label: `${label} / ${childLabel}`, phone: row.telephone,
+                status: 'duplicate', detail: 'Élève déjà inscrit — aucune fiche ajoutée.',
+              });
+            } else {
+              studentsCreated += 1;
+              const parentExisted = parentResult.status === 'duplicate';
+              entries.push({
+                line: row.line, label: `${label} / ${childLabel}`, phone: row.telephone,
+                status: parentExisted ? 'activated' : parentResult.status,
+                detail: parentExisted
+                  ? 'Élève inscrit — accès parent déjà actif. Carte QR prête.'
+                  : 'Élève inscrit. Carte QR prête.',
+              });
+            }
+          } catch (err) {
+            studentsError += 1;
+            entries.push({
+              line: row.line, label: `${label} / ${childLabel}`, phone: row.telephone,
+              status: 'error',
+              detail: err instanceof Error ? err.message : 'Inscription de l’élève impossible.',
+            });
+          }
+        } else {
+          noteOutcome(row.telephone, parentResult.status);
+          entries.push({
+            line: row.line, label, phone: row.telephone,
+            status: parentResult.status,
+            detail: parentResult.row.reason
+              ?? (parentResult.status === 'created'
+                ? 'Accès créé.'
+                : parentResult.status === 'activated'
+                  ? 'Accès activé (fiche existante).'
+                  : 'Compte déjà actif.'),
+          });
+        }
+        done += 1;
+        setProgress({ done, total: list.length });
+      }
     }
     entries.sort((a, b) => a.line - b.line);
     setReport(entries);
+    setStudentReport(studentsCreated + studentsDuplicate + studentsError > 0
+      ? { created: studentsCreated, duplicate: studentsDuplicate, error: studentsError }
+      : null);
     setImporting(false);
     // Journal : créés = accès créés ou activés (l'effet métier est le même).
+    // On compte les PARENTS uniques, pas les lignes (une fratrie = un accès).
+    const parentOutcomes = [...parentOutcome.values()];
     void recordImportBatch({
       kind: 'parents',
       totalRows: analysis.duplicates.length + list.length,
-      createdCount: entries.filter((e) => e.status === 'created' || e.status === 'activated').length,
-      duplicateCount: entries.filter((e) => e.status === 'duplicate').length,
-      errorCount: entries.filter((e) => e.status === 'error').length,
+      createdCount: parentOutcomes.filter((s) => s === 'created' || s === 'activated').length,
+      duplicateCount: analysis.duplicates.length + parentOutcomes.filter((s) => s === 'duplicate').length,
+      errorCount: parentOutcomes.filter((s) => s === 'error').length,
       createdBy: importedBy,
     });
+    if (studentsCreated + studentsDuplicate + studentsError > 0) {
+      void recordImportBatch({
+        kind: 'students',
+        totalRows: studentsCreated + studentsDuplicate + studentsError,
+        createdCount: studentsCreated,
+        duplicateCount: studentsDuplicate,
+        errorCount: studentsError,
+        createdBy: importedBy,
+      });
+    }
     onFinished();
     if (entries.some((e) => e.status === 'created' || e.status === 'activated')) void refreshRemote();
   };
@@ -730,7 +840,7 @@ function ParentsImport({
       >
         <Upload className="w-8 h-8 mx-auto text-slate-400" />
         <p className="mt-2 font-bold text-slate-700">{fileName ?? 'Déposez le fichier .xlsx ici, ou cliquez pour choisir'}</p>
-        <p className="text-xs text-slate-400 mt-1">Nom, prénom et téléphone — aperçu avant écriture.</p>
+        <p className="text-xs text-slate-400 mt-1">Parent (nom, prénom, téléphone) et enfant (prénom, nom, classe) — aperçu avant écriture.</p>
         <input
           ref={fileRef}
           type="file"
@@ -757,7 +867,7 @@ function ParentsImport({
 
       {analysis && !report && (
         <div className="mt-4 rounded-3xl bg-white border p-5">
-          <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-2 text-center">
             <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-3">
               <p className="text-2xl font-black text-emerald-700 tabular-nums">{analysis.toCreate.length}</p>
               <p className="text-[11px] font-bold text-emerald-600">À créer</p>
@@ -773,13 +883,15 @@ function ParentsImport({
           </div>
 
           {analysis.toCreate.length > 0 && (
-            <div className="mt-3 rounded-2xl border border-slate-200 overflow-hidden max-h-64 overflow-y-auto">
-              <table className="w-full text-sm">
+            <div className="mt-3 rounded-2xl border border-slate-200 max-h-64 overflow-y-auto overflow-x-auto">
+              <table className="w-full min-w-[520px] text-sm">
                 <thead className="bg-slate-50 text-[11px] uppercase tracking-widest text-slate-500">
                   <tr>
                     <th className="px-3 py-2 text-left">Ligne</th>
                     <th className="px-3 py-2 text-left">Parent</th>
                     <th className="px-3 py-2 text-left">Téléphone (identifiant)</th>
+                    {withChildren && <th className="px-3 py-2 text-left">Enfant</th>}
+                    {withChildren && <th className="px-3 py-2 text-left">Classe</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -788,6 +900,14 @@ function ParentsImport({
                       <td className="px-3 py-1.5 text-slate-400 tabular-nums">{row.line}</td>
                       <td className="px-3 py-1.5 font-semibold text-slate-800">{row.prenom} {row.nom}</td>
                       <td className="px-3 py-1.5 tabular-nums text-slate-700">{formatPhone(row.telephone)}</td>
+                      {withChildren && (
+                        <td className="px-3 py-1.5 font-semibold text-slate-800">
+                          {row.enfantPrenom ? `${row.enfantPrenom} ${row.enfantNom ?? ''}`.trim() : '—'}
+                        </td>
+                      )}
+                      {withChildren && (
+                        <td className="px-3 py-1.5 text-slate-700">{row.enfantClasse || '—'}</td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -818,8 +938,10 @@ function ParentsImport({
             className="mt-4 w-full py-3.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-2"
           >
             {importing
-              ? <><Loader2 className="w-4 h-4 animate-spin" /> Création {progress.done}/{progress.total}…</>
-              : <><UserPlus className="w-4 h-4" /> Confirmer : créer {analysis.toCreate.length} accès parent{analysis.toCreate.length > 1 ? 's' : ''}</>}
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Import {progress.done}/{progress.total}…</>
+              : withChildren
+                ? <><UserPlus className="w-4 h-4" /> Confirmer : créer {analysis.toCreate.length} parent{analysis.toCreate.length > 1 ? 's' : ''} + élève{analysis.toCreate.length > 1 ? 's' : ''}</>
+                : <><UserPlus className="w-4 h-4" /> Confirmer : créer {analysis.toCreate.length} accès parent{analysis.toCreate.length > 1 ? 's' : ''}</>}
           </button>
         </div>
       )}
@@ -827,13 +949,28 @@ function ParentsImport({
       {report && (
         <div className="mt-4 rounded-3xl bg-white border p-5">
           <h2 className="font-extrabold text-slate-800 flex items-center gap-2">
-            <CheckCircle className="w-5 h-5 text-emerald-600" /> Import parents terminé
+            <CheckCircle className="w-5 h-5 text-emerald-600" /> Import {studentReport ? 'parents / élèves' : 'parents'} terminé
           </h2>
           <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
             <span className="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700">{countOf('created')} accès créés</span>
             {countOf('activated') > 0 && <span className="px-3 py-1.5 rounded-full bg-blue-100 text-blue-700">{countOf('activated')} accès activés</span>}
             <span className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-600">{countOf('duplicate')} déjà actifs</span>
             <span className="px-3 py-1.5 rounded-full bg-red-100 text-red-600">{countOf('error')} erreurs</span>
+            {studentReport && studentReport.created > 0 && (
+              <span className="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700">
+                {studentReport.created} élève{studentReport.created > 1 ? 's' : ''} inscrit{studentReport.created > 1 ? 's' : ''}
+              </span>
+            )}
+            {studentReport && studentReport.duplicate > 0 && (
+              <span className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-600">
+                {studentReport.duplicate} élève{studentReport.duplicate > 1 ? 's' : ''} déjà inscrit{studentReport.duplicate > 1 ? 's' : ''}
+              </span>
+            )}
+            {studentReport && studentReport.error > 0 && (
+              <span className="px-3 py-1.5 rounded-full bg-red-100 text-red-600">
+                {studentReport.error} élève{studentReport.error > 1 ? 's' : ''} en erreur
+              </span>
+            )}
           </div>
           {countOf('error') > 0 && (
             <ul className="mt-3 text-xs text-red-600 space-y-1 max-h-40 overflow-y-auto">
@@ -844,14 +981,14 @@ function ParentsImport({
           )}
           <p className="mt-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold px-3 py-2 flex gap-2">
             <Phone className="w-4 h-4 flex-shrink-0" />
-            Les parents se connectent avec leur numéro seul — aucun mot de passe à communiquer.
+            Les parents se connectent avec leur numéro seul — aucun mot de passe à communiquer. Les élèves importés sont rattachés et l’abonnement est payable immédiatement.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button onClick={downloadParentReport} className="px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 flex items-center justify-center gap-2">
               <Download className="w-4 h-4" /> Télécharger le rapport (Excel)
             </button>
             <button
-              onClick={() => { setReport(null); setParentRows([]); setFileName(null); }}
+              onClick={() => { setReport(null); setStudentReport(null); setParentRows([]); setFileName(null); }}
               className="px-4 py-2.5 rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50"
             >
               Nouvel import
@@ -869,8 +1006,8 @@ function ParentsImport({
         {sortedParents.length === 0 ? (
           <p className="p-5 text-sm text-slate-400 text-center">Aucun parent enregistré pour le moment.</p>
         ) : (
-          <div className="max-h-96 overflow-y-auto">
-            <table className="w-full text-sm" data-testid="parents-table">
+          <div className="max-h-96 overflow-y-auto overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm" data-testid="parents-table">
               <thead className="text-[11px] uppercase tracking-widest text-slate-500 bg-slate-50/60">
                 <tr>
                   <th className="px-4 py-2 text-left">Parent</th>

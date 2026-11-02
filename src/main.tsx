@@ -17,6 +17,17 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>
 );
 
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((registration) => {
+        // Vérifie les mises à jour à chaque ouverture : le service worker
+        // réseau-d'abord ne sert jamais une page périmée.
+        void registration.update();
+      })
+      .catch(() => {
+        /* installation PWA indisponible : l'application web reste utilisable */
+      });
+  });
 }

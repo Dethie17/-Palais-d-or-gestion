@@ -214,7 +214,7 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block font-bold text-sm text-slate-800 truncate">{m.name || `Menu du ${m.day}`}</span>
-                          <span className="block text-xs text-slate-500 truncate">{m.items.map((it) => it.name).join(' • ')}</span>
+                          <span className="block text-xs text-slate-500 truncate">{m.items.map((it) => it.name).join(' • ')}{m.dessert ? ` • Dessert : ${m.dessert}` : ''}</span>
                         </span>
                         <span className="font-black text-sm text-slate-700 whitespace-nowrap flex-shrink-0">{formatCurrency(menuTicketTotal(m))}</span>
                       </li>

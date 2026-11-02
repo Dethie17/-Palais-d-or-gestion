@@ -1,7 +1,8 @@
 /**
  * Sécurité du login (espace parent comme back-office) — fonctions pures testées.
  * - Anti brute-force : 5 essais puis verrouillage progressif (1 / 5 / 15 / 60 min).
- * - Session : NON limitée (persistante, seule la déconnexion manuelle la supprime).
+ * - Session : expiration automatique après inactivité (20 min par défaut,
+ *   préavis 60 s) ou durée maximale (12 h par défaut) — voir sessionExpiry.ts.
  * - Noms d'utilisateur : 3–24 caractères [a-z0-9._-] (après minuscules).
  */
 

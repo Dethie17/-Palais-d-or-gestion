@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#15803d" />
+    <title>O RESTO — Hors ligne</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(160deg, #ecfdf5 0%, #f8fafc 55%, #e2e8f0 100%);
+        color: #0f172a;
+      }
+      main {
+        width: 100%;
+        max-width: 420px;
+        text-align: center;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 24px;
+        padding: 32px 24px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+      }
+      .mark {
+        width: 72px;
+        height: 72px;
+        margin: 0 auto 18px;
+        border-radius: 20px;
+        display: grid;
+        place-items: center;
+        background: #15803d;
+        color: #fff;
+        font-size: 34px;
+        font-weight: 900;
+      }
+      h1 { margin: 0 0 8px; font-size: 22px; letter-spacing: -0.02em; }
+      p { margin: 0 0 22px; color: #475569; font-size: 14px; line-height: 1.6; }
+      a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        padding: 0 22px;
+        border-radius: 14px;
+        background: #15803d;
+        color: #fff;
+        font-weight: 800;
+        font-size: 14px;
+        text-decoration: none;
+      }
+      a:active { transform: scale(0.98); }
+      small { display: block; margin-top: 16px; color: #94a3b8; font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">O</div>
+      <h1>Vous êtes hors ligne</h1>
+      <p>
+        O RESTO a besoin d’une connexion pour afficher les menus, les soldes et
+        les paiements à jour. Vérifiez votre réseau, puis réessayez.
+      </p>
+      <a href="/">Réessayer</a>
+      <small>O RESTO — Cantine scolaire</small>
+    </main>
+  </body>
+</html>

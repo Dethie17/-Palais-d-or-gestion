@@ -6,7 +6,12 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-export const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8' } as const;
+export const JSON_HEADERS = {
+  'Content-Type': 'application/json; charset=utf-8',
+  // Les réponses d'API peuvent contenir des jetons ou des données de compte :
+  // aucun cache intermédiaire ne doit les conserver.
+  'Cache-Control': 'no-store',
+} as const;
 
 /** Sécurité : le webhook est public par nature, on borne le corps lu. */
 const MAX_BODY_BYTES = 128 * 1024;
@@ -79,6 +84,36 @@ export function methodNotAllowed(req: IncomingMessage, res: ServerResponse, allo
 /** Vrai si la requête vient d'un navigateur (donc soumise au CORS). */
 export function isBrowserRequest(req: IncomingMessage): boolean {
   return Boolean(req.headers.origin);
+}
+
+/**
+ * Vrai si l'origine du navigateur correspond à l'hôte qui sert l'API.
+ *
+ * Les appels serveur à serveur (webhook SycaPay, scripts) n'envoient pas
+ * d'en-tête `Origin` : ils restent autorisés. Un navigateur, lui, ne peut pas
+ * falsifier `Origin` ; le comparer à l'hôte public ferme les appels
+ * inter-sites vers les routes de connexion.
+ */
+export function isSameOrigin(req: IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (typeof origin !== 'string' || !origin.trim()) return true;
+
+  try {
+    const originHost = new URL(origin).host.toLowerCase();
+    const forwardedHost = req.headers['x-forwarded-host'];
+    const rawHost = Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost;
+    const host = ((rawHost ?? req.headers.host ?? '').split(',')[0] ?? '').trim().toLowerCase();
+    return Boolean(host) && originHost === host;
+  } catch {
+    return false;
+  }
+}
+
+/** Répond 403 si un navigateur appelle depuis un autre site. */
+export function rejectForeignOrigin(req: IncomingMessage, res: ServerResponse): boolean {
+  if (isSameOrigin(req)) return false;
+  sendError(res, 403, 'Origine non autorisée.');
+  return true;
 }
 
 /**

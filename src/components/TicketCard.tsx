@@ -13,6 +13,7 @@ interface TicketCardProps {
   description?: string;
   image?: string;
   items: TicketMenuItem[];
+  dessert?: string;
   total: number;
   highlight?: boolean;
   highlightLabel?: string;
@@ -27,7 +28,7 @@ interface TicketCardProps {
  * (Menus = vitrine, Abonnement = achat). Photo du menu, souche jour,
  * pointillés de séparation, plats (sans prix unitaires) + total détachable.
  */
-const TicketCard = ({ day, name, description, image, items, total, highlight, highlightLabel, showPrices, action, className }: TicketCardProps) => {
+const TicketCard = ({ day, name, description, image, items, dessert, total, highlight, highlightLabel, showPrices, action, className }: TicketCardProps) => {
   return (
     <div className={`bg-white rounded-2xl border-2 shadow-sm overflow-hidden flex flex-col ${highlight ? 'border-green-500 ring-2 ring-green-200' : 'border-slate-100'} ${className ?? ''}`}>
       {/* Photo du menu */}
@@ -72,6 +73,12 @@ const TicketCard = ({ day, name, description, image, items, total, highlight, hi
               )}
             </li>
           ))}
+          {dessert && (
+            <li className="flex items-center gap-1.5">
+              <UtensilsCrossed className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+              <span className="truncate"><span className="font-semibold text-amber-700">Dessert :</span> {dessert}</span>
+            </li>
+          )}
         </ul>
         {/* Pointillés + total */}
         <div className="mt-3 pt-3 border-t-2 border-dashed border-slate-200 flex items-center justify-between">

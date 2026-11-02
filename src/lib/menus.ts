@@ -58,3 +58,29 @@ export function sanitizeMenuItem(name: string, price: number): WeeklyMenuItem | 
   if (!clean || !Number.isFinite(amount) || amount < 0 || amount > 100000) return null;
   return { name: clean, price: amount };
 }
+
+/**
+ * La table distante n'a pas de colonne `dessert` : on replie le dessert dans
+ * `description` avec un marqueur interne, puis on le ressort à la lecture.
+ * L'écran ne voit jamais le marqueur (description nettoyée + champ dessert).
+ */
+const DESSERT_MARKER = '\n[dessert]';
+
+/** Empaquette description + dessert pour la colonne `description` distante. */
+export function encodeMenuDescription(description: string, dessert?: string): string {
+  const cleanDescription = (description ?? '').trim();
+  const cleanDessert = (dessert ?? '').trim().slice(0, 60);
+  if (!cleanDessert) return cleanDescription;
+  return `${cleanDescription}${DESSERT_MARKER}${cleanDessert}`.slice(0, 500);
+}
+
+/** Dépaquette la colonne `description` distante en description + dessert. */
+export function decodeMenuDescription(raw: string | null | undefined): { description: string; dessert: string } {
+  const text = typeof raw === 'string' ? raw : '';
+  const index = text.lastIndexOf(DESSERT_MARKER);
+  if (index === -1) return { description: text.trim(), dessert: '' };
+  return {
+    description: text.slice(0, index).trim(),
+    dessert: text.slice(index + DESSERT_MARKER.length).trim(),
+  };
+}

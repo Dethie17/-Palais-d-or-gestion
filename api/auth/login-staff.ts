@@ -33,9 +33,11 @@ import {
   handlePreflight,
   methodNotAllowed,
   readJson,
+  rejectForeignOrigin,
   sendError,
   sendJson,
 } from '../_lib/http.js';
+import { enforceIpRateLimit, enforceKeyRateLimit } from '../_lib/rateLimit.js';
 
 interface LoginBody {
   username?: unknown;
@@ -67,6 +69,8 @@ function passwordMatches(input: string, stored: string | null): boolean {
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   if (req.method === 'OPTIONS') return handlePreflight(req, res);
   if (req.method !== 'POST') return methodNotAllowed(req, res, ['POST']);
+  if (rejectForeignOrigin(req, res)) return;
+  if (!enforceIpRateLimit(req, res, 'auth:login-staff', 30, 5 * 60_000)) return;
 
   let body: LoginBody;
   try {
@@ -81,6 +85,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   if (!username || !password) {
     return sendError(res, 400, 'Identifiant et mot de passe requis.');
   }
+  if (!enforceKeyRateLimit(res, 'auth:login-staff', username, 10, 15 * 60_000)) return;
 
   let db;
   let authDb;

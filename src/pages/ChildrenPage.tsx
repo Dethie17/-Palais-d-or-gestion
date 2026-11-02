@@ -276,7 +276,7 @@ const ChildrenPage = () => {
       )}
 
       {/* Synthèse famille — style ticket cantine */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-3">
         <div className="bg-white rounded-2xl border-2 border-slate-100 shadow-sm overflow-hidden">
           <p className="px-4 py-2.5 bg-gradient-to-r from-green-700 to-green-600 text-[11px] font-black uppercase tracking-widest text-white flex items-center gap-1.5"><Baby className="w-3.5 h-3.5" /> Enfants</p>
           <div className="p-4">

@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import SpaceTopNav from './components/layout/SpaceTopNav';
 import SplashScreen from './components/SplashScreen';
+import InstallAppPrompt from './components/InstallAppPrompt';
 import { getRoleDef } from './lib/roleTasks';
 import { PageName, CartItem, Order } from './types/menu';
 import { canAccess, ROLE_PAGES, PAGE_LABEL } from './lib/permissions';
@@ -301,6 +302,7 @@ const App = () => {
         <ProductProvider>
           <AppProvider>
             <AppContent />
+            <InstallAppPrompt />
             {showSplash && <SplashScreen onDone={() => setShowSplash(false)} />}
           </AppProvider>
         </ProductProvider>

@@ -61,11 +61,24 @@
   }
   html {
     scroll-behavior: smooth;
+    /* Évite le défilement horizontal accidentel sur mobile sans casser
+       `position: sticky` (contrairement à overflow-x: hidden). */
+    overflow-x: clip;
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    overflow-x: clip;
     -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     text-rendering: optimizeLegibility;
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
   }
   ::selection {
     background: hsl(var(--brand) / 0.22);

@@ -1070,8 +1070,8 @@ const ValidationPage = () => {
             Aucun passage sur la période ({journalPeriod === 'day' ? 'aujourd’hui' : journalPeriod === 'week' ? 'semaine en cours' : 'mois en cours'}).
           </p>
         ) : (
-          <div className="max-h-[420px] overflow-y-auto">
-            <table className="w-full text-sm">
+          <div className="max-h-[420px] overflow-y-auto overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-slate-50 text-slate-500 sticky top-0">
                 <tr><th className="text-left p-3">Date</th><th className="text-left p-3">Heure</th><th className="text-left p-3">Élève</th><th className="text-left p-3">Formule</th><th className="text-left p-3">Statut</th><th className="text-left p-3">Motif</th></tr>
               </thead>

@@ -477,7 +477,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
                 <CalendarDays className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
                 <p className="text-sm text-emerald-100">
                   {menuDuJour ? (
-                    <span>Menu publié pour aujourd’hui : <strong>{menuDuJour.name || `Menu du ${menuDuJour.day}`}</strong>{(menuDuJour.items ?? []).length > 0 ? ` — ${(menuDuJour.items ?? []).map((i) => i.name).join(', ')}` : ''}</span>
+                    <span>Menu publié pour aujourd’hui : <strong>{menuDuJour.name || `Menu du ${menuDuJour.day}`}</strong>{(menuDuJour.items ?? []).length > 0 ? ` — ${(menuDuJour.items ?? []).map((i) => i.name).join(', ')}` : ''}{menuDuJour.dessert ? ` — Dessert : ${menuDuJour.dessert}` : ''}</span>
                   ) : (
                     <span>Aucun menu publié pour aujourd’hui — la validation fonctionne par abonnement / solde carte.</span>
                   )}
