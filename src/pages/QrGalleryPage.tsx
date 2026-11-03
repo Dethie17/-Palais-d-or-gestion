@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useResto } from '@/context/RestoContext';
 import { QRCodeSVG } from 'qrcode.react';
-import { formatCurrency } from '@/lib/utils';
 import { CYCLE_LABEL } from '@/lib/schoolCycles';
-import { QrCode, Download, Printer, Search, FolderDown, CheckCircle, Wallet } from 'lucide-react';
+import { QrCode, Download, Printer, Search, FolderDown, CheckCircle } from 'lucide-react';
 
 /**
  * Galerie QR des élèves — espace Personnel (service) uniquement.
@@ -12,7 +11,7 @@ import { QrCode, Download, Printer, Search, FolderDown, CheckCircle, Wallet } fr
  * à ranger ensuite dans le dossier image QR code du site).
  */
 const QrGalleryPage = () => {
-  const { children: kids, walletOf, subscriptions, formulas } = useResto();
+  const { children: kids, subscriptions } = useResto();
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [done, setDone] = useState('');
@@ -45,23 +44,6 @@ const QrGalleryPage = () => {
       const end = new Date(s.endDate).getTime();
       return (!Number.isFinite(start) || start <= now) && Number.isFinite(end) && end >= now;
     });
-  };
-
-  /** Période suivante déjà réglée (réabonnement de fin de mois). */
-  const childNext = (childId: string) => {
-    const now = Date.now();
-    return subscriptions.find((s) => {
-      if (s.childId !== childId || s.status !== 'active') return false;
-      return new Date(s.startDate).getTime() > now;
-    });
-  };
-
-  /** Dernière période close : sert à afficher « expiré le … ». */
-  const childLast = (childId: string) => {
-    const now = Date.now();
-    return [...subscriptions]
-      .filter((s) => s.childId === childId && s.status !== 'cancelled' && new Date(s.endDate).getTime() < now)
-      .sort((a, b) => +new Date(b.endDate) - +new Date(a.endDate))[0];
   };
 
   const fileName = (firstName: string, lastName: string, token: string) =>
@@ -200,8 +182,6 @@ const QrGalleryPage = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
           {filtered.map((k) => {
             const sub = childSub(k.id);
-            const next = childNext(k.id);
-            const last = childLast(k.id);
             return (
               <article key={k.id} className="bg-white rounded-2xl border-2 border-slate-100 overflow-hidden break-inside-avoid">
                 <div id={`qr-gallery-${k.qrToken}`} className="bg-white p-3 flex justify-center">
@@ -210,26 +190,9 @@ const QrGalleryPage = () => {
                 <div className="px-3 pb-3 text-center border-t-2 border-dashed border-slate-200 pt-2.5">
                   <p className="font-extrabold text-sm text-slate-800 capitalize truncate">{k.firstName} {k.lastName}</p>
                   <p className="text-[11px] text-slate-500">{k.className} · {CYCLE_LABEL[k.cycle ?? 'primaire']}</p>
-                  <p className="mt-1.5 flex items-center justify-center gap-1 text-[11px] font-bold text-slate-600">
-                    <Wallet className="w-3 h-3" /> {formatCurrency(walletOf(k.id))}
-                    {sub && <span className="text-emerald-700"> · {sub.mealsRemaining} repas</span>}
+                  <p className={`mt-2 text-[11px] font-extrabold ${sub ? 'text-emerald-700' : 'text-slate-500'}`}>
+                    {sub ? 'ACTIF' : 'SANS ABONNEMENT'}
                   </p>
-                  {sub ? (
-                    <p className="mt-1 text-[10px] font-bold text-emerald-700">
-                      Valable jusqu’au {new Date(sub.endDate).toLocaleDateString('fr-FR')}
-                    </p>
-                  ) : last ? (
-                    <p className="mt-1 text-[10px] font-bold text-amber-700">
-                      Expiré le {new Date(last.endDate).toLocaleDateString('fr-FR')}
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-[10px] font-bold text-slate-400">Sans abonnement</p>
-                  )}
-                  {next && (
-                    <p className="mt-0.5 text-[10px] font-bold text-slate-500">
-                      Renouvelé : {new Date(next.startDate).toLocaleDateString('fr-FR')}
-                    </p>
-                  )}
                   <p className="font-mono text-[10px] text-slate-400 mt-0.5">{k.qrToken}</p>
                   <button
                     onClick={() => downloadOne(k.qrToken, k.firstName, k.lastName, k.className)}

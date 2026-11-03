@@ -67,10 +67,24 @@ const SubscriptionsAdminPage = () => {
   };
   /** Bénéficiaire d'un paiement : enfant si abo rattaché, sinon parent / compte. */
   const whoOfPayment = (p: ORestoPayment) => {
+    const subscriptionIds = p.groupSubscriptionIds?.length
+      ? p.groupSubscriptionIds
+      : p.subscriptionId
+        ? [p.subscriptionId]
+        : [];
+    if (subscriptionIds.length > 0) {
+      return subscriptionIds
+        .map((subscriptionId) => {
+          const sub = subscriptions.find((s) => s.id === subscriptionId);
+          const k = sub?.childId ? kids.find((c) => c.id === sub.childId) : undefined;
+          return k ? `${k.firstName} ${k.lastName}` : (sub?.clientUsername ?? p.clientUsername ?? '?');
+        })
+        .join(' / ');
+    }
     const sub = subscriptions.find((s) => s.id === p.subscriptionId);
     const k = sub?.childId ? kids.find((c) => c.id === sub.childId) : undefined;
     if (k) return `${k.firstName} ${k.lastName}`;
-    return sub?.clientUsername ?? p.clientUsername ?? '—';
+    return sub?.clientUsername ?? p.clientUsername ?? '?';
   };
   const payStatus = (status: string) => PAY_STATUS[status] ?? { label: status, style: 'bg-slate-100 text-slate-500' };
 

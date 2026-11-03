@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { weeklyMenuTotal, menuTicketTotal, sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete, isWeekPublishable, publishedDays, foldDayPriceIntoItems, encodeMenuDescription, decodeMenuDescription } from '@/lib/menus';
+import { DAY_PHOTOS, menuPhoto } from '@/data/cantineWeek';
 
 describe('composition des menus du jour (DG)', () => {
   it('total = somme des prix (négatifs ignorés)', () => {
@@ -105,5 +106,20 @@ describe('composition des menus du jour (DG)', () => {
     ];
     expect(publishedDays(menus).map((m) => m.day)).toEqual(['Lundi', 'Mardi', 'Mercredi']);
     expect(publishedDays([])).toEqual([]);
+  });
+
+  it('photo du plat adaptée depuis description / plats / dessert', () => {
+    expect(
+      menuPhoto({
+        day: 'Lundi',
+        description: 'Poulets wings potatoes + sauce',
+        items: [{ name: 'Chandwitch Poulet', price: 900 }],
+        dessert: 'Jus d’orange',
+      }),
+    ).toBe('https://images.unsplash.com/photo-1608039755401-742074f0548d?w=600&h=400&fit=crop');
+  });
+
+  it('photo du jour quand aucun ingrédient connu n’est décrit', () => {
+    expect(menuPhoto({ day: 'Mardi', description: 'Le généreux : complets + dessert', items: [], dessert: '' })).toBe(DAY_PHOTOS.Mardi);
   });
 });

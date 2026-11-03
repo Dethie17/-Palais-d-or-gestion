@@ -26,7 +26,8 @@ interface DbUser {
 
 // Comptes créables : la Direction bénéficie d'un seul rôle — le Caissier.
 // (Réservé à la DAF côté serveur ; rôles supérieurs ne se créent pas ici.)
-const CREATABLE_ROLES: UserRole[] = ['gestionnaire'];
+// Aucun nouveau compte Caissier ne peut être créé.
+const CREATABLE_ROLES: UserRole[] = [];
 
 /**
  * Paramètres — Personnel de service (comptes du site) + Directeur Général
@@ -60,6 +61,12 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
       username: u.username,
       role: u.role,
     }));
+    if (!isSupabaseConfigured) {
+      setDbUsers(local);
+      setOffline(true);
+      setLoading(false);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('users')
@@ -227,13 +234,15 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
 
       {offline ? (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-800">
-          <p className="font-bold">⚠️ Base utilisateurs injoignable (mode hors-ligne).</p>
-          <p className="mt-1">La gestion des comptes nécessite la connexion Supabase avec la table <code>users</code> migrée (<code>supabase-oresto-migration.sql</code>). Les comptes démo restent utilisables pour la connexion.</p>
+          <p className="font-bold">⚠️ Base utilisateurs indisponible.</p>
+          <p className="mt-1">{isSupabaseConfigured
+            ? <>La table <code>users</code> est injoignable ou ses règles de sécurité (RLS) empêchent sa lecture. Vérifiez la migration Supabase et la session administrateur.</>
+            : <>Connexion Supabase non configurée. Les paramètres de déploiement doivent contenir <code>VITE_SUPABASE_URL</code> et <code>VITE_SUPABASE_ANON_KEY</code> (ou <code>VITE_SUPABASE_PUBLISHABLE_KEY</code>). </>}</p>
         </div>
       ) : (
         <>
           {/* Ajouter un compte */}
-          <form onSubmit={handleAdd} className="bg-white rounded-2xl border p-5">
+          {allowedRoles.length > 0 && <form onSubmit={handleAdd} className="bg-white rounded-2xl border p-5">
             <p className="font-bold text-slate-800 flex items-center gap-2"><Plus className="w-5 h-5 text-green-700" /> Ajouter un compte{isStaff ? ' (client, personnel)' : ' (caissier)'}</p>
             <div className="mt-3 grid sm:grid-cols-4 gap-3">
               <div>
@@ -256,7 +265,7 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
                 <button type="submit" className="w-full py-2.5 rounded-xl bg-green-700 text-white font-bold text-sm hover:bg-green-800">Créer le compte</button>
               </div>
             </div>
-          </form>
+          </form>}
 
           {/* Liste des comptes */}
           <div className="bg-white rounded-2xl border overflow-hidden">

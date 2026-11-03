@@ -398,7 +398,7 @@ function MenuDuJourCard({ menu, actionLabel, onAction }: { menu: { day: string; 
     <div className="bg-white rounded-2xl shadow border border-slate-200 overflow-hidden">
       <div className="p-5">
       <div className="flex items-center gap-2 font-bold text-slate-800">
-        <CalendarDays className="w-5 h-5 text-slate-400" /> Menu — {menu.day} : {menu.name || `Menu du ${menu.day}`}
+        <CalendarDays className="w-5 h-5 text-slate-400" /> Menu — {menu.day}
       </div>
       <ul className="mt-2 space-y-1 text-sm">
         {menu.items.map((it) => (

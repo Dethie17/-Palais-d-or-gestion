@@ -8,14 +8,12 @@ import { useRef, useState } from 'react';
 
 const QRCodePage = () => {
   const { user } = useAuth();
-  const { mySubscription, mySubscriptions, myValidations, formulas, myChildren, walletOf } = useResto();
+  const { mySubscription, mySubscriptions, subscriptions, myChildren } = useResto();
   const [copied, setCopied] = useState(false);
   const qrRef = useRef<HTMLDivElement>(null);
 
   const sub = user ? mySubscription(user.username) : undefined;
   const hasPending = user ? mySubscriptions(user.username).some((s) => s.status === 'pending') : false;
-  const formula = formulas.find((f) => f.id === sub?.formulaId);
-  const used = user ? myValidations(user.username).filter((v) => v.status === 'accepted').length : 0;
   // QR individuel réel (scannable) : token personnel STABLE du client.
   // Il ne change jamais (renouvellements inclus) et reste lié à ses abonnements.
   const token = user ? getClientQrToken(user.username) : 'ORESTO-VISITEUR';
@@ -95,24 +93,11 @@ const QRCodePage = () => {
             <QRCodeSVG value={token} size={230} level="M" />
           </div>
           <p className="font-mono font-bold text-white text-lg tracking-widest mt-4">{token}</p>
-          <p className="text-slate-300 text-sm mt-1 capitalize">
-            {user?.username} — {formula?.name ?? 'sans formule'}
-          </p>
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-            <div className="bg-white/10 rounded-xl p-3">
-              <p className="text-2xl font-extrabold text-white">{sub?.mealsRemaining ?? 0}</p>
-              <p className="text-xs text-slate-300">repas restants</p>
-            </div>
-            <div className="bg-white/10 rounded-xl p-3">
-              <p className="text-2xl font-extrabold text-white">{used}</p>
-              <p className="text-xs text-slate-300">repas validés</p>
-            </div>
-            <div className="bg-white/10 rounded-xl p-3">
-              <p className="text-sm font-extrabold text-white leading-8">
-                {sub ? new Date(sub.endDate).toLocaleDateString('fr-FR') : '—'}
-              </p>
-              <p className="text-xs text-slate-300">expire le</p>
-            </div>
+          <p className="text-slate-300 text-sm mt-1 capitalize">{user?.username}</p>
+          <div className="mt-4 text-center">
+            <p className={`inline-flex rounded-full px-4 py-2 text-sm font-extrabold ${sub ? 'bg-green-400 text-green-950' : 'bg-amber-300 text-amber-950'}`}>
+              {sub ? 'ACTIF' : 'SANS ABONNEMENT'}
+            </p>
           </div>
         </div>
       </div>
@@ -141,7 +126,7 @@ const QRCodePage = () => {
 
       <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-sm text-green-800 flex gap-2">
         <ShieldCheck className="w-5 h-5 flex-shrink-0" />
-        <span>Contrôle automatique à chaque scan : abonnement actif, date de validité, repas restants et anti-double (1 repas / jour / QR Code).</span>
+        <span>Contrôle automatique à chaque scan : actif ou sans abonnement, avec anti-double (1 repas / jour / QR Code).</span>
       </div>
 
       {user && myChildren(user.username).length > 0 && (
@@ -155,7 +140,11 @@ const QRCodePage = () => {
               <div className="text-sm">
                 <p className="font-extrabold capitalize">{k.firstName} {k.lastName} <span className="font-normal text-slate-500">• {k.className}</span></p>
                 <p className="font-mono font-bold text-slate-700">{k.qrToken}</p>
-                <p className="text-slate-500">Solde carte : <strong>{walletOf(k.id)} FCFA</strong></p>
+                {(() => {
+                  const now = Date.now();
+                  const childSubActive = subscriptions.some((s) => s.childId === k.id && s.status === 'active' && new Date(s.startDate).getTime() <= now && new Date(s.endDate).getTime() >= now);
+                  return <p className={`mt-1 text-xs font-extrabold ${childSubActive ? 'text-green-700' : 'text-slate-500'}`}>{childSubActive ? 'ACTIF' : 'SANS ABONNEMENT'}</p>;
+                })()}
               </div>
             </div>
           ))}

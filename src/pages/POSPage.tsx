@@ -3,7 +3,7 @@ import { CartItem, Product, Order, KioskOrder } from '@/types/menu';
 import { categories } from '@/data/mockData';
 import { formatCurrency } from '@/lib/utils';
 import { menuTicketTotal } from '@/lib/menus';
-import { dayPhoto } from '@/data/cantineWeek';
+import { menuPhoto } from '@/data/cantineWeek';
 import { useProducts } from '@/context/ProductContext';
 import { useResto } from '@/context/RestoContext';
 import { useAuth } from '@/context/AuthContext';
@@ -92,7 +92,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
   // ---- Repas du jour : ajoutable au panier comme un article ----
   const todayName = DAY_INDEX[new Date().getDay()];
   const todayMenu = weeklyMenus.find((m) => m.day === todayName && (m.items ?? []).length > 0);
-  const dayMenuName = todayMenu ? todayMenu.name || `Menu du ${todayMenu.day}` : '';
+  const dayMenuName = todayMenu ? `Menu du ${todayMenu.day}` : '';
   const dayMenuPrice = todayMenu ? menuTicketTotal(todayMenu) : 0;
 
   const addDayMenuToCart = () => {
@@ -103,7 +103,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
       category: 'Menu du jour',
       price: dayMenuPrice,
       description: (todayMenu.items ?? []).map((i) => i.name).join(', '),
-      image: dayPhoto(todayMenu.day) ?? '/placeholder.svg',
+      image: menuPhoto(todayMenu) ?? '/placeholder.svg',
       available: true,
     });
   };
@@ -336,7 +336,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
               <div className="flex items-stretch">
                 <div className="w-28 sm:w-36 flex-shrink-0 overflow-hidden relative">
                   <img
-                    src={dayPhoto(todayMenu.day) ?? '/placeholder.svg'}
+                    src={menuPhoto(todayMenu) ?? '/placeholder.svg'}
                     alt={dayMenuName}
                     loading="lazy"
                     onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }}

@@ -62,7 +62,6 @@ const MenusPage = ({ onNavigate }: MenusPageProps) => {
               <div className="max-w-md">
                 <TicketCard
                   day={menuDuJour.day}
-                  name={menuDuJour.name || `Menu du ${menuDuJour.day}`}
                   description={menuDuJour.description}
                   items={menuDuJour.items}
                   dessert={menuDuJour.dessert}
@@ -91,7 +90,6 @@ const MenusPage = ({ onNavigate }: MenusPageProps) => {
                 <TicketCard
                   key={m.day}
                   day={m.day}
-                  name={m.name || `Menu du ${m.day}`}
                   description={m.description}
                   items={m.items}
                   dessert={m.dessert}

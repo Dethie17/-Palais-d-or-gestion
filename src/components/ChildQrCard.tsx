@@ -3,6 +3,7 @@ import { Copy, Download, Printer } from 'lucide-react';
 import { getChildQrToken } from '@/lib/clientQr';
 import { CYCLE_LABEL } from '@/lib/schoolCycles';
 import type { Child } from '@/types/menu';
+import { useResto } from '@/context/RestoContext';
 
 /**
  * Carte QR enfant pro : avatar, prénom + nom, classe + cycle,
@@ -18,7 +19,10 @@ const ChildQrCard = ({ k, qrRefCb, copied, onCopy, onPNG, onPrint, anchorId }: {
   onPrint: () => void;
   anchorId?: string;
 }) => {
+  const { subscriptions } = useResto();
   const token = k.qrToken || getChildQrToken(k.id);
+  const now = Date.now();
+  const active = subscriptions.some((s) => s.childId === k.id && s.status === 'active' && new Date(s.startDate).getTime() <= now && new Date(s.endDate).getTime() >= now);
   return (
     <li id={anchorId} className="scroll-mt-24 bg-white rounded-3xl border-2 border-slate-100 p-5 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-center gap-3">
@@ -28,6 +32,7 @@ const ChildQrCard = ({ k, qrRefCb, copied, onCopy, onPNG, onPrint, anchorId }: {
         <div className="min-w-0">
           <p className="text-sm font-black text-slate-900 truncate">{k.firstName} {k.lastName}</p>
           <p className="text-xs text-slate-500 truncate">{k.className} · {CYCLE_LABEL[k.cycle ?? 'primaire']}</p>
+          <p className={`mt-1 text-[11px] font-extrabold ${active ? 'text-green-700' : 'text-slate-500'}`}>{active ? 'ACTIF' : 'SANS ABONNEMENT'}</p>
         </div>
       </div>
       <div className="mt-4 flex items-center gap-4 rounded-2xl bg-slate-50 border p-4">

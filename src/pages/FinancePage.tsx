@@ -123,10 +123,24 @@ const FinancePage = () => {
   const transactions = useMemo(() => {
     const inP = (v: string | Date) => new Date(v).getTime() >= since;
     const subOwner = (p: ORestoPayment): string => {
+      const subscriptionIds = p.groupSubscriptionIds?.length
+        ? p.groupSubscriptionIds
+        : p.subscriptionId
+          ? [p.subscriptionId]
+          : [];
+      if (subscriptionIds.length > 0) {
+        const owners = subscriptionIds.map((subscriptionId) => {
+          const sub = subscriptions.find((s) => s.id === subscriptionId);
+          const child = sub?.childId ? kids.find((c) => c.id === sub.childId) : undefined;
+          const parent = sub?.clientUsername ?? p.clientUsername ?? '?';
+          return child ? `${child.firstName} ${child.lastName} (${parent})` : parent;
+        });
+        return owners.join(' / ');
+      }
       const sub = subscriptions.find((s) => s.id === p.subscriptionId);
       const child = sub?.childId ? kids.find((c) => c.id === sub.childId) : undefined;
-      const parent = sub?.clientUsername ?? p.clientUsername ?? '—';
-      return child ? `${child.firstName} ${child.lastName} · ${parent}` : parent;
+      const parent = sub?.clientUsername ?? p.clientUsername ?? '?';
+      return child ? `${child.firstName} ${child.lastName} (${parent})` : parent;
     };
     const childOwner = (childId: string): string => {
       const child = kids.find((c) => c.id === childId);

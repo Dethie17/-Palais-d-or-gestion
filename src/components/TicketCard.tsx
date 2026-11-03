@@ -9,7 +9,7 @@ export interface TicketMenuItem {
 
 interface TicketCardProps {
   day: string;
-  name: string;
+  name?: string;
   description?: string;
   image?: string;
   items: TicketMenuItem[];
@@ -34,7 +34,7 @@ const TicketCard = ({ day, name, description, image, items, dessert, total, high
       {/* Photo du menu */}
       {image && (
         <div className="relative h-36 overflow-hidden">
-          <img src={image} alt={`${name} — ${day}`} loading="lazy" className="w-full h-full object-cover" />
+          <img src={image} alt={`Menu du ${day}`} loading="lazy" className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
           <span className="absolute bottom-2 left-3 flex items-center gap-1.5 text-sm font-black uppercase tracking-widest text-white drop-shadow">
             <TicketIcon className="w-4 h-4" /> {day}
@@ -61,7 +61,7 @@ const TicketCard = ({ day, name, description, image, items, dessert, total, high
       )}
       {/* Corps */}
       <div className="p-4 flex flex-col flex-1">
-        <p className="font-extrabold text-slate-900">{name}</p>
+        {name && <p className="font-extrabold text-slate-900">{name}</p>}
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
         <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
           {items.map((it) => (

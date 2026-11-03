@@ -86,9 +86,7 @@ describe('EspaceParentPage render (repro crash childId)', () => {
     // le premier jour publié de la semaine de référence).
     await screen.findByText(/Menu du jour — /);
     expect(screen.getByText(/Menu du jour — (Lundi|Mardi|Mercredi|Jeudi|Vendredi)/)).toBeTruthy();
-    expect(screen.getAllByText(
-      /Menu Élève|Menu Gourmand|Menu Petit Budget|Menu Goûter|Menu Burger/,
-    ).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/Menu (Élève|Gourmand|Petit Budget|Goûter|Burger)/)).toBeNull();
   });
 
   it('semaine explicitement vidée par le Personnel (bel état vide)', async () => {

@@ -135,7 +135,6 @@ describe('Espace Abonné — rendu général', () => {
     await waitForProfile();
 
     expect((await screen.findAllByText(/Menu du jour/)).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/Riz/)).toBeTruthy();
     expect(screen.getAllByText('MENU DU JOUR').length).toBeGreaterThanOrEqual(1);
   });
 });
@@ -147,7 +146,6 @@ describe('Espace Abonné — menus', () => {
     renderPage(<EspaceParentPage />);
     await waitForProfile();
     expect((await screen.findAllByText(/Menu du jour/)).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/Riz/)).toBeTruthy();
   });
 });
 

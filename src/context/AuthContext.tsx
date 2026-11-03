@@ -253,7 +253,8 @@ const DEMO_ACCOUNTS: Record<string, User> = DEMO_LOGIN_ENABLED
   ? {
       client: { username: 'client', role: 'client', password: 'client123' },
       personnel: { username: 'personnel', role: 'personnel', password: 'personnel123' },
-      gestionnaire: { username: 'gestionnaire', role: 'gestionnaire', password: 'gestionnaire123' },
+      // Compte Caissier retiré : cet espace est indisponible.
+
       admin: { username: 'admin', role: 'admin', password: 'admin123' },
     }
   : {};
@@ -491,7 +492,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const username = typeof row.username === 'string' ? row.username.trim().toLowerCase() : '';
     const role = normalizeRole(row.role);
-    if (!username || !role) return null;
+    if (!username || !role || role === 'gestionnaire') return null;
 
     return {
       username,
@@ -578,7 +579,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const local = getLocalUsers().find((u) => u.username === name);
-      if (local && local.password === password) {
+      if (local && local.password === password && normalizeRole(local.role) !== 'gestionnaire') {
         setUser(toSessionUser(local));
         return true;
       }
@@ -615,7 +616,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!ok) return false;
 
         const role = normalizeRole(data.role);
-        if (!role) return false;
+        if (!role || role === 'gestionnaire') return false;
 
         const user: User = {
           username: data.username,

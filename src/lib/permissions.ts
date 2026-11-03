@@ -30,7 +30,8 @@ export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   personnel: ['home', 'menu', 'validation', 'subscriptions', 'paiements', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'dashboard', 'paymentsuccess', 'paymentfailure', 'reclamations'],
   // Caissier : POS (avec scan QR élève), espace repas et historique.
   // Les pages payment/receipt/orders sont le tunnel technique de la vente.
-  gestionnaire: ['pos', 'menurecreation', 'history', 'payment', 'receipt', 'orders', 'profile', 'paymentsuccess', 'paymentfailure'],
+  // Espace Caissier désactivé : aucun accès disponible.
+  gestionnaire: [],
   // Espace ISM : pilotage + suivi uniquement (sans menus/paramètres/établissements)
   admin: [...ISM_PAGES, 'paymentsuccess', 'paymentfailure'],
 };
