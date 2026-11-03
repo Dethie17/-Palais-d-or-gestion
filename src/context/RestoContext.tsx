@@ -3732,7 +3732,13 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     // La colonne `dessert` n'existe pas encore en base : on l'empaquette dans
     // `description` (marqueur interne) pour que la publication reste partagée.
     const storedDescription = encodeMenuDescription(description, cleanDessert);
-    setWeeklyMenus((prev) => prev.map((m) => (m.day === day ? { ...m, name, description, dessert: cleanDessert, items: clean, price: dayPrice } : m)));
+    setWeeklyMenus((prev) => {
+      const existing = prev.find((m) => m.day === day);
+      if (existing) {
+        return prev.map((m) => (m.day === day ? { ...m, name, description, dessert: cleanDessert, items: clean, price: dayPrice } : m));
+      }
+      return [...prev, { day, name, description, dessert: cleanDessert, items: clean, price: dayPrice }];
+    });
     // Persistance : l'état local est optimiste (affichage immédiat). On écrit
     // en base sans jamais avaler l'erreur en silence.
     void (async () => {
