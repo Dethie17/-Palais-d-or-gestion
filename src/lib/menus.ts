@@ -90,22 +90,33 @@ export function sanitizeMenuItem(name: string, price: number): WeeklyMenuItem | 
  * L'écran ne voit jamais le marqueur (description nettoyée + champ dessert).
  */
 const DESSERT_MARKER = '\n[dessert]';
+const IMAGE_MARKER = '\n[menu-image]';
 
-/** Empaquette description + dessert pour la colonne `description` distante. */
-export function encodeMenuDescription(description: string, dessert?: string): string {
+/** Empaquette description + dessert + image pour la colonne `description` distante. */
+export function encodeMenuDescription(description: string, dessert?: string, image?: string): string {
   const cleanDescription = (description ?? '').trim();
   const cleanDessert = (dessert ?? '').trim().slice(0, 60);
-  if (!cleanDessert) return cleanDescription;
-  return `${cleanDescription}${DESSERT_MARKER}${cleanDessert}`.slice(0, 500);
+  const cleanImage = (image ?? '').trim().slice(0, 500);
+  let encoded = cleanDescription;
+  if (cleanDessert) encoded += `${DESSERT_MARKER}${cleanDessert}`;
+  if (cleanImage) encoded += `${IMAGE_MARKER}${cleanImage}`;
+  return encoded.slice(0, 1000);
 }
 
-/** Dépaquette la colonne `description` distante en description + dessert. */
-export function decodeMenuDescription(raw: string | null | undefined): { description: string; dessert: string } {
-  const text = typeof raw === 'string' ? raw : '';
-  const index = text.lastIndexOf(DESSERT_MARKER);
-  if (index === -1) return { description: text.trim(), dessert: '' };
+/** Dépaquette la colonne `description` distante en description, dessert et image. */
+export function decodeMenuDescription(raw: string | null | undefined): { description: string; dessert: string; image: string } {
+  let text = typeof raw === 'string' ? raw : '';
+  let image = '';
+  const imageIndex = text.lastIndexOf(IMAGE_MARKER);
+  if (imageIndex !== -1) {
+    image = text.slice(imageIndex + IMAGE_MARKER.length).trim().slice(0, 500);
+    text = text.slice(0, imageIndex);
+  }
+  const dessertIndex = text.lastIndexOf(DESSERT_MARKER);
+  if (dessertIndex === -1) return { description: text.trim(), dessert: '', image };
   return {
-    description: text.slice(0, index).trim(),
-    dessert: text.slice(index + DESSERT_MARKER.length).trim(),
+    description: text.slice(0, dessertIndex).trim(),
+    dessert: text.slice(dessertIndex + DESSERT_MARKER.length).trim(),
+    image,
   };
 }

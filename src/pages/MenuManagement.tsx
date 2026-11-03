@@ -9,6 +9,7 @@ import { useProducts } from '@/context/ProductContext';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { menuDateLabel, menuMonthDays } from '@/lib/menuDates';
+import { menuPhoto } from '@/data/cantineWeek';
 
 const MenuManagement = () => {
   const { user } = useAuth();
@@ -53,13 +54,13 @@ const MenuManagement = () => {
     setEditingProduct(null);
     setShowModal(true);
   };
-  type DayDraft = { name: string; description: string; dessert: string };
+  type DayDraft = { name: string; description: string; dessert: string; image: string };
   const monthDays = menuMonthDays(2026, 10, 2);
   const [monthDraft, setMonthDraft] = useState<Record<string, DayDraft> | null>(null);
   const [monthSaved, setMonthSaved] = useState(false);
   const baseMonth = (): Record<string, DayDraft> => {
-    const byDay = Object.fromEntries(weeklyMenus.map((m) => [m.day, { name: m.name, description: m.description, dessert: m.dessert ?? '' }]));
-    return Object.fromEntries(monthDays.map((day) => [day, byDay[day] ?? { name: '', description: '', dessert: '' }]));
+    const byDay = Object.fromEntries(weeklyMenus.map((m) => [m.day, { name: m.name, description: m.description, dessert: m.dessert ?? '', image: m.image ?? '' }]));
+    return Object.fromEntries(monthDays.map((day) => [day, byDay[day] ?? { name: '', description: '', dessert: '', image: '' }]));
   };
   const monthForm: Record<string, DayDraft> = monthDraft ?? baseMonth();
   const setDay = (day: string, patch: Partial<DayDraft>) => {
@@ -80,7 +81,7 @@ const MenuManagement = () => {
       const row = monthForm[day];
       if (!row) return;
       const existing = weeklyMenus.find((m) => m.day === day);
-      updateWeeklyMenu(day, '', row.description.trim(), [], existing?.price ?? 0, row.dessert.trim());
+      updateWeeklyMenu(day, '', row.description.trim(), [], existing?.price ?? 0, row.dessert.trim(), row.image.trim());
     });
     setMonthDraft(null);
     setMonthSaved(true);
@@ -110,7 +111,7 @@ const MenuManagement = () => {
         <p className="font-bold text-slate-800 flex items-center gap-2">
           <CalendarDays className="w-5 h-5 text-slate-500" /> Menu mensuel — novembre 2026
         </p>
-        <p className="text-xs text-slate-500 mt-1">Renseignez uniquement le repas et le dessert pour chaque jour du 2 au 30 novembre. Le menu mensuel est visible par les parents et l’Espace Repas dès sa publication.</p>
+        <p className="text-xs text-slate-500 mt-1">Renseignez le repas, le dessert et, si vous le souhaitez, une image pour chaque jour du 2 au 30 novembre. Chaque menu affiche une image illustrée; une URL personnalisée remplace l’image automatique.</p>
         {isDG && (
           <p className="mt-2 text-xs font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-1.5">
             <Eye className="w-4 h-4 flex-shrink-0" /> Suivi Direction : composition modifiable uniquement par le Superviseur.
@@ -119,7 +120,7 @@ const MenuManagement = () => {
         <fieldset disabled={isDG} className="contents">
         <div className="mt-3 grid lg:grid-cols-2 gap-3">
           {monthDays.map((day) => {
-            const row = monthForm[day] ?? { name: '', description: '', dessert: '' };
+            const row = monthForm[day] ?? { name: '', description: '', dessert: '', image: '' };
             return (
               <div key={day} className="rounded-2xl border-2 border-slate-100 p-4 hover:border-slate-200 transition-colors">
                 <span className="text-[11px] font-black px-2.5 py-1.5 rounded-xl bg-gradient-to-br from-slate-500 to-red-600 text-white whitespace-nowrap inline-block">
@@ -146,6 +147,25 @@ const MenuManagement = () => {
                     maxLength={60}
                     className="ml-auto flex-1 min-w-0 px-3 py-1.5 rounded-xl border-2 border-amber-200 text-sm outline-none focus:border-amber-500 bg-white"
                   />
+                </div>
+                <div className="mt-2 grid grid-cols-[72px_1fr] gap-2 items-center">
+                  <img
+                    src={menuPhoto({ day, description: row.description, dessert: row.dessert, items: [], image: row.image })}
+                    alt="Illustration du menu"
+                    className="w-[72px] h-[72px] rounded-xl object-cover border border-slate-200"
+                    loading="lazy"
+                  />
+                  <div>
+                    <label htmlFor={`image-${day}`} className="text-[11px] font-black uppercase tracking-widest text-slate-600">Image illustrant le menu</label>
+                    <input
+                      id={`image-${day}`}
+                      value={row.image}
+                      onChange={(e) => setDay(day, { image: e.target.value })}
+                      placeholder="URL de l’image (optionnel)"
+                      maxLength={500}
+                      className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500"
+                    />
+                  </div>
                 </div>
               </div>
             );

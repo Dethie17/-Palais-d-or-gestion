@@ -54,13 +54,17 @@ describe('composition des menus du jour (DG)', () => {
   });
 
 
-  it('dessert empaqueté dans description (colonne distante absente) puis restitué', () => {
-    const stored = encodeMenuDescription('Tacos + Jus', 'Fruit de saison');
+  it('dessert et image empaquetés dans description (colonnes distantes absentes) puis restitués', () => {
+    const stored = encodeMenuDescription('Tacos + Jus', 'Fruit de saison', 'https://example.com/menu.jpg');
     expect(stored).not.toBe('Tacos + Jus');
-    expect(decodeMenuDescription(stored)).toEqual({ description: 'Tacos + Jus', dessert: 'Fruit de saison' });
-    expect(decodeMenuDescription('Tacos + Jus')).toEqual({ description: 'Tacos + Jus', dessert: '' });
-    expect(encodeMenuDescription('Tacos + Jus', '   ')).toBe('Tacos + Jus');
-    expect(decodeMenuDescription(null)).toEqual({ description: '', dessert: '' });
+    expect(decodeMenuDescription(stored)).toEqual({
+      description: 'Tacos + Jus',
+      dessert: 'Fruit de saison',
+      image: 'https://example.com/menu.jpg',
+    });
+    expect(decodeMenuDescription('Tacos + Jus')).toEqual({ description: 'Tacos + Jus', dessert: '', image: '' });
+    expect(encodeMenuDescription('Tacos + Jus', '   ', '   ')).toBe('Tacos + Jus');
+    expect(decodeMenuDescription(null)).toEqual({ description: '', dessert: '', image: '' });
   });
 
   it('semaine complète = 5 jours avec au moins un plat', () => {
@@ -117,6 +121,16 @@ describe('composition des menus du jour (DG)', () => {
         dessert: 'Jus d’orange',
       }),
     ).toBe('https://images.unsplash.com/photo-1608039755401-742074f0548d?w=600&h=400&fit=crop');
+  });
+
+  it('photo personnalisée prioritaire sur les illustrations automatiques', () => {
+    expect(menuPhoto({
+      day: 'Mardi',
+      description: 'Tacos',
+      items: [],
+      dessert: '',
+      image: 'https://example.com/menu-personnalise.jpg',
+    })).toBe('https://example.com/menu-personnalise.jpg');
   });
 
   it('photo du jour quand aucun ingrédient connu n’est décrit', () => {

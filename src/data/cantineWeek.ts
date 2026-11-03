@@ -35,20 +35,28 @@ const DISH_PHOTOS: Array<{ pattern: RegExp; photo: string }> = [
   { pattern: /crepe|gaufre/, photo: DAY_PHOTOS.Jeudi },
   { pattern: /burger/, photo: DAY_PHOTOS.Vendredi },
   { pattern: /fataya|samossa|samoussa/, photo: DAY_PHOTOS.Lundi },
+  { pattern: /thi[eé]b|riz au poisson|riz poisson/, photo: 'https://images.unsplash.com/photo-1547592180-85f173990554?w=600&h=400&fit=crop' },
+  { pattern: /yassa/, photo: 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=600&h=400&fit=crop' },
+  { pattern: /mafe|mafé/, photo: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=600&h=400&fit=crop' },
+  { pattern: /poulet|poulets/, photo: WINGS_PHOTO },
+  { pattern: /riz|spaghetti|pâtes|nouilles/, photo: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=600&h=400&fit=crop' },
 ];
 
 const normaliser = (texte: string): string =>
   texte.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 export function menuPhoto(
-  menu: Pick<WeeklyMenu, 'day' | 'description' | 'items' | 'dessert'>,
-): string | undefined {
+  menu: Pick<WeeklyMenu, 'day' | 'description' | 'items' | 'dessert'> & { image?: string },
+): string {
+  if (menu.image?.trim()) return menu.image.trim();
   const texte = normaliser([
     menu.description,
     menu.dessert,
     ...(menu.items ?? []).map((item) => item.name),
   ].filter(Boolean).join(' '));
-  return DISH_PHOTOS.find(({ pattern }) => pattern.test(texte))?.photo ?? dayPhoto(menu.day);
+  const known = DISH_PHOTOS.find(({ pattern }) => pattern.test(texte))?.photo ?? dayPhoto(menu.day);
+  if (known) return known;
+  return 'https://images.unsplash.com/photo-1547592180-85f173990554?w=600&h=400&fit=crop';
 }
 
 const WEEK: Array<{ day: WeekDay; name: string; description: string; price: number; items: Array<{ name: string }> }> = [

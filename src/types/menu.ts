@@ -351,6 +351,8 @@ export interface WeeklyMenu {
   items: WeeklyMenuItem[];
   /** Dessert du jour (texte libre, affiché séparément des plats). */
   dessert?: string;
+  /** Image illustrative du menu, URL distante ou chemin local. */
+  image?: string;
   /** Prix UNIQUE du ticket du jour (FCFA), saisi par le Personnel. */
   price?: number;
 }
