@@ -130,6 +130,32 @@ export async function settle(args: SettleArgs, db: SupabaseClient = adminClient(
       if (!replay.error && replay.data && (replay.data as SettleOutcome).outcome !== 'unknown') {
         return replay.data as SettleOutcome;
       }
+
+      // Dernier repli si la migration SQL du groupe n'est pas encore appliquée
+      // sur le projet hébergé : chaque abonnement inféré reçoit son résultat.
+      if (tag === 'SUCCESS') {
+        await db.from('oresto_payments').update({
+          status: 'paid', provider_status: 'SUCCESS',
+          provider_tx: args.providerTx ?? null, settled_at: new Date().toISOString(),
+          paid_at: new Date().toISOString(),
+        }).eq('reference', args.reference).eq('status', 'pending');
+        for (const subscriptionId of inferredIds) {
+          const sub = (siblings ?? []).find((item: any) => item.id === subscriptionId);
+          if (!sub) continue;
+          const { data: formula } = await db.from('formulas').select('meals_included').eq('id', sub.formula_id).maybeSingle();
+          await db.from('subscriptions').update({
+            status: 'active', meals_remaining: formula?.meals_included ?? sub.meals_remaining,
+          }).eq('id', subscriptionId);
+        }
+        return { outcome: 'settled', reference: args.reference, status: 'paid' };
+      }
+      if (tag === 'CANCELED') {
+        await db.from('oresto_payments').update({
+          status: 'cancelled', provider_status: tag, settled_at: new Date().toISOString(),
+        }).eq('reference', args.reference).eq('status', 'pending');
+        await db.from('subscriptions').update({ status: 'cancelled' }).in('id', inferredIds);
+        return { outcome: 'ignored', reference: args.reference, status: 'cancelled' };
+      }
     }
   }
 
