@@ -91,6 +91,48 @@ export async function settle(args: SettleArgs, db: SupabaseClient = adminClient(
     return groupData as SettleOutcome;
   }
 
+  // Reconstitution de secours : certains paiements historiques ont été créés
+  // avant que le groupe multi-enfants ne soit persisté, ou juste avant le
+  // rendez-vous avec la passerelle. On déduit le groupe des abonnements créés
+  // ensemble pour le même parent, puis on rejoue le règlement atomique.
+  const { data: payment } = await db.from('oresto_payments').select('*').eq('reference', args.reference).maybeSingle();
+  if (payment?.client_username) {
+    const { data: siblings } = await db.from('subscriptions')
+      .select('*')
+      .eq('client_username', payment.client_username);
+    const paymentTime = new Date(payment.created_at).getTime();
+    const inferredIds = Array.from(new Set([
+      ...(typeof payment.subscription_id === 'string' ? [payment.subscription_id] : []),
+      ...((siblings ?? []).filter((sub: any) => {
+        const created = new Date(sub.created_at).getTime();
+        return ['pending', 'cancelled', 'active'].includes(sub.status)
+          && Number.isFinite(created) && Number.isFinite(paymentTime)
+          && Math.abs(created - paymentTime) <= 5 * 60 * 1000;
+      }).map((sub: any) => sub.id)),
+    ]));
+    if (inferredIds.length > 1) {
+      const childIds = Array.from(new Set([
+        ...(typeof payment.child_id === 'string' ? [payment.child_id] : []),
+        ...((siblings ?? []).filter((sub: any) => inferredIds.includes(sub.id)).map((sub: any) => sub.child_id).filter(Boolean)),
+      ]));
+      await db.from('oresto_payment_groups').upsert({
+        payment_reference: args.reference,
+        subscription_ids: inferredIds,
+        child_ids: childIds,
+        parent_username: payment.client_username,
+      });
+      const replay = await db.rpc('oresto_settle_payment_group', {
+        p_reference: args.reference,
+        p_tag: tag,
+        p_provider_tx: args.providerTx ?? null,
+        p_event_id: args.eventId ?? null,
+      });
+      if (!replay.error && replay.data && (replay.data as SettleOutcome).outcome !== 'unknown') {
+        return replay.data as SettleOutcome;
+      }
+    }
+  }
+
   // Une recharge porte sa référence dans wallet_transactions ; on tente
   // d'abord oresto_payments, et « unknown » bascule alors sur le wallet.
   const first = await settleWithRpc(db, 'oresto_settle_payment', { ...common, p_event_type: args.eventType ?? null });

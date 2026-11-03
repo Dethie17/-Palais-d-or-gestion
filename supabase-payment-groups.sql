@@ -24,14 +24,27 @@ DECLARE
   v_sub_id TEXT;
   v_formula public.formulas%ROWTYPE;
 BEGIN
-  SELECT * INTO v_group FROM public.oresto_payment_groups WHERE payment_reference = p_reference;
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('outcome', 'unknown');
-  END IF;
-
   SELECT * INTO v_payment FROM public.oresto_payments WHERE reference = p_reference LIMIT 1 FOR UPDATE;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('outcome', 'unknown', 'reference', p_reference);
+  END IF;
+
+  SELECT * INTO v_group FROM public.oresto_payment_groups WHERE payment_reference = p_reference;
+  IF NOT FOUND THEN
+    INSERT INTO public.oresto_payment_groups (payment_reference, subscription_ids, child_ids, parent_username)
+    SELECT p_reference,
+      ARRAY_AGG(DISTINCT s.id ORDER BY s.created_at, s.id),
+      ARRAY_AGG(DISTINCT s.child_id ORDER BY s.child_id) FILTER (WHERE s.child_id IS NOT NULL),
+      v_payment.client_username
+    FROM public.subscriptions s
+    WHERE s.client_username = v_payment.client_username
+      AND s.status IN ('pending', 'cancelled', 'active')
+      AND ABS(EXTRACT(EPOCH FROM (s.created_at - v_payment.created_at))) <= 300
+    HAVING COUNT(*) > 1;
+    SELECT * INTO v_group FROM public.oresto_payment_groups WHERE payment_reference = p_reference;
+    IF NOT FOUND THEN
+      RETURN jsonb_build_object('outcome', 'unknown');
+    END IF;
   END IF;
   IF v_payment.status <> 'pending' THEN
     RETURN jsonb_build_object('outcome', 'already', 'reference', p_reference, 'status', v_payment.status);

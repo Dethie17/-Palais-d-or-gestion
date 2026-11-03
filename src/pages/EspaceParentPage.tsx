@@ -8,7 +8,7 @@ import { officialPrice } from '@/lib/aboTariffs';
 import { cycleOfClass } from '@/lib/schoolCycles';
 import { officialAboForCycle } from '@/lib/aboTariffs';
 import { publishedDays } from '@/lib/menus';
-import { dayPhoto } from '@/data/cantineWeek';
+import { menuPhoto } from '@/data/cantineWeek';
 import type {
   Complaint, ComplaintCategory, ComplaintStatus,
   ORestoPayment, ORestoPaymentStatus, PageName, Subscription, WalletTx,
@@ -239,15 +239,17 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
 
     const firstSub = subscriptionsToPay[0];
     const { payment } = paySubscription(firstSub.id, method, firstSub, montant);
+    payment.groupSubscriptionIds = subscriptionsToPay.map((sub) => sub.id);
 
-    void supabase.from('oresto_payment_groups').upsert({
+    const { error: groupError } = await supabase.from('oresto_payment_groups').upsert({
       payment_reference: payment.reference,
       subscription_ids: subscriptionsToPay.map((sub) => sub.id),
       child_ids: children.map((child) => child.id),
       parent_username: username,
-    }).then(({ error }) => {
-      if (error) console.warn('oresto_payment_groups indisponible:', error.message);
     });
+    if (groupError) {
+      throw new Error(`Impossible de préparer le paiement multi-enfants: ${groupError.message}`);
+    }
 
     const session = await openProviderPayment(
       { reference: payment.reference, amount: montant, method, phone },
@@ -351,18 +353,20 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
 
   // ---------- Historique complet ----------
   const historyRows = useMemo(() => {
-    const payList = myPayments(username).map((p) => ({
-      kind: 'pay' as const,
-      id: p.id,
-      date: p.createdAt,
-      child: childNameOf(allMine.find((s) => s.id === p.subscriptionId)) ?? 'Abonnement',
-      label: `Paiement ${p.reference} — ${METHOD_LABEL[p.method] ?? p.method}`,
-      amount: -p.amount,
-      status: p.status,
-      solde: null as number | null,
-      tx: null as WalletTx | null,
-      payment: p,
-    }));
+    const payList = myPayments(username)
+      .filter((p) => p.status !== 'cancelled')
+      .map((p) => ({
+        kind: 'pay' as const,
+        id: p.id,
+        date: p.createdAt,
+        child: childNameOf(allMine.find((s) => s.id === p.subscriptionId)) ?? 'Abonnement',
+        label: `Paiement ${p.reference} — ${METHOD_LABEL[p.method] ?? p.method}`,
+        amount: -p.amount,
+        status: p.status,
+        solde: null as number | null,
+        tx: null as WalletTx | null,
+        payment: p,
+      }));
     const walletList = kids
       .filter((k) => histChild === 'all' || k.id === histChild)
       .flatMap((k) =>
@@ -471,21 +475,20 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
 
         {/* ===== 2. MENU : consultation seule (aucun achat) ===== */}
         <section id="menu" className="scroll-mt-24">
-          <SectionTitle step="2" title="Menu du jour" sub="Consultation — le menu du jour est servi à la cantine, sans achat en ligne" />
+          <SectionTitle step="2" title="Menu du jour" />
 
           {menuDuJour ? (
             <div className="mt-4 max-w-md">
-              <p className="font-bold text-slate-800 mb-2">Menu du jour — {menuDuJour.day} : {menuDuJour.name || `Menu du ${menuDuJour.day}`}</p>
+              <p className="font-bold text-slate-800 mb-2">Menu du jour — {menuDuJour.day}</p>
               <div className="bg-white rounded-2xl border-2 border-green-500 ring-2 ring-green-200 shadow-sm overflow-hidden">
                 <div className="relative h-36 overflow-hidden">
-                  <img src={dayPhoto(menuDuJour.day)} alt={`${menuDuJour.day} — ${menuDuJour.name}`} loading="lazy" className="w-full h-full object-cover" />
+                  <img src={menuPhoto(menuDuJour)} alt={`Menu du jour — ${menuDuJour.day}`} loading="lazy" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
                   <span className="absolute bottom-2 left-3 text-sm font-black uppercase tracking-widest text-white drop-shadow">{menuDuJour.day}</span>
                   <span className="absolute top-2 right-2 text-[11px] font-bold px-2.5 py-1 rounded-full bg-white text-green-700 shadow">MENU DU JOUR</span>
                 </div>
                 <div className="p-4">
-                  <p className="font-extrabold text-slate-900">{menuDuJour.name || `Menu du ${menuDuJour.day}`}</p>
-                  {menuDuJour.description && <p className="text-xs text-slate-500 mt-0.5">{menuDuJour.description}</p>}
+                  {menuDuJour.description && <p className="text-sm font-semibold text-slate-800">{menuDuJour.description}</p>}
                   {menuDuJour.dessert && <p className="text-sm font-semibold text-amber-700 mt-1">Dessert : {menuDuJour.dessert}</p>}
                   {menuDuJour.items.length > 0 && (
                     <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
@@ -769,9 +772,7 @@ function ReclamationsSection({ username }: { username: string }) {
           <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
             <MessageSquareWarning className="w-5 h-5 text-emerald-700" /> Réclamations
           </h2>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Une remarque sur les repas, la carte ou le service ? Écrivez au Superviseur — il répond dans ce fil.
-          </p>
+
         </div>
       </div>
 
