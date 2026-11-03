@@ -165,7 +165,7 @@ des abonnements. Le mode test « none » de SycaPay exige de poser explicitement
 ### Étape 5 — Vérifier
 
 ```bash
-curl https://orestosn.com/api/sycapay/health
+curl https://orestosn.com/api/sycapay/status
 # attendu : {"ok":true,"mode":"sycapay","sycapay":true,"database":true}
 ```
 
