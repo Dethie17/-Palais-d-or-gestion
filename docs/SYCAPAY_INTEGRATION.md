@@ -137,7 +137,7 @@ SYCAPAY_MDP_API=…            ← à saisir (back-office)
 SYCAPAY_CA_CRT=<base64>
 SYCAPAY_CLIENT_CRT=<base64>
 SYCAPAY_CLIENT_KEY=<base64>
-VITE_APP_URL=https://orestos.vercel.app
+VITE_APP_URL=https://orestosn.com
 ```
 
 Sur Vercel, ondeclare ces mêmes variables dans les variables d'environnement
@@ -152,7 +152,7 @@ variable `VITE_*`** : elles seraient livrées dans le bundle.
 Dans le back-office SycaPay (partenaire MIAMS) :
 
 ```
-https://orestos.vercel.app/api/sycapay/webhook
+https://orestosn.com/api/sycapay/webhook
 ```
 
 mode **HMAC SHA256**, secret à aligner sur `SYCAPAY_WEBHOOK_SECRET`.
@@ -165,7 +165,7 @@ des abonnements. Le mode test « none » de SycaPay exige de poser explicitement
 ### Étape 5 — Vérifier
 
 ```bash
-curl https://orestos.vercel.app/api/sycapay/health
+curl https://orestosn.com/api/sycapay/health
 # attendu : {"ok":true,"mode":"sycapay","sycapay":true,"database":true}
 ```
 
@@ -184,7 +184,7 @@ Vérifié, pas supposé :
 | Couple mTLS `client.key` / `client.crt` / `ca.crt` | ✅ cohérent |
 | Connexion mTLS à `ops.sycapay.com` | ✅ **aboutit** |
 | `loginApi` = MIAMS | ✅ |
-| Domaine `orestos.vercel.app` | ✅ répond |
+| Domaine `orestosn.com` | ✅ répond |
 | **Compte partenaire MIAMS** | ❌ **`1114 — partenaire désactivé`** |
 | Colonnes `provider*` + `oresto_settle_payment` | ❌ à installer |
 | Tables `kiosk_orders`, `reclamations`, `reclamation_messages` | ❌ à installer |

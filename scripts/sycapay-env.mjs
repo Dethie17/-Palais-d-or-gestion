@@ -37,7 +37,7 @@ const CONSTANTS = {
   SYCAPAY_LOGIN_API: 'MIAMS',
   // Les adresses de retour doivent être en https : SycaPay refuse en http
   // (codes 1120 / 1121 sur l'initiation).
-  VITE_APP_URL: 'https://orestos.vercel.app',
+  VITE_APP_URL: 'https://orestosn.com',
 };
 
 /** Fichier PEM → variable d'environnement correspondante. */
