@@ -145,6 +145,8 @@ export interface ORestoPayment {
    * comptabilisé (v_paiements_valides côté base, isValidatedPayment ici).
    */
   settledAt?: string;
+  /** Groupes de paiement multi-enfants : abonnements couverts par une seule transaction. */
+  groupSubscriptionIds?: string[];
 }
 
 export interface MealValidation {
@@ -341,7 +343,8 @@ export interface WeeklyMenuItem {
 }
 
 export interface WeeklyMenu {
-  day: WeekDay;
+  /** Clé hebdomadaire historique (Lundi...) ou clé mensuelle YYYY-MM-DD. */
+  day: string;
   name: string;
   description: string;
   /** Plats du jour (noms - sans prix unitaires côté composition). */

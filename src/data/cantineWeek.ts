@@ -1,4 +1,5 @@
 import type { WeekDay, WeeklyMenu } from '@/types/menu';
+import { menuMonthDays } from '@/lib/menuDates';
 
 /**
  * Semaine cantine de référence (vitrine parent Lun → Ven).
@@ -24,6 +25,31 @@ export const DAY_PHOTOS: Record<WeekDay, string> = {
 
 export const dayPhoto = (day: string): string | undefined =>
   (DAY_PHOTOS as Record<string, string>)[day];
+
+const WINGS_PHOTO = 'https://images.unsplash.com/photo-1608039755401-742074f0548d?w=600&h=400&fit=crop';
+
+const DISH_PHOTOS: Array<{ pattern: RegExp; photo: string }> = [
+  { pattern: /wings?|chicken/, photo: WINGS_PHOTO },
+  { pattern: /tacos?/, photo: DAY_PHOTOS.Mardi },
+  { pattern: /pizza/, photo: DAY_PHOTOS.Mercredi },
+  { pattern: /crepe|gaufre/, photo: DAY_PHOTOS.Jeudi },
+  { pattern: /burger/, photo: DAY_PHOTOS.Vendredi },
+  { pattern: /fataya|samossa|samoussa/, photo: DAY_PHOTOS.Lundi },
+];
+
+const normaliser = (texte: string): string =>
+  texte.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+export function menuPhoto(
+  menu: Pick<WeeklyMenu, 'day' | 'description' | 'items' | 'dessert'>,
+): string | undefined {
+  const texte = normaliser([
+    menu.description,
+    menu.dessert,
+    ...(menu.items ?? []).map((item) => item.name),
+  ].filter(Boolean).join(' '));
+  return DISH_PHOTOS.find(({ pattern }) => pattern.test(texte))?.photo ?? dayPhoto(menu.day);
+}
 
 const WEEK: Array<{ day: WeekDay; name: string; description: string; price: number; items: Array<{ name: string }> }> = [
   {
@@ -71,5 +97,17 @@ export function referenceWeek(): WeeklyMenu[] {
     description: m.description,
     price: m.price,
     items: m.items.map((it) => ({ name: it.name, price: 0 })),
+  }));
+}
+
+/** Menu mensuel vide du 2 au 30 novembre 2026 : seule la cantine publie son contenu. */
+export function referenceMonth(): WeeklyMenu[] {
+  return menuMonthDays(2026, 10, 2).map((day) => ({
+    day,
+    name: '',
+    description: '',
+    dessert: '',
+    price: 0,
+    items: [],
   }));
 }

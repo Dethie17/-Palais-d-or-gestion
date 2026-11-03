@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Product, ProductExtra, WEEK_DAYS, WeeklyMenuItem } from '@/types/menu';
+import { Product, ProductExtra } from '@/types/menu';
 import { categories } from '@/data/mockData';
 import { formatCurrency } from '@/lib/utils';
 import { publishedDays, isWeekPublishable } from '@/lib/menus';
@@ -8,6 +8,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { useProducts } from '@/context/ProductContext';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
+import { menuDateLabel, menuMonthDays } from '@/lib/menuDates';
 
 const MenuManagement = () => {
   const { user } = useAuth();
@@ -52,42 +53,38 @@ const MenuManagement = () => {
     setEditingProduct(null);
     setShowModal(true);
   };
-  type DayDraft = { name: string; description: string; dessert: string; items: WeeklyMenuItem[] };
-  const [weekDraft, setWeekDraft] = useState<Record<string, DayDraft> | null>(null);
-  const [weekSaved, setWeekSaved] = useState(false);
-  const baseWeek = (): Record<string, DayDraft> =>
-    Object.fromEntries(weeklyMenus.map((m) => [m.day, { name: m.name, description: m.description, dessert: m.dessert ?? '', items: (m.items ?? []).map((it) => ({ name: it.name, price: 0 })) }]));
-  const weekForm: Record<string, DayDraft> = weekDraft ?? baseWeek();
+  type DayDraft = { name: string; description: string; dessert: string };
+  const monthDays = menuMonthDays(2026, 10, 2);
+  const [monthDraft, setMonthDraft] = useState<Record<string, DayDraft> | null>(null);
+  const [monthSaved, setMonthSaved] = useState(false);
+  const baseMonth = (): Record<string, DayDraft> => {
+    const byDay = Object.fromEntries(weeklyMenus.map((m) => [m.day, { name: m.name, description: m.description, dessert: m.dessert ?? '' }]));
+    return Object.fromEntries(monthDays.map((day) => [day, byDay[day] ?? { name: '', description: '', dessert: '' }]));
+  };
+  const monthForm: Record<string, DayDraft> = monthDraft ?? baseMonth();
   const setDay = (day: string, patch: Partial<DayDraft>) => {
-    const cur = weekDraft ?? baseWeek();
-    setWeekDraft({ ...cur, [day]: { ...cur[day], ...patch } });
+    const cur = monthDraft ?? baseMonth();
+    setMonthDraft({ ...cur, [day]: { ...cur[day], ...patch } });
   };
-  const removeDish = (day: string, idx: number) => {
-    const cur = weekForm[day];
-    if (!cur) return;
-    setDay(day, { items: cur.items.filter((_, i) => i !== idx) });
-  };
-  const weekRows = WEEK_DAYS.map((d) => ({
-    day: d,
-    items: weekForm[d]?.items ?? [],
-    description: weekForm[d]?.description ?? '',
-    dessert: weekForm[d]?.dessert ?? '',
+  const monthRows = monthDays.map((day) => ({
+    day,
+    items: [],
+    description: monthForm[day]?.description ?? '',
+    dessert: monthForm[day]?.dessert ?? '',
   }));
-  const composedCount = publishedDays(weekRows).length;
-  const canPublish = isWeekPublishable(weekRows);
-  const saveWeekMenus = () => {
+  const composedCount = publishedDays(monthRows).length;
+  const canPublish = isWeekPublishable(monthRows);
+  const saveMonthMenus = () => {
     if (!canPublish) return;
-    WEEK_DAYS.forEach((d) => {
-      const row = weekForm[d];
+    monthDays.forEach((day) => {
+      const row = monthForm[day];
       if (!row) return;
-      // Nom et prix ne sont plus saisis ici : on conserve les valeurs déjà
-      // publiées (le prix reste utilisé par la caisse / les tickets).
-      const existing = weeklyMenus.find((m) => m.day === d);
-      updateWeeklyMenu(d, row.name.trim(), row.description.trim(), row.items, existing?.price ?? 0, row.dessert.trim());
+      const existing = weeklyMenus.find((m) => m.day === day);
+      updateWeeklyMenu(day, '', row.description.trim(), [], existing?.price ?? 0, row.dessert.trim());
     });
-    setWeekDraft(null);
-    setWeekSaved(true);
-    window.setTimeout(() => setWeekSaved(false), 2500);
+    setMonthDraft(null);
+    setMonthSaved(true);
+    window.setTimeout(() => setMonthSaved(false), 2500);
   };
 
   return (
@@ -108,12 +105,12 @@ const MenuManagement = () => {
         )}
       </div>
 
-      {/* Menus du jour : composition Superviseur */}
+      {/* Menu mensuel : composition Superviseur */}
       <div className="bg-white rounded-2xl border p-5">
         <p className="font-bold text-slate-800 flex items-center gap-2">
-          <CalendarDays className="w-5 h-5 text-slate-500" /> Menus du jour — composition
+          <CalendarDays className="w-5 h-5 text-slate-500" /> Menu mensuel — novembre 2026
         </p>
-        <p className="text-xs text-slate-500 mt-1">Renseignez la description et le dessert de chaque jour. La semaine s’affiche — Accès Abonné ET Espace Repas (caisse) — dès qu’au moins un jour est composé et publié.</p>
+        <p className="text-xs text-slate-500 mt-1">Renseignez uniquement le repas et le dessert pour chaque jour du 2 au 30 novembre. Le menu mensuel est visible par les parents et l’Espace Repas dès sa publication.</p>
         {isDG && (
           <p className="mt-2 text-xs font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-1.5">
             <Eye className="w-4 h-4 flex-shrink-0" /> Suivi Direction : composition modifiable uniquement par le Superviseur.
@@ -121,66 +118,52 @@ const MenuManagement = () => {
         )}
         <fieldset disabled={isDG} className="contents">
         <div className="mt-3 grid lg:grid-cols-2 gap-3">
-          {WEEK_DAYS.map((d) => {
-            const row = weekForm[d] ?? { name: '', description: '', dessert: '', items: [] };
+          {monthDays.map((day) => {
+            const row = monthForm[day] ?? { name: '', description: '', dessert: '' };
             return (
-              <div key={d} className="rounded-2xl border-2 border-slate-100 p-4 hover:border-slate-200 transition-colors">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-black px-2.5 py-1.5 rounded-xl bg-gradient-to-br from-slate-500 to-red-600 text-white whitespace-nowrap flex-shrink-0">{d}</span>
-                </div>
-                <input
-                  value={row.description}
-                  onChange={(e) => setDay(d, { description: e.target.value })}
-                  placeholder="Accroche (ex : Tacos + Jus Naturel)"
-                  maxLength={140}
-                  className="mt-2 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500"
-                />
-                <div className="mt-2 flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-100 px-3 py-2">
-                  <label htmlFor={`dessert-${d}`} className="text-[11px] font-black uppercase tracking-widest text-amber-700 whitespace-nowrap">Dessert</label>
+              <div key={day} className="rounded-2xl border-2 border-slate-100 p-4 hover:border-slate-200 transition-colors">
+                <span className="text-[11px] font-black px-2.5 py-1.5 rounded-xl bg-gradient-to-br from-slate-500 to-red-600 text-white whitespace-nowrap inline-block">
+                  {menuDateLabel(day)}
+                </span>
+                <div className="mt-2">
+                  <label htmlFor={`meal-${day}`} className="text-[11px] font-black uppercase tracking-widest text-slate-600">Repas</label>
                   <input
-                    id={`dessert-${d}`}
+                    id={`meal-${day}`}
+                    value={row.description}
+                    onChange={(e) => setDay(day, { description: e.target.value })}
+                    placeholder="ex : Riz au poisson + légumes"
+                    maxLength={140}
+                    className="mt-1 w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-slate-500"
+                  />
+                </div>
+                <div className="mt-2 flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-100 px-3 py-2">
+                  <label htmlFor={`dessert-${day}`} className="text-[11px] font-black uppercase tracking-widest text-amber-700 whitespace-nowrap">Dessert</label>
+                  <input
+                    id={`dessert-${day}`}
                     value={row.dessert}
-                    onChange={(e) => setDay(d, { dessert: e.target.value })}
+                    onChange={(e) => setDay(day, { dessert: e.target.value })}
                     placeholder="ex : Fruit de saison"
                     maxLength={60}
                     className="ml-auto flex-1 min-w-0 px-3 py-1.5 rounded-xl border-2 border-amber-200 text-sm outline-none focus:border-amber-500 bg-white"
                   />
                 </div>
-                {row.items.length > 0 && (
-                  <ul className="mt-2 divide-y divide-slate-100 border rounded-xl overflow-hidden">
-                    {row.items.map((it, i) => (
-                      <li key={`${it.name}-${i}`} className="px-3 py-1.5 flex items-center gap-2 text-sm">
-                        <span className="w-5 h-5 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-black flex items-center justify-center flex-shrink-0">{i + 1}</span>
-                        <span className="font-semibold flex-1 truncate">{it.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeDish(d, i)}
-                          title="Retirer ce plat"
-                          className="p-1 rounded-lg text-red-500 hover:bg-red-50"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </div>
             );
           })}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
-            onClick={saveWeekMenus}
+            onClick={saveMonthMenus}
             disabled={!canPublish}
-            title={canPublish ? 'Publier la semaine (Accès Abonné + Espace Repas)' : 'Renseignez au moins un jour pour publier'}
+            title={canPublish ? 'Publier le mois (Accès Abonné + Espace Repas)' : 'Renseignez au moins un jour pour publier'}
             className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-700 disabled:bg-slate-200 disabled:text-slate-400"
           >
             Publier les menus (parents + Espace Repas)
           </button>
           <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${canPublish ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-            {composedCount}/5 jours composés{canPublish ? ' — publication possible' : ' — renseignez au moins un jour'}
+            {composedCount}/29 jours composés{canPublish ? ' — publication possible' : ' — renseignez au moins un jour'}
           </span>
-          {weekSaved && <span className="text-xs font-bold text-green-700">Menus publiés ✓ (visibles Accès Abonné + Espace Repas)</span>}
+          {monthSaved && <span className="text-xs font-bold text-green-700">Menu mensuel publié ✓ (visibles parents + Espace Repas)</span>}
         </div>
         </fieldset>
       </div>

@@ -5,8 +5,9 @@ import { useResto } from '@/context/RestoContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { WAVE_BUSINESS_URL, WAVE_BUSINESS_NAME } from '@/lib/wave';
 import TicketCard from '@/components/TicketCard';
-import { dayPhoto } from '@/data/cantineWeek';
+import { menuPhoto } from '@/data/cantineWeek';
 import { menuTicketTotal } from '@/lib/menus';
+import { localDateKey, menuDateLabel, menuMonthDays } from '@/lib/menuDates';
 
 import {
   CalendarDays, Smartphone, QrCode, CheckCircle,
@@ -32,10 +33,12 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const todayName = DAY_INDEX[new Date().getDay()];
-  const todayMenu = weeklyMenus.find((m) => m.day === todayName && (m.items ?? []).length > 0);
+  const monthDays = menuMonthDays(2026, 10, 2);
+  const todayName = localDateKey(new Date(), 2026, 10);
+  const publishedMonthlyMenus = weeklyMenus.filter((m) => monthDays.includes(m.day) && (!!m.description?.trim() || !!m.dessert?.trim() || (m.items ?? []).length > 0));
+  const todayMenu = publishedMonthlyMenus.find((m) => m.day === todayName);
 
-  const otherMenus = weeklyMenus.filter((m) => m.day !== todayName && (m.items ?? []).length > 0);
+  const otherMenus = publishedMonthlyMenus.filter((m) => m.day !== todayName);
 
   const handleSelectMenu = (menu: WeeklyMenu) => {
     setSelectedMenu(menu);
@@ -167,10 +170,9 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
           {todayMenu && (
             <div className="max-w-md">
               <TicketCard
-                day={todayMenu.day}
-                name={todayMenu.name || `Menu du ${todayMenu.day}`}
+                day={menuDateLabel(todayMenu.day)}
                 description={todayMenu.description}
-                image={dayPhoto(todayMenu.day)}
+                image={menuPhoto(todayMenu)}
                 items={todayMenu.items ?? []}
                 dessert={todayMenu.dessert}
                 total={menuTicketTotal(todayMenu)}
@@ -195,10 +197,9 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
                 {otherMenus.map((menu) => (
                   <TicketCard
                     key={menu.day}
-                    day={menu.day}
-                    name={menu.name || `Menu du ${menu.day}`}
+                    day={menuDateLabel(menu.day)}
                     description={menu.description}
-                    image={dayPhoto(menu.day)}
+                    image={menuPhoto(menu)}
                     items={menu.items ?? []}
                     dessert={menu.dessert}
                     total={menuTicketTotal(menu)}
@@ -224,8 +225,8 @@ const MenuRecreationPage = ({ onNavigate }: MenuRecreationPageProps) => {
           <div className="bg-white rounded-2xl border p-6 shadow-sm">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
-                <p className="text-sm text-slate-500">{selectedMenu.day}</p>
-                <h3 className="text-xl font-bold text-slate-800">{selectedMenu.name || `Menu du ${selectedMenu.day}`}</h3>
+                <p className="text-sm text-slate-500">{menuDateLabel(selectedMenu.day)}</p>
+                <h3 className="text-xl font-bold text-slate-800">Menu du {menuDateLabel(selectedMenu.day)}</h3>
                 <p className="text-sm text-slate-500 mt-1">{formatMenuItems(selectedMenu.items ?? [])}</p>
                 {selectedMenu.dessert && <p className="text-sm font-semibold text-amber-700 mt-1">Dessert : {selectedMenu.dessert}</p>}
               </div>

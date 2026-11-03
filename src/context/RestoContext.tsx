@@ -52,7 +52,8 @@ import { normalizeParentPhone, isValidParentPhone, formatParentPhone } from '@/l
 import { dedupeChildren, childNaturalKey } from '@/lib/childIdentity';
 import { inferCycleFromClass, normalizeCycle, canonicalClassName } from '@/lib/schoolCycles';
 import { decodeMenuDescription, encodeMenuDescription, foldDayPriceIntoItems, publishedDays } from '@/lib/menus';
-import { referenceWeek } from '@/data/cantineWeek';
+import { referenceMonth, referenceWeek } from '@/data/cantineWeek';
+import { menuMonthDays } from '@/lib/menuDates';
 
 /**
  * Écritures Supabase « best-effort » : l'application continue en local quand
@@ -197,7 +198,7 @@ const LEGACY_LS_KEYS: Record<string, string> = {
 // et photos validés) tant que le Personnel n'a rien publié. Le Personnel garde
 // la main via Gestion Menu : composants, prix et publication (local + distant).
 // La base distante, quand elle contient une semaine publiée, prend le dessus.
-const DEFAULT_WEEKLY_MENUS: WeeklyMenu[] = referenceWeek();
+const DEFAULT_WEEKLY_MENUS: WeeklyMenu[] = referenceMonth();
 
 // Semaine déjà enregistrée en local ? Absente = première installation → on
 // présente la semaine de référence (jamais une cantine vide par défaut).
@@ -732,7 +733,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
   const [weeklyMenus, setWeeklyMenus] = useState<WeeklyMenu[]>(() => {
     // Migration douce : les menus enregistrés avant la composition (sans items) sont normalisés.
     // Première installation (rien en local) : semaine de référence validée.
-    if (!hasStoredWeek()) return referenceWeek();
+    if (!hasStoredWeek()) return referenceMonth();
     return load<WeeklyMenu[]>(LS_KEYS.weeklyMenus, DEFAULT_WEEKLY_MENUS).map((m) => ({
       ...m,
       items: Array.isArray((m as Partial<WeeklyMenu>).items) ? (m as WeeklyMenu).items : [],
@@ -966,7 +967,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
                 !!it && typeof (it as WeeklyMenuItem).name === 'string')
               .map((it) => ({ name: (it as WeeklyMenuItem).name.trim().slice(0, 60), price: Math.max(0, Math.floor(Number((it as WeeklyMenuItem).price) || 0)) }));
           };
-          const remote = WEEK_DAYS.map((d) => {
+          const remote = menuMonthDays(2026, 10, 2).map((d) => {
             const r = byDay.get(d);
             if (!r) return { day: d, name: '', description: '', items: [] as WeeklyMenuItem[], price: 0 };
             const decoded = decodeMenuDescription(r.description);
@@ -985,7 +986,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           if (publishedDays(remote).length > 0) {
             setWeeklyMenus(remote);
           } else if (!hasStoredWeek()) {
-            setWeeklyMenus(referenceWeek());
+            setWeeklyMenus(referenceMonth());
           }
         }
         if (profRes.data && profRes.data.length > 0) {
@@ -1711,7 +1712,10 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       clearWaveCode(payment.reference);
       // Discriminant : abonnement d'abord (subscriptionId), ticket ensuite.
       if (payment.subscriptionId) {
-        activateSubscription(payment.subscriptionId);
+        const subscriptionIds = payment.groupSubscriptionIds?.length
+          ? payment.groupSubscriptionIds
+          : [payment.subscriptionId];
+        subscriptionIds.forEach((subscriptionId) => activateSubscription(subscriptionId));
         return { ok: true, message: 'Paiement confirmé : votre carte est ACTIVE. Présentez votre QR Code.' };
       }
       // Intention ticket en attente (local puis colonnes persistées)
@@ -1820,7 +1824,10 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       if (payment.reference) clearWaveCode(payment.reference);
       // Abonnement d'abord, ticket ensuite (évite de transformer un abo en crédit)
       if (payment.subscriptionId) {
-        activateSubscription(payment.subscriptionId);
+        const subscriptionIds = payment.groupSubscriptionIds?.length
+          ? payment.groupSubscriptionIds
+          : [payment.subscriptionId];
+        subscriptionIds.forEach((subscriptionId) => activateSubscription(subscriptionId));
         const intents = load<Record<string, { username: string; formulaId: string }>>(LS_KEYS.ticketIntents, {});
         if (intents[paymentId]) {
           const next = { ...intents };

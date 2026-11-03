@@ -9,6 +9,7 @@ import { cycleOfClass } from '@/lib/schoolCycles';
 import { officialAboForCycle } from '@/lib/aboTariffs';
 import { publishedDays } from '@/lib/menus';
 import { menuPhoto } from '@/data/cantineWeek';
+import { localDateKey, menuDateLabel } from '@/lib/menuDates';
 import type {
   Complaint, ComplaintCategory, ComplaintStatus,
   ORestoPayment, ORestoPaymentStatus, PageName, Subscription, WalletTx,
@@ -201,7 +202,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     return !!s && renewDueSoon(s.endDate, nowTs);
   });
 
-  const todayName = DAY_INDEX[new Date().getDay()];
+  const todayName = localDateKey(new Date(), 2026, 10);
 
   // ---------- Paiement : Wave / Max it via SycaPay ----------
   // Toutes les sommes partent par openProviderPayment : SycaPay initie la
@@ -400,10 +401,8 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     return [...payList, ...walletList, ...validList].sort((a, b) => +new Date(b.date) - +new Date(a.date));
   }, [myPayments, username, kids, childTxs, histChild, myValidations, allMine, soldeAfterByTx]);
 
-  const sortedMenus = [...weeklyMenus].sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day));
-  // Seuls les jours publiés par le Personnel (plat, description ou dessert) existent.
-  // Semaine vide = bel état vide, aucun contenu inventé.
-  const publishedMenus = publishedDays(sortedMenus);
+  const sortedMenus = [...weeklyMenus].sort((a, b) => a.day.localeCompare(b.day));
+  const publishedMenus = publishedDays(sortedMenus).filter((m) => /^2026-11-(0[2-9]|[12][0-9]|30)$/.test(m.day));
   const menuDuJour = publishedMenus.find((m) => m.day === todayName)
     ?? publishedMenus[0];
 
@@ -484,19 +483,12 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
                 <div className="relative h-36 overflow-hidden">
                   <img src={menuPhoto(menuDuJour)} alt={`Menu du jour — ${menuDuJour.day}`} loading="lazy" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
-                  <span className="absolute bottom-2 left-3 text-sm font-black uppercase tracking-widest text-white drop-shadow">{menuDuJour.day}</span>
+                  <span className="absolute bottom-2 left-3 text-sm font-black uppercase tracking-widest text-white drop-shadow">{menuDateLabel(menuDuJour.day)}</span>
                   <span className="absolute top-2 right-2 text-[11px] font-bold px-2.5 py-1 rounded-full bg-white text-green-700 shadow">MENU DU JOUR</span>
                 </div>
                 <div className="p-4">
-                  {menuDuJour.description && <p className="text-sm font-semibold text-slate-800">{menuDuJour.description}</p>}
+                  {menuDuJour.description && <p className="text-sm font-semibold text-slate-800"><span className="text-slate-500">Repas :</span> {menuDuJour.description}</p>}
                   {menuDuJour.dessert && <p className="text-sm font-semibold text-amber-700 mt-1">Dessert : {menuDuJour.dessert}</p>}
-                  {menuDuJour.items.length > 0 && (
-                    <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
-                      {menuDuJour.items.map((it, i) => (
-                        <li key={`${it.name}-${i}`} className="truncate">{it.name}</li>
-                      ))}
-                    </ul>
-                  )}
                 </div>
               </div>
             </div>
