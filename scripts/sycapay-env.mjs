@@ -42,8 +42,8 @@ const CONSTANTS = {
 
 /** Fichier PEM → variable d'environnement correspondante. */
 const PEM_TO_VAR = [
-  ['client.crt', 'SYCAPAY_CLIENT_CRT'],
-  ['client.key', 'SYCAPAY_CLIENT_KEY'],
+  ['client.crt', 'SYCAPAY_CLIENT_CERT_B64'],
+  ['client.key', 'SYCAPAY_CLIENT_KEY_B64'],
   ['ca.crt', 'SYCAPAY_CA_CRT'],
 ];
 

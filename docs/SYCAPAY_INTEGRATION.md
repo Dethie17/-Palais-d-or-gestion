@@ -135,8 +135,8 @@ SYCAPAY_BASE_URL=https://ops.sycapay.com/coresystem/part/api
 SYCAPAY_LOGIN_API=MIAMS
 SYCAPAY_MDP_API=…            ← à saisir (back-office)
 SYCAPAY_CA_CRT=<base64>
-SYCAPAY_CLIENT_CRT=<base64>
-SYCAPAY_CLIENT_KEY=<base64>
+SYCAPAY_CLIENT_CERT_B64=<base64>
+SYCAPAY_CLIENT_KEY_B64=<base64>
 VITE_APP_URL=https://orestosn.com
 ```
 

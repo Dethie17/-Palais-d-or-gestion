@@ -30,6 +30,7 @@ import {
   readConfig,
   requiresReturnUrls,
   isSycaPayConfigured,
+  SycaPayCertificateError,
   SycaPayConfigError,
   SycaPayTransportError,
   type InitiateResponse,
@@ -47,6 +48,8 @@ import {
   sendError,
   sendJson,
 } from '../_lib/http.js';
+
+export const config = { runtime: 'nodejs' };
 
 /** Services _PM_ de ce projet : Wave et Orange Money Sénégal. */
 const ALLOWED_SERVICES: SycaPayCodeService[] = ['SN_PM_WAVE', 'SN_PM_OM'];
@@ -155,9 +158,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   const merchant = typeof body.nomMarchand === 'string' ? body.nomMarchand.trim().slice(0, 80) : '';
   if (merchant) transaction.nomMarchand = merchant;
 
-  let config;
+  let sycaPayConfig;
   try {
-    config = readConfig();
+    sycaPayConfig = readConfig();
   } catch (err) {
     if (err instanceof SycaPayConfigError) return sendError(res, 500, err.message);
     throw err;
@@ -165,11 +168,22 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
   let response: InitiateResponse;
   try {
-    response = await call<InitiateResponse>(config, {
+    response = await call<InitiateResponse>(sycaPayConfig, {
       path: '/initiationTransactionV1',
-      body: { loginApi: config.loginApi, mdpApi: config.mdpApi, transaction },
+      body: { loginApi: sycaPayConfig.loginApi, mdpApi: sycaPayConfig.mdpApi, transaction },
     });
   } catch (err) {
+    if (err instanceof SycaPayCertificateError) {
+      // Le certificat est refusé ou invalide : ce n'est pas une panne
+      // passagère. On referme la demande pour ne pas laisser un pending
+      // éternel, avec un message générique qui ne contient aucun secret.
+      await markFailed(reference, 'mtls-certificate', err.message);
+      return sendError(res, 502, err.message, {
+        retryable: false,
+        status: 'failed',
+        errorCode: 'mtls-certificate',
+      });
+    }
     if (err instanceof SycaPayTransportError) {
       // Panne de transport : rien n'a été engagé, l'appel peut être renvoyé.
       return sendError(res, 502, err.message, { retryable: true });

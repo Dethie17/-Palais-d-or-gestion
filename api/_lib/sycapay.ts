@@ -12,7 +12,7 @@
  */
 
 import https from 'node:https';
-import type { IncomingHttpHeaders } from 'node:http';
+import type { ClientRequest, IncomingHttpHeaders } from 'node:http';
 
 const DEFAULT_BASE_URL = 'https://ops.sycapay.com/coresystem/part/api';
 
@@ -62,18 +62,35 @@ export function readPem(envValue: string | undefined): string | undefined {
 /**
  * Lit la configuration depuis l'environnement.
  * `SYCAPAY_ENABLED=false` désactive la passerelle sans toucher au reste.
+ *
+ * Priorité des certificats client :
+ *  1. `SYCAPAY_CLIENT_CERT_B64` + `SYCAPAY_CLIENT_KEY_B64` (Vercel Production) ;
+ *  2. `SYCAPAY_CLIENT_CRT` + `SYCAPAY_CLIENT_KEY` (anciens déploiements).
+ *
+ * Les nouvelles variables sont du PEM encodé en base64. Les anciennes sont
+ * lues via `readPem`, qui accepte déjà le base64 comme le PEM brut : un
+ * déploiement existant continue donc de fonctionner sans changement.
  */
 export function readConfig(env: NodeJS.ProcessEnv = process.env): SycaPayConfig {
   const ca = readPem(env.SYCAPAY_CA_CRT);
-  const cert = readPem(env.SYCAPAY_CLIENT_CRT);
-  const key = readPem(env.SYCAPAY_CLIENT_KEY);
+  const useB64Credentials = Boolean(
+    (env.SYCAPAY_CLIENT_CERT_B64 ?? '').trim() || (env.SYCAPAY_CLIENT_KEY_B64 ?? '').trim(),
+  );
+  const cert = useB64Credentials
+    ? readPem(Buffer.from((env.SYCAPAY_CLIENT_CERT_B64 ?? '').trim(), 'base64').toString('utf8'))
+    : readPem(env.SYCAPAY_CLIENT_CRT);
+  const key = useB64Credentials
+    ? readPem(Buffer.from((env.SYCAPAY_CLIENT_KEY_B64 ?? '').trim(), 'base64').toString('utf8'))
+    : readPem(env.SYCAPAY_CLIENT_KEY);
+  const certVar = useB64Credentials ? 'SYCAPAY_CLIENT_CERT_B64' : 'SYCAPAY_CLIENT_CRT';
+  const keyVar = useB64Credentials ? 'SYCAPAY_CLIENT_KEY_B64' : 'SYCAPAY_CLIENT_KEY';
   const loginApi = (env.SYCAPAY_LOGIN_API ?? '').trim();
   const mdpApi = (env.SYCAPAY_MDP_API ?? '').trim();
 
   const missing: string[] = [];
   if (!ca) missing.push('SYCAPAY_CA_CRT');
-  if (!cert) missing.push('SYCAPAY_CLIENT_CRT');
-  if (!key) missing.push('SYCAPAY_CLIENT_KEY');
+  if (!cert) missing.push(certVar);
+  if (!key) missing.push(keyVar);
   if (!loginApi) missing.push('SYCAPAY_LOGIN_API');
   if (!mdpApi) missing.push('SYCAPAY_MDP_API');
   if (missing.length > 0) throw new SycaPayConfigError(missing);
@@ -104,6 +121,46 @@ export class SycaPayTransportError extends Error {
     super(message);
     this.name = 'SycaPayTransportError';
   }
+}
+
+/**
+ * Le certificat client a été refusé, ou le couple cert/clé/CA est invalide.
+ * Le message reste volontairement générique : aucun PEM, aucune clé et aucun
+ * détail OpenSSL ne doit atteindre les logs ou la réponse HTTP.
+ */
+export class SycaPayCertificateError extends SycaPayTransportError {
+  constructor() {
+    super('Certificat client SycaPay refusé ou invalide. Vérifiez la configuration mTLS du serveur.');
+    this.name = 'SycaPayCertificateError';
+  }
+}
+
+const TLS_CERTIFICATE_ERROR =
+  /(?:CERT|CERTIFICATE|X509|SELF_SIGNED|UNABLE_TO_VERIFY|UNABLE_TO_GET_ISSUER|BAD_CERT|CERT_REQUIRED|ALERT_CERTIFICATE|ALERT_BAD_CERTIFICATE|ERR_OSSL|ERR_TLS_CERT|EPROTO)/i;
+
+/** Vrai pour une erreur TLS imputable au certificat ou à sa vérification. */
+export function isCertificateError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const code = String((err as NodeJS.ErrnoException).code ?? '');
+  const message = String((err as Error).message ?? '');
+  return TLS_CERTIFICATE_ERROR.test(`${code} ${message}`);
+}
+
+/** Ne laisse jamais remonter le détail brut d'une erreur de certificat. */
+function asTransportError(err: unknown): SycaPayTransportError {
+  if (err instanceof SycaPayTransportError) return err;
+  if (isCertificateError(err)) return new SycaPayCertificateError();
+  const message = err instanceof Error ? err.message : String(err);
+  return new SycaPayTransportError(`Appel SycaPay impossible : ${message}`);
+}
+
+/** Agent HTTPS portant le certificat client, la clé privée et la CA serveur. */
+export function createMtlsAgent(config: Pick<SycaPayConfig, 'ca' | 'cert' | 'key'>): https.Agent {
+  return new https.Agent({
+    ca: config.ca,
+    cert: config.cert,
+    key: config.key,
+  });
 }
 
 /** Réponse brute d'un appel SycaPay, telle que rendue par l'API. */
@@ -142,43 +199,47 @@ export function call<T extends SycaPayEnvelope = SycaPayEnvelope>(
   const url = new URL(`${config.baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`);
 
   return new Promise<T>((resolve, reject) => {
-    const req = https.request(
-      {
-        hostname: url.hostname,
-        port: url.port || 443,
-        path: `${url.pathname}${url.search}`.replace(/^\/+/, '/'),
-        method: 'POST',
-        ca: config.ca,
-        cert: config.cert,
-        key: config.key,
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload),
-          Accept: 'application/json',
-          ...headers,
+    let req: ClientRequest;
+    try {
+      req = https.request(
+        {
+          hostname: url.hostname,
+          port: url.port || 443,
+          path: `${url.pathname}${url.search}`.replace(/^\/+/, '/'),
+          method: 'POST',
+          agent: createMtlsAgent(config),
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(payload),
+            Accept: 'application/json',
+            ...headers,
+          },
+          timeout: timeoutMs,
         },
-        timeout: timeoutMs,
-      },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on('data', (c: Buffer) => chunks.push(c));
-        res.on('end', () => {
-          const raw = Buffer.concat(chunks).toString('utf8');
-          if (!raw.trim()) {
-            reject(new SycaPayTransportError(`Réponse SycaPay vide (HTTP ${res.statusCode ?? '?'})`));
-            return;
-          }
-          try {
-            resolve(JSON.parse(raw) as T);
-          } catch {
-            reject(new SycaPayTransportError(`Réponse SycaPay illisible (HTTP ${res.statusCode ?? '?'})`));
-          }
-        });
-      },
-    );
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c: Buffer) => chunks.push(c));
+          res.on('end', () => {
+            const raw = Buffer.concat(chunks).toString('utf8');
+            if (!raw.trim()) {
+              reject(new SycaPayTransportError(`Réponse SycaPay vide (HTTP ${res.statusCode ?? '?'})`));
+              return;
+            }
+            try {
+              resolve(JSON.parse(raw) as T);
+            } catch {
+              reject(new SycaPayTransportError(`Réponse SycaPay illisible (HTTP ${res.statusCode ?? '?'})`));
+            }
+          });
+        },
+      );
+    } catch (err) {
+      reject(asTransportError(err));
+      return;
+    }
 
     req.on('timeout', () => req.destroy(new SycaPayTransportError(`Délai dépassé sur ${path}`)));
-    req.on('error', (err) => reject(new SycaPayTransportError(`Appel SycaPay impossible : ${err.message}`)));
+    req.on('error', (err) => reject(asTransportError(err)));
     req.write(payload);
     req.end();
   });

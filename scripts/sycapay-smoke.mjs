@@ -120,8 +120,8 @@ function postMtls(baseUrl, path, body, tls, timeoutMs = 30000) {
 async function main() {
   const env = readEnv(ENV_PATH);
   const missing = ['SYCAPAY_LOGIN_API', 'SYCAPAY_MDP_API'].filter((k) => !env[k]?.trim());
-  const cert = pemFromEnv(env.SYCAPAY_CLIENT_CRT);
-  const key = pemFromEnv(env.SYCAPAY_CLIENT_KEY);
+  const cert = pemFromEnv(env.SYCAPAY_CLIENT_CERT_B64 ?? env.SYCAPAY_CLIENT_CRT);
+  const key = pemFromEnv(env.SYCAPAY_CLIENT_KEY_B64 ?? env.SYCAPAY_CLIENT_KEY);
   const ca = pemFromEnv(env.SYCAPAY_CA_CRT);
 
   if (!cert || !key || !ca) {

@@ -19,6 +19,7 @@ import {
   isRetryableCallError,
   isSycaPayConfigured,
   readConfig,
+  SycaPayCertificateError,
   SycaPayConfigError,
   SycaPayTransportError,
   type CheckoutSessionResponse,
@@ -34,6 +35,8 @@ import {
   sendError,
   sendJson,
 } from '../_lib/http.js';
+
+export const config = { runtime: 'nodejs' };
 
 interface CardBody {
   reference?: unknown;
@@ -111,9 +114,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   const metadata = sanitizeMetadata(body.metadata);
   if (metadata) payload.metadata = metadata;
 
-  let config;
+  let sycaPayConfig;
   try {
-    config = readConfig();
+    sycaPayConfig = readConfig();
   } catch (err) {
     if (err instanceof SycaPayConfigError) return sendError(res, 500, err.message);
     throw err;
@@ -121,11 +124,19 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
   let response: CheckoutSessionResponse;
   try {
-    response = await call<CheckoutSessionResponse>(config, {
+    response = await call<CheckoutSessionResponse>(sycaPayConfig, {
       path: '/checkout/session',
-      body: { loginApi: config.loginApi, mdpApi: config.mdpApi, ...payload },
+      body: { loginApi: sycaPayConfig.loginApi, mdpApi: sycaPayConfig.mdpApi, ...payload },
     });
   } catch (err) {
+    if (err instanceof SycaPayCertificateError) {
+      await markFailed(reference, 'mtls-certificate', err.message);
+      return sendError(res, 502, err.message, {
+        retryable: false,
+        status: 'failed',
+        errorCode: 'mtls-certificate',
+      });
+    }
     if (err instanceof SycaPayTransportError) {
       // Aucun lien généré : rien n'est engagé, l'appel peut être renvoyé.
       return sendError(res, 502, err.message, { retryable: true });
@@ -173,5 +184,19 @@ async function registerCheckout(reference: string, checkoutUrl: string): Promise
     if (error) console.warn('[sycapay/card] trace impossible :', error.message);
   } catch (err) {
     console.warn('[sycapay/card] trace impossible :', (err as Error).message);
+  }
+}
+
+/** Referme une demande carte que le certificat client empêche d'ouvrir. */
+async function markFailed(reference: string, errorCode: string, message: string): Promise<void> {
+  try {
+    const { error } = await adminClient().rpc('oresto_fail_payment', {
+      p_reference: reference,
+      p_error_code: errorCode,
+      p_error_message: message,
+    });
+    if (error) console.warn('[sycapay/card] clôture impossible :', error.message);
+  } catch (err) {
+    console.warn('[sycapay/card] clôture impossible :', (err as Error).message);
   }
 }

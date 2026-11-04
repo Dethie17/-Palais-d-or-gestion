@@ -24,6 +24,8 @@ import { readJson, readRawBody, sendJson, methodNotAllowed, handlePreflight } fr
 import { signatureHeaderName, verifySignature } from '../_lib/webhookHmac.js';
 import { isPaymentEvent, readWebhookV1, readWebhookV2, settle, type SettleOutcome } from '../_lib/settle.js';
 
+export const config = { runtime: 'nodejs' };
+
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   if (req.method === 'OPTIONS') return handlePreflight(req, res);
   if (req.method !== 'POST') return methodNotAllowed(req, res, ['POST']);

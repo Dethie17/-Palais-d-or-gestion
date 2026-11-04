@@ -23,6 +23,7 @@ import {
   isRetryableCallError,
   isSycaPayConfigured,
   readConfig,
+  SycaPayCertificateError,
   SycaPayConfigError,
   SycaPayTransportError,
   type StatusResponse,
@@ -37,6 +38,8 @@ import {
   sendError,
   sendJson,
 } from '../_lib/http.js';
+
+export const config = { runtime: 'nodejs' };
 
 interface StatusBody {
   reference?: unknown;
@@ -132,9 +135,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return sendError(res, 403, 'Cette transaction n’est pas la vôtre.');
   }
 
-  let config;
+  let sycaPayConfig;
   try {
-    config = readConfig();
+    sycaPayConfig = readConfig();
   } catch (err) {
     if (err instanceof SycaPayConfigError) return sendError(res, 500, err.message);
     throw err;
@@ -142,11 +145,16 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
   let response: StatusResponse;
   try {
-    response = await call<StatusResponse>(config, {
+    response = await call<StatusResponse>(sycaPayConfig, {
       path: '/statusV2',
-      body: { loginApi: config.loginApi, mdpApi: config.mdpApi, idPartenaire: reference },
+      body: { loginApi: sycaPayConfig.loginApi, mdpApi: sycaPayConfig.mdpApi, idPartenaire: reference },
     });
   } catch (err) {
+    if (err instanceof SycaPayCertificateError) {
+      // On ne solde rien : une vérification impossible ne vaut pas un échec
+      // définitif. Le message est générique et ne contient aucun secret.
+      return sendError(res, 502, err.message, { retryable: false, status: 'unknown' });
+    }
     if (err instanceof SycaPayTransportError) {
       // Panne réseau : rien n'est conclu, et surtout rien n'est soldé.
       return sendError(res, 502, err.message, { retryable: true, status: 'unknown' });
@@ -165,7 +173,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       // Ni secret ni donnée personnelle ici : seulement l'endpoint appelé,
       // pour distinguer une URL de base modifiée d'un refus de la passerelle.
       console.warn('[sycapay/status] enveloppe inattendue', JSON.stringify({
-        endpoint: `${config.baseUrl}/statusV2`,
+        endpoint: `${sycaPayConfig.baseUrl}/statusV2`,
         response: JSON.stringify(response).slice(0, 300),
       }));
     }

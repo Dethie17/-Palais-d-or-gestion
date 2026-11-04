@@ -1,7 +1,7 @@
 ﻿import { describe, it, expect } from 'vitest';
 import { signBody, verifySignature } from '../../api/_lib/webhookHmac';
 import { parseAmount, normalizeLocalPhone, sanitizeMetadata } from '../../api/_lib/http';
-import { describeError, failureMessage, isAccepted, isExpiredFailure, isRetryableCallError, readConfig, readPem, requiresReturnUrls } from '../../api/_lib/sycapay';
+import { describeError, failureMessage, isAccepted, isCertificateError, isExpiredFailure, isRetryableCallError, readConfig, readPem, requiresReturnUrls, SycaPayCertificateError } from '../../api/_lib/sycapay';
 import { isPaymentEvent, readWebhookV1, readWebhookV2 } from '../../api/_lib/settle';
 
 /**
@@ -252,5 +252,74 @@ describe('Nettoyage de la configuration', () => {
     const config = readConfig(env as never);
     expect(config.loginApi).toBe('MIAMS');
     expect(config.mdpApi).toBe('secret');
+  });
+});
+
+describe('Migration des certificats client vers les variables B64', () => {
+  const ca = ['-----BEGIN CERTIFICATE-----', 'CA', '-----END CERTIFICATE-----'].join('\n');
+  const cert = ['-----BEGIN CERTIFICATE-----', 'CLIENT', '-----END CERTIFICATE-----'].join('\n');
+  const key = ['-----BEGIN PRIVATE KEY-----', 'KEY', '-----END PRIVATE KEY-----'].join('\n');
+  const legacyCert = ['-----BEGIN CERTIFICATE-----', 'LEGACY-CLIENT', '-----END CERTIFICATE-----'].join('\n');
+  const legacyKey = ['-----BEGIN PRIVATE KEY-----', 'LEGACY-KEY', '-----END PRIVATE KEY-----'].join('\n');
+  const base = {
+    SYCAPAY_CA_CRT: ca,
+    SYCAPAY_LOGIN_API: 'MIAMS',
+    SYCAPAY_MDP_API: 'secret',
+  };
+
+  it('décode les deux nouvelles variables base64', () => {
+    const config = readConfig({
+      ...base,
+      SYCAPAY_CLIENT_CERT_B64: Buffer.from(cert, 'utf8').toString('base64'),
+      SYCAPAY_CLIENT_KEY_B64: Buffer.from(key, 'utf8').toString('base64'),
+    } as never);
+    expect(config.cert).toBe(cert);
+    expect(config.key).toBe(key);
+  });
+
+  it('préfère le couple B64 au couple historique', () => {
+    const config = readConfig({
+      ...base,
+      SYCAPAY_CLIENT_CRT: legacyCert,
+      SYCAPAY_CLIENT_KEY: legacyKey,
+      SYCAPAY_CLIENT_CERT_B64: Buffer.from(cert, 'utf8').toString('base64'),
+      SYCAPAY_CLIENT_KEY_B64: Buffer.from(key, 'utf8').toString('base64'),
+    } as never);
+    expect(config.cert).toBe(cert);
+    expect(config.key).toBe(key);
+  });
+
+  it('retombe sur les anciennes variables quand les B64 sont absentes', () => {
+    const config = readConfig({
+      ...base,
+      SYCAPAY_CLIENT_CRT: legacyCert,
+      SYCAPAY_CLIENT_KEY: legacyKey,
+    } as never);
+    expect(config.cert).toBe(legacyCert);
+    expect(config.key).toBe(legacyKey);
+  });
+
+  it('nomme la variable B64 manquante sans exposer de clé', () => {
+    let message = '';
+    try {
+      readConfig({
+        ...base,
+        SYCAPAY_CLIENT_CERT_B64: Buffer.from(cert, 'utf8').toString('base64'),
+      } as never);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toMatch(/SYCAPAY_CLIENT_KEY_B64/);
+    expect(message).not.toContain(key);
+    expect(message).not.toContain('BEGIN PRIVATE KEY');
+  });
+
+  it('classe les erreurs TLS de certificat sans détail OpenSSL', () => {
+    expect(isCertificateError({ code: 'ERR_OSSL_X509_KEY_VALUES_MISMATCH', message: 'key values mismatch' })).toBe(true);
+    expect(isCertificateError({ code: 'CERT_HAS_EXPIRED', message: 'certificate has expired' })).toBe(true);
+    expect(isCertificateError({ code: 'ECONNREFUSED', message: 'connection refused' })).toBe(false);
+    const err = new SycaPayCertificateError();
+    expect(err.message).toMatch(/Certificat client SycaPay/);
+    expect(err.message).not.toContain('BEGIN');
   });
 });
