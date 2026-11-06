@@ -79,6 +79,22 @@ export function moisLibelle(mois: string | null | undefined): string {
   return `${MOIS_NOMS[Number(m[2]) - 1] ?? mois} ${m[1]}`;
 }
 
+/** Liste des mois couverts par un abonnement (startDate → endDate), libellés. */
+export function moisLibelleRange(startIso: string | null | undefined, endIso: string | null | undefined): string {
+  if (!startIso) return '—';
+  const start = new Date(startIso);
+  const end = endIso ? new Date(endIso) : start;
+  if (!Number.isFinite(start.getTime())) return '—';
+  const labels: string[] = [];
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+  const last = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (cur <= last) {
+    labels.push(`${MOIS_NOMS[cur.getMonth()]} ${cur.getFullYear()}`);
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  return labels.join(', ') || '—';
+}
+
 /** JJ/MM/AAAA pour l'affichage et les exports. */
 export function formatDateJJMMAAAA(iso: string | null | undefined): string {
   if (!iso) return '—';
