@@ -7,11 +7,16 @@ import OrestoLogo from '@/components/brand/OrestoLogo';
 import {
   LogIn, AlertCircle, UserRound, LockKeyhole, Eye, EyeOff, ScanLine, UtensilsCrossed,
   ShoppingCart, LayoutDashboard, Settings, ShieldCheck, KeyRound, Loader2,
-  ArrowRight, ArrowLeft, QrCode, Wallet, Smartphone,
+  ArrowRight, ArrowLeft, QrCode, Wallet, Smartphone, Building2,
   type LucideIcon,
 } from 'lucide-react';
 
 const ROLE_ORDER: UserRole[] = ['client', 'personnel', 'gestionnaire', 'admin'];
+
+const ENTITY_SPACES: Record<string, { label: string; roles: UserRole[]; roleLabels?: Partial<Record<UserRole, string>> }> = {
+  'groupe-ism': { label: 'Groupe ISM', roles: ['client', 'personnel', 'gestionnaire', 'admin'] },
+  'dangote': { label: 'Dangote', roles: ['admin', 'personnel', 'client'], roleLabels: { admin: 'Ressource Humaine', personnel: 'Superviseur', client: 'Employé' } },
+};
 
 /** Points forts affichés sur chaque carte profil (100 % icônes Lucide). */
 // « caissier » et « manager » sont d anciens rôles : ils ne font plus partie
@@ -57,6 +62,7 @@ const LoginPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+  const [selectedEntity, setSelectedEntity] = useState<'groupe-ism' | 'dangote' | null>(null);
   // Verrouillage anti brute-force : compte à rebours live
   const [lockUntil, setLockUntil] = useState(0);
   const [lockLeft, setLockLeft] = useState('');
@@ -141,6 +147,46 @@ const LoginPage = () => {
 
   const activeRole = selectedRole ? ROLE_DEFINITIONS[selectedRole] : null;
 
+  if (!selectedEntity) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
+        <div className="relative max-w-6xl mx-auto px-4 py-10 md:py-14">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center gap-3 bg-white rounded-3xl px-5 py-3 shadow-2xl">
+              <OrestoLogo variant="mark" imgClassName="w-12 h-12 object-contain" />
+              <span className="text-left">
+                <span className="block text-xl font-black tracking-tight leading-none"><span className="text-green-700">O</span> <span className="text-slate-900">RESTO</span></span>
+                <span className="block text-[11px] text-slate-500 font-medium">Choix de l'entité</span>
+              </span>
+            </div>
+          </div>
+          <p className="text-center text-sm font-semibold text-slate-300 mb-4 uppercase tracking-widest">Quelle entité ?</p>
+          <div className="grid sm:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            {Object.entries(ENTITY_SPACES).map(([slug, info]) => (
+              <button
+                key={slug}
+                onClick={() => setSelectedEntity(slug as 'groupe-ism' | 'dangote')}
+                className="group relative overflow-hidden rounded-3xl shadow-2xl transition-all duration-300 hover:scale-[1.02] border border-slate-200 h-64"
+              >
+                <img
+                  src={slug === 'groupe-ism' ? '/logos/ism.png' : '/logos/dangote.png'}
+                  alt={info.label}
+                  className="absolute inset-0 w-full h-full object-contain bg-white p-6"
+                />
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-6">
+                  <h2 className="text-2xl font-black text-white">{info.label}</h2>
+                  <span className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-green-300 group-hover:gap-3 transition-all">
+                    Accéder <ArrowRight className="w-4 h-4" />
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!selectedRole) {
     return (
       <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
@@ -161,9 +207,10 @@ const LoginPage = () => {
           {/* Choix du profil */}
           <p className="text-center text-sm font-semibold text-slate-300 mb-4 uppercase tracking-widest">Qui êtes-vous ?</p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {ROLE_ORDER.map((id) => {
+            {ENTITY_SPACES[selectedEntity!].roles.map((id) => {
               const r = ROLE_DEFINITIONS[id];
               const RoleIcon = r.icon;
+              const label = ENTITY_SPACES[selectedEntity!].roleLabels?.[id] ?? r.title;
               return (
                 <button
                   key={r.role}
@@ -173,7 +220,7 @@ const LoginPage = () => {
                   <div className={`w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br ${r.color} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}>
                     <RoleIcon className="w-8 h-8 text-white" />
                   </div>
-                  <h2 className="text-xl font-bold mt-4">{r.title}</h2>
+                  <h2 className="text-xl font-bold mt-4">{label}</h2>
                   <p className="text-xs text-slate-400 mt-1 line-clamp-2 min-h-8">{r.mission}</p>
                   <div className="mt-3 flex items-center justify-center gap-2">
                     {ROLE_HIGHLIGHTS[r.role].map((h) => (

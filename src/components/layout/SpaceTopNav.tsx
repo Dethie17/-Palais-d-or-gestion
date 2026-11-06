@@ -35,7 +35,7 @@ const NAV: { page: PageName; label: string; icon: React.ReactNode; roles: UserRo
   { page: 'qrgallery', label: 'QR Code', icon: <QrCode aria-hidden className="w-4 h-4" />, roles: ['personnel', 'gestionnaire'] },
   { page: 'users', label: 'Utilisateurs', icon: <Users aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'import-eleves', label: 'Import', icon: <FileSpreadsheet aria-hidden className="w-4 h-4" />, roles: ['admin'] },
-  { page: 'entities', label: 'Entités', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['admin'] },
+  { page: 'entities', label: 'Entités', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'establishments', label: 'Établissements', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
   { page: 'settings', label: 'Paramètres', icon: <Settings aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
   { page: 'finance', label: 'Finance', icon: <Banknote aria-hidden className="w-4 h-4" />, roles: ['admin'] },

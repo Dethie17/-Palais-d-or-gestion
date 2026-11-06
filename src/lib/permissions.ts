@@ -15,7 +15,7 @@ import { UserRole } from '@/context/AuthContext';
 const ISM_PAGES: PageName[] = [
   'dashboard', 'finance', 'subscriptions',
   'users', 'history', 'profile',
-  'import-eleves', 'entities',
+  'import-eleves',
   // Historique des paiements (parents ↔ école), paginé depuis la base.
   'paiements',
   // Les QR Cartes Student ne sont pas exposés à l'Espace ISM :
@@ -23,15 +23,15 @@ const ISM_PAGES: PageName[] = [
 ];
 export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // Parent : UN seul parcours continu (Accès Abonné) + profil.
-  client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'history', 'profile', 'paymentsuccess', 'paymentfailure', 'reclamations'],
+  client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'history', 'profile', 'paymentsuccess', 'paymentfailure', 'reclamations', 'entities'],
   // Superviseur cantine : tout le terrain (menus, paramètres, établissements),
   // y compris les réclamations. La caisse (POS, encaissement, espace repas)
   // est réservée au Caissier.
-  personnel: ['home', 'subscriptions', 'paiements', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'dashboard', 'paymentsuccess', 'paymentfailure', 'reclamations'],
+  personnel: ['home', 'subscriptions', 'paiements', 'qrgallery', 'users', 'establishments', 'settings', 'history', 'profile', 'dashboard', 'paymentsuccess', 'paymentfailure', 'reclamations', 'entities'],
   // Caissier : POS (avec scan QR élève), espace repas et historique.
   gestionnaire: ['validation', 'menu', 'pos', 'history', 'qrgallery', 'paymentsuccess', 'paymentfailure', 'profile'],
   // Espace ISM : pilotage + suivi uniquement (sans menus/paramètres/établissements)
-  admin: [...ISM_PAGES, 'paymentsuccess', 'paymentfailure'],
+  admin: [...ISM_PAGES, 'entities', 'paymentsuccess', 'paymentfailure'],
 };
 
 export function canAccess(role: UserRole | undefined, page: PageName): boolean {
