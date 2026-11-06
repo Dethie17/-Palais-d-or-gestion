@@ -23,13 +23,13 @@ const ISM_PAGES: PageName[] = [
 ];
 export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // Parent : UN seul parcours continu (Accès Abonné) + profil.
-  client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'history', 'profile', 'paymentsuccess', 'paymentfailure', 'reclamations', 'entities'],
+  client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'profile', 'paymentsuccess', 'paymentfailure', 'entities'],
   // Superviseur cantine : tout le terrain (menus, paramètres, établissements),
   // y compris les réclamations. La caisse (POS, encaissement, espace repas)
   // est réservée au Caissier.
-  personnel: ['home', 'subscriptions', 'paiements', 'qrgallery', 'users', 'settings', 'history', 'profile', 'dashboard', 'paymentsuccess', 'paymentfailure', 'reclamations', 'entities'],
+  personnel: ['home', 'subscriptions', 'paiements', 'qrgallery', 'users', 'settings', 'profile', 'dashboard', 'paymentsuccess', 'paymentfailure', 'entities'],
   // Caissier : POS (avec scan QR élève), espace repas et historique.
-  gestionnaire: ['validation', 'menu', 'pos', 'history', 'qrgallery', 'paymentsuccess', 'paymentfailure', 'profile'],
+  gestionnaire: ['validation', 'menu', 'pos', 'qrgallery', 'paymentsuccess', 'paymentfailure', 'profile'],
   // Espace ISM : pilotage + suivi uniquement (sans menus/paramètres/établissements)
   admin: [...ISM_PAGES, 'entities', 'paymentsuccess', 'paymentfailure'],
 };

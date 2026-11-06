@@ -134,9 +134,9 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
   const revWeek = revenueBreakdown(revenueSource, startOfWeek.getTime());
   const revMonth = revenueBreakdown(revenueSource, startOfMonth.getTime());
   const revAll = revenueBreakdown(revenueSource, 0);
-const caDay = { orders: revDay.sales, subs: 0, total: revDay.sales };
-const caWeek = { orders: revWeek.sales, subs: 0, total: revWeek.sales };
-const caMonth = { orders: revMonth.sales, subs: 0, total: revMonth.sales };
+const caDay = { orders: revDay.sales, subs: revDay.subscriptions, total: revDay.total };
+const caWeek = { orders: revWeek.sales, subs: revWeek.subscriptions, total: revWeek.total };
+const caMonth = { orders: revMonth.sales, subs: revMonth.subscriptions, total: revMonth.total };
   const caPeriod = period === 'week' ? caWeek : period === 'month' ? caMonth : caDay;
 
   // Courbe DG : ventes (caisse, kiosque, tickets, repas carte) + abonnements validés.
@@ -154,7 +154,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
       ? {
           ...card,
           ...card,
-          label: 'CA ventes',
+          label: 'CA (ventes + abonnements)',
           value: formatCurrency(caPeriod.total),
           change: caPeriod.total > 0 ? '+' + Math.round(caPeriod.total) + ' F' : 'aucune vente',
           positive: caPeriod.total > 0,

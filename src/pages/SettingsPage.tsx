@@ -213,24 +213,6 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
         </div>
       )}
 
-      {/* Vue d'ensemble */}
-      <div className="grid sm:grid-cols-3 gap-3">
-        <button onClick={() => onNavigate('subscriptions')} className="bg-white rounded-2xl border p-4 text-left hover:shadow-md transition-shadow">
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1"><Wallet className="w-4 h-4" /> Abonnements actifs</p>
-          <p className="text-3xl font-black text-slate-900 mt-1">{activeSubs}</p>
-          <p className="text-xs text-green-700 font-semibold mt-1">CA encaissé : {formatCurrency(paidRevenue)} →</p>
-        </button>
-        <button onClick={() => onNavigate('users')} className="bg-white rounded-2xl border p-4 text-left hover:shadow-md transition-shadow">
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1"><Users className="w-4 h-4" /> Comptes</p>
-          <p className="text-3xl font-black text-slate-900 mt-1">{dbUsers.length}</p>
-          <p className="text-xs text-green-700 font-semibold mt-1">Voir utilisateurs & accès →</p>
-        </button>
-        <button onClick={() => onNavigate('dashboard')} className="bg-white rounded-2xl border p-4 text-left hover:shadow-md transition-shadow">
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1"><LayoutDashboard className="w-4 h-4" /> Repas validés</p>
-          <p className="text-3xl font-black text-slate-900 mt-1">{validations.filter((v) => v.status === 'accepted').length}</p>
-          <p className="text-xs text-green-700 font-semibold mt-1">Ouvrir le tableau de bord →</p>
-        </button>
-      </div>
 
       {offline ? (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-800">

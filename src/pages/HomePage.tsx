@@ -4,9 +4,11 @@ import { useResto } from '@/context/RestoContext';
 import { useProducts } from '@/context/ProductContext';
 import { formatCurrency } from '@/lib/utils';
 import { menuTicketTotal, publishedDays } from '@/lib/menus';
+import { isAboPayment } from '@/lib/ismFinance';
+import { menuMonthDays } from '@/lib/menuDates';
 import { isOfficialFormula } from '@/lib/formulas';
 import {
-  QrCode, UtensilsCrossed, Wallet, History, CalendarDays,
+  QrCode, UtensilsCrossed, Wallet, History, CalendarDays, TrendingUp,
   LayoutDashboard, Users, Banknote, ArrowRight, Clock,
   CheckCircle, XCircle, Ticket, Baby,
 } from 'lucide-react';
@@ -73,6 +75,9 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
   const DAY_NAMES = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
   const todayName = DAY_NAMES[dayIdx];
   const published = publishedDays(weeklyMenus);
+  const monthDays = menuMonthDays(2026, 10, 2);
+  const publishedMonthly = weeklyMenus.filter((m) => monthDays.includes(m.day) && (m.items ?? []).length > 0);
+  const aboRevenue = payments.filter((p) => p.status === 'paid' && isAboPayment(p, subscriptions, formulas)).reduce((s, p) => s + p.amount, 0);
   const menuDuJour = isServiceDay
     ? (published.find((m) => m.day === todayName) ?? published[0] ?? null)
     : null;
@@ -322,8 +327,8 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard label="Repas servis (jour)" value={acceptedToday.length} />
             <StatCard label="Abonnements actifs" value={stats.activeClients} />
-            <StatCard label="Menus publiés" value={`${published.length}/5`} />
-            <StatCard label="Plats récréation" value={products.filter((p) => p.available).length} />
+
+            <StatCard label="Menus publiés" value={`${publishedMonthly.length}/${monthDays.length}`} />
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">

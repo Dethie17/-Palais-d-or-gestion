@@ -31,7 +31,7 @@ const NAV: { page: PageName; label: string; icon: React.ReactNode; roles: UserRo
   { page: 'validation', label: 'Validation repas', icon: <ScanLine aria-hidden className="w-4 h-4" />, roles: ['gestionnaire'] },
   { page: 'menu', label: 'Gestion Menu', icon: <ClipboardList aria-hidden className="w-4 h-4" />, roles: ['gestionnaire'] },
   { page: 'subscriptions', label: 'Abonnés & paiements', icon: <Users aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
-  { page: 'reclamations', label: 'Réclamations', icon: <MessageSquareWarning aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
+
   { page: 'qrgallery', label: 'QR Code', icon: <QrCode aria-hidden className="w-4 h-4" />, roles: ['personnel', 'gestionnaire'] },
   { page: 'users', label: 'Utilisateurs', icon: <Users aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'import-eleves', label: 'Import', icon: <FileSpreadsheet aria-hidden className="w-4 h-4" />, roles: ['admin'] },
@@ -41,7 +41,7 @@ const NAV: { page: PageName; label: string; icon: React.ReactNode; roles: UserRo
   { page: 'finance', label: 'Finance', icon: <Banknote aria-hidden className="w-4 h-4" />, roles: ['admin'] },
   { page: 'paiements', label: 'Historique paiements', icon: <Receipt aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'pos', label: 'Vente (POS)', icon: <ShoppingCart aria-hidden className="w-4 h-4" />, roles: ['gestionnaire'] },
-  { page: 'history', label: 'Historique des commandes', icon: <Receipt aria-hidden className="w-4 h-4" />, roles: ['personnel', 'gestionnaire', 'admin'] },
+
 ];
 
 const SpaceTopNav = ({ currentPage, onNavigate }: { currentPage: PageName; onNavigate: (page: PageName) => void }) => {
