@@ -85,12 +85,12 @@ export function moisLibelleRange(startIso: string | null | undefined, endIso: st
   const start = new Date(startIso);
   const end = endIso ? new Date(endIso) : start;
   if (!Number.isFinite(start.getTime())) return '—';
+  const monthsCount = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  const n = monthsCount > 0 ? monthsCount : 1;
   const labels: string[] = [];
-  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
-  const last = new Date(end.getFullYear(), end.getMonth(), 1);
-  while (cur <= last) {
-    labels.push(`${MOIS_NOMS[cur.getMonth()]} ${cur.getFullYear()}`);
-    cur.setMonth(cur.getMonth() + 1);
+  for (let i = 0; i < n; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+    labels.push(`${MOIS_NOMS[d.getMonth()]} ${d.getFullYear()}`);
   }
   return labels.join(', ') || '—';
 }
