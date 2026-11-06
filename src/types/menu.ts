@@ -77,7 +77,8 @@ export type PageName =
   | 'paymentfailure'
   | 'reclamations'
   | 'import-eleves'
-  | 'paiements';
+  | 'paiements'
+  | 'entities';
 
 // ---------- O RESTO — modèle issu du cahier des charges ----------
 

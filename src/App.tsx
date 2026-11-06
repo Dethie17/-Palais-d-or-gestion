@@ -43,6 +43,7 @@ const PaymentFailurePage = lazy(() => import('./pages/PaymentFailurePage'));
 const SycaPayReturnPage = lazy(() => import('./pages/SycaPayReturnPage'));
 const ImportElevesPage = lazy(() => import('./pages/ImportElevesPage'));
 const HistoriquePaiementsPage = lazy(() => import('./pages/HistoriquePaiementsPage'));
+const EntitiesPage = lazy(() => import('./pages/EntitiesPage'));
 
 function PageLoader() {
   return (
@@ -239,6 +240,8 @@ function AppContent() {
         return <ImportElevesPage />;
       case 'paiements':
         return <HistoriquePaiementsPage />;
+      case 'entities':
+        return <EntitiesPage />;
       case 'establishments':
         return <EstablishmentsPage />;
       case 'settings':

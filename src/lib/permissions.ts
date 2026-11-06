@@ -15,7 +15,7 @@ import { UserRole } from '@/context/AuthContext';
 const ISM_PAGES: PageName[] = [
   'dashboard', 'finance', 'subscriptions',
   'users', 'history', 'profile',
-  'import-eleves',
+  'import-eleves', 'entities',
   // Historique des paiements (parents ↔ école), paginé depuis la base.
   'paiements',
   // Les QR Cartes Student ne sont pas exposés à l'Espace ISM :
@@ -83,4 +83,5 @@ export const PAGE_LABEL: Record<PageName, string> = {
   reclamations: 'Réclamations',
   'import-eleves': 'Import',
   paiements: 'Historique des paiements',
+  entities: 'Entités',
 };

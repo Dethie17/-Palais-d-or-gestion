@@ -18,15 +18,6 @@ INSERT INTO public.entites (nom, slug, statut)
 VALUES ('DANGOTE', 'dangote', 'actif')
 ON CONFLICT (slug) DO NOTHING;
 
--- Fonction helper : entité de l'utilisateur connecté
-CREATE OR REPLACE FUNCTION public.current_entite_id()
-RETURNS UUID
-LANGUAGE SQL
-STABLE
-AS $$
-  SELECT entite_id FROM public.users WHERE auth_id = auth.uid() LIMIT 1;
-$$;
-
 -- 2. Ajout entite_id sur toutes les tables métier
 DO $$
 DECLARE
@@ -47,6 +38,15 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+
+-- Fonction helper : entité de l'utilisateur connecté (après ajout de la colonne)
+CREATE OR REPLACE FUNCTION public.current_entite_id()
+RETURNS UUID
+LANGUAGE SQL
+STABLE
+AS $$
+  SELECT entite_id FROM public.users WHERE auth_id = auth.uid() LIMIT 1;
+$$;
 
 -- 3. Contraintes FK + NOT NULL (sauf tables où l'absence est possible)
 DO $$
@@ -100,3 +100,20 @@ END $$;
 
 -- ROLLBACK (manuel) :
 -- DROP POLICY ... ; ALTER TABLE ... DROP COLUMN entite_id; DROP FUNCTION public.current_entite_id(); DROP TABLE public.entites;
+-- RLS pour la table entites
+ALTER TABLE public.entites ENABLE ROW LEVEL SECURITY;
+CREATE OR REPLACE FUNCTION public.is_platform_admin()
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.users WHERE auth_id = auth.uid() AND role = 'admin');
+$$;
+DROP POLICY IF EXISTS entites_select ON public.entites;
+DROP POLICY IF EXISTS entites_insert ON public.entites;
+DROP POLICY IF EXISTS entites_update ON public.entites;
+DROP POLICY IF EXISTS entites_delete ON public.entites;
+CREATE POLICY entites_select ON public.entites FOR SELECT USING (true);
+CREATE POLICY entites_insert ON public.entites FOR INSERT WITH CHECK (public.is_platform_admin());
+CREATE POLICY entites_update ON public.entites FOR UPDATE USING (public.is_platform_admin()) WITH CHECK (public.is_platform_admin());
+CREATE POLICY entites_delete ON public.entites FOR DELETE USING (public.is_platform_admin());
