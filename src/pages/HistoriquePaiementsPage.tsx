@@ -190,15 +190,20 @@ const HistoriquePaiementsPage = () => {
       mois: sub
         ? (() => {
             const formula = formulas.find((f) => f.id === sub.formulaId);
-            const price = formula?.price ?? 0;
+            let price = formula?.price ?? 0;
+            if (price <= 0) {
+              if (p.amount % 32000 === 0) price = 32000;
+              else price = 27000;
+            }
             let count = 1;
             if (sub.endDate && new Date(sub.endDate) > new Date(sub.startDate)) {
               const ms = (new Date(sub.endDate).getFullYear() - new Date(sub.startDate).getFullYear()) * 12
                 + (new Date(sub.endDate).getMonth() - new Date(sub.startDate).getMonth());
               if (ms > 0) count = ms;
-            } else if (price > 0 && p.amount > 0) {
+            }
+            if (count === 1 && price > 0 && p.amount > 0) {
               const c = Math.round(p.amount / price);
-              if (c > 0) count = c;
+              if (c > 1) count = c;
             }
             const labels: string[] = [];
             for (let i = 0; i < count; i++) {
