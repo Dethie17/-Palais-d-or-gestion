@@ -108,6 +108,7 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     title: 'Caissier',
     icon: Store,
     mission: 'Tenue du comptoir : vente au POS, scan du QR élève pour débiter sa carte prépayée et historique des ventes.',
+    color: 'from-slate-800 to-slate-900',
     tasks: [
       { label: 'Vente POS au comptoir', page: 'pos', detail: 'Vente directe, ticket, monnaie rendue' },
       { label: 'Scanner le QR de l’élève', page: 'pos', detail: 'Débiter la carte prépayée de l’élève, pas de Wave par l’enfant' },

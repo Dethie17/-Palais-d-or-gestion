@@ -110,6 +110,7 @@ export interface User {
   password?: string;
   qrToken?: string;
   establishmentId?: string;
+  entiteId?: string;
 }
 
 interface AuthContextType {
@@ -451,7 +452,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       Promise.resolve(
         supabase
           .from('users')
-          .select('username, role, establishment_id')
+          .select('username, role, establishment_id, entite_id')
           .eq('auth_id', session.user.id)
           .maybeSingle(),
       ),
@@ -478,7 +479,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           Promise.resolve(
             supabase
               .from('users')
-              .select('username, role, establishment_id')
+              .select('username, role, establishment_id, entite_id')
               .eq('username', username)
               .maybeSingle(),
           ),
@@ -498,7 +499,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username,
       role,
       qrToken: getClientQrToken(username),
-      establishmentId: row.establishment_id ?? undefined,
+      establishmentId: (row as { establishment_id?: string }).establishment_id ?? undefined,
+      entiteId: (row as { entite_id?: string }).entite_id ?? undefined,
     };
   }, []);
 
