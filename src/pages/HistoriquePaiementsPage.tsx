@@ -50,7 +50,7 @@ interface HistoLigne {
  * chargées par le contexte — la base ne stocke que les identifiants.
  */
 const HistoriquePaiementsPage = () => {
-  const { children: kids, parentProfiles, parentProfileOf, subscriptions } = useResto();
+  const { children: kids, parentProfiles, parentProfileOf, subscriptions, formulas } = useResto();
 
   const [du, setDu] = useState('');
   const [au, setAu] = useState('');
@@ -187,7 +187,28 @@ const HistoriquePaiementsPage = () => {
       enfantNom: child?.lastName ?? '',
       enfantPrenom: child?.firstName ?? '',
       classe: child?.className ?? '—',
-      mois: sub ? moisLibelleRange(sub.startDate, sub.endDate) : '—',
+      mois: sub
+        ? (() => {
+            const formula = formulas.find((f) => f.id === sub.formulaId);
+            const price = formula?.price ?? 0;
+            let count = 1;
+            if (sub.endDate && new Date(sub.endDate) > new Date(sub.startDate)) {
+              const ms = (new Date(sub.endDate).getFullYear() - new Date(sub.startDate).getFullYear()) * 12
+                + (new Date(sub.endDate).getMonth() - new Date(sub.startDate).getMonth());
+              if (ms > 0) count = ms;
+            } else if (price > 0 && p.amount > 0) {
+              const c = Math.round(p.amount / price);
+              if (c > 0) count = c;
+            }
+            const labels: string[] = [];
+            for (let i = 0; i < count; i++) {
+              const d = new Date(sub.startDate);
+              d.setMonth(d.getMonth() + i);
+              labels.push(`${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][d.getMonth()]} ${d.getFullYear()}`);
+            }
+            return labels.join(', ') || '—';
+          })()
+        : '—',
       date: formatDateJJMMAAAA(paiementDate(p)),
       heure: formatHeureHHMM(paiementDate(p)),
       statut: paiementsStatusLabel(p.status),
