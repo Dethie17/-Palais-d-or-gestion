@@ -107,12 +107,10 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     role: 'gestionnaire',
     title: 'Caissier',
     icon: Store,
-    mission: 'Tenue du comptoir : vente au POS, scan du QR élève pour débiter sa carte prépayée, Espace Repas et historique des ventes.',
-    color: 'from-slate-800 to-slate-900',
+    mission: 'Tenue du comptoir : vente au POS, scan du QR élève pour débiter sa carte prépayée et historique des ventes.',
     tasks: [
       { label: 'Vente POS au comptoir', page: 'pos', detail: 'Vente directe, ticket, monnaie rendue' },
       { label: 'Scanner le QR de l’élève', page: 'pos', detail: 'Débiter la carte prépayée de l’élève, pas de Wave par l’enfant' },
-      { label: 'Espace repas', page: 'menurecreation', detail: 'Annoncer les plats, la vente se fait à la caisse' },
       { label: 'Consulter l’historique', page: 'history', detail: 'Ventes du comptoir et débits cartes' },
     ],
     forbidden: [

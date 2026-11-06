@@ -575,7 +575,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
         </section>
 
         {/* ===== 5. RÉCLAMATIONS (intégrées à l'espace) ===== */}
-        <ReclamationsSection username={username} />
+        {/* Reclamations desactivees */}
 
         {/* ===== 6. HISTORIQUE ===== */}
         <section id="historique" className="scroll-mt-24" data-testid="section-historique">
@@ -591,9 +591,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
               </button>
             ))}
             <span className="ml-auto text-sm font-bold">Ce mois : <span className="text-emerald-700">{formatCurrency(totals.spent)}</span></span>
-            {totals.mealsLeft > 0 && (
-              <span className="text-sm font-bold text-slate-500">Repas restants : <span className="text-slate-900 tabular-nums">{totals.mealsLeft}</span></span>
-            )}
+
           </div>
           <div className="bg-white rounded-2xl border overflow-hidden">
             {historyRows.length === 0 ? (

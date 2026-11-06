@@ -492,7 +492,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const username = typeof row.username === 'string' ? row.username.trim().toLowerCase() : '';
     const role = normalizeRole(row.role);
-    if (!username || !role || role === 'gestionnaire') return null;
+    if (!username || !role) return null;
 
     return {
       username,
@@ -616,7 +616,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!ok) return false;
 
         const role = normalizeRole(data.role);
-        if (!role || role === 'gestionnaire') return false;
+        if (!role) return false;
 
         const user: User = {
           username: data.username,

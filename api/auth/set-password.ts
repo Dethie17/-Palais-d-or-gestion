@@ -13,7 +13,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { adminClient } from '../_lib/supabaseAdmin.js';
-import { requireRole, ADMIN_ONLY } from '../_lib/session.js';
+import { requireRole, DELETE_USER_ROLES } from '../_lib/session.js';
 import {
   handlePreflight,
   methodNotAllowed,
@@ -31,7 +31,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   if (req.method === 'OPTIONS') return handlePreflight(req, res);
   if (req.method !== 'POST') return methodNotAllowed(req, res, ['POST']);
 
-  const caller = await requireRole(req, res, ADMIN_ONLY);
+  const caller = await requireRole(req, res, DELETE_USER_ROLES);
   if (!caller) return;
 
   let body: ResetBody;

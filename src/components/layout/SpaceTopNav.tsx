@@ -28,11 +28,11 @@ import {
 const NAV: { page: PageName; label: string; icon: React.ReactNode; roles: UserRole[] }[] = [
   { page: 'home', label: 'Accueil', icon: <Home aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
   { page: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
-  { page: 'validation', label: 'Validation repas', icon: <ScanLine aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
-  { page: 'menu', label: 'Gestion Menu', icon: <ClipboardList aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
+  { page: 'validation', label: 'Validation repas', icon: <ScanLine aria-hidden className="w-4 h-4" />, roles: ['gestionnaire'] },
+  { page: 'menu', label: 'Gestion Menu', icon: <ClipboardList aria-hidden className="w-4 h-4" />, roles: ['gestionnaire'] },
   { page: 'subscriptions', label: 'Abonnés & paiements', icon: <Users aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'reclamations', label: 'Réclamations', icon: <MessageSquareWarning aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
-  { page: 'qrgallery', label: 'QR Code', icon: <QrCode aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
+  { page: 'qrgallery', label: 'QR Code', icon: <QrCode aria-hidden className="w-4 h-4" />, roles: ['personnel', 'gestionnaire'] },
   { page: 'users', label: 'Utilisateurs', icon: <Users aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'import-eleves', label: 'Import', icon: <FileSpreadsheet aria-hidden className="w-4 h-4" />, roles: ['admin'] },
   { page: 'establishments', label: 'Établissements', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
@@ -40,7 +40,6 @@ const NAV: { page: PageName; label: string; icon: React.ReactNode; roles: UserRo
   { page: 'finance', label: 'Finance', icon: <Banknote aria-hidden className="w-4 h-4" />, roles: ['admin'] },
   { page: 'paiements', label: 'Historique paiements', icon: <Receipt aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'pos', label: 'Vente (POS)', icon: <ShoppingCart aria-hidden className="w-4 h-4" />, roles: ['gestionnaire'] },
-  { page: 'menurecreation', label: 'Espace Repas', icon: <UtensilsCrossed aria-hidden className="w-4 h-4" />, roles: ['gestionnaire'] },
   { page: 'history', label: 'Historique des commandes', icon: <Receipt aria-hidden className="w-4 h-4" />, roles: ['personnel', 'gestionnaire', 'admin'] },
 ];
 
@@ -53,7 +52,8 @@ const SpaceTopNav = ({ currentPage, onNavigate }: { currentPage: PageName; onNav
   if (isClient || !user) return null;
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200/80 shadow-sm" data-testid="space-topnav">
+    <>
+    <header className="hidden md:block sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200/80 shadow-sm" data-testid="space-topnav">
       <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center gap-3">
         <div className="flex items-center gap-2 flex-shrink-0">
           <div className="w-9 h-9 rounded-xl bg-white border flex items-center justify-center overflow-hidden">
@@ -94,6 +94,30 @@ const SpaceTopNav = ({ currentPage, onNavigate }: { currentPage: PageName; onNav
         </button>
       </div>
     </header>
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200/80 shadow-lg" data-testid="space-bottomnav">
+      <div className="flex gap-1 overflow-x-auto px-2 py-2">
+        {items.map((item) => (
+          <button
+            key={item.page}
+            onClick={() => onNavigate(item.page)}
+            className={`flex flex-col items-center justify-center min-w-[72px] px-2 py-1.5 rounded-xl text-[10px] font-bold transition-colors ${
+              currentPage === item.page ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <span className="mb-0.5">{item.icon}</span>
+            <span className="truncate max-w-[68px]">{item.label}</span>
+          </button>
+        ))}
+        <button
+          onClick={logout}
+          className="flex flex-col items-center justify-center min-w-[72px] px-2 py-1.5 rounded-xl text-[10px] font-bold text-red-600 hover:bg-red-50 transition-colors"
+        >
+          <LogOut aria-hidden className="w-4 h-4 mb-0.5" />
+          <span>Déconnexion</span>
+        </button>
+      </div>
+    </nav>
+    </>
   );
 };
 

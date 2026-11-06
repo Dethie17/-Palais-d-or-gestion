@@ -89,25 +89,6 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
   const [orderToCancel, setOrderToCancel] = useState<KioskOrder | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
 
-  // ---- Repas du jour : ajoutable au panier comme un article ----
-  const todayName = DAY_INDEX[new Date().getDay()];
-  const todayMenu = weeklyMenus.find((m) => m.day === todayName && (m.items ?? []).length > 0);
-  const dayMenuName = todayMenu ? `Menu du ${todayMenu.day}` : '';
-  const dayMenuPrice = todayMenu ? menuTicketTotal(todayMenu) : 0;
-
-  const addDayMenuToCart = () => {
-    if (!todayMenu || dayMenuPrice <= 0) return;
-    addToCart({
-      id: `MENU-${todayMenu.day}`,
-      name: dayMenuName,
-      category: 'Menu du jour',
-      price: dayMenuPrice,
-      description: (todayMenu.items ?? []).map((i) => i.name).join(', '),
-      image: menuPhoto(todayMenu) ?? '/placeholder.svg',
-      available: true,
-    });
-  };
-
   // ---- Commandes de l'élève scanné (à retirer / annuler) ----
   const childOrders = cardChild
     ? kioskOrders
@@ -327,40 +308,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar bg-gradient-to-br from-slate-50 to-slate-50/20">
-          {todayMenu && dayMenuPrice > 0 && (
-            <button
-              onClick={addDayMenuToCart}
-              aria-label={`Ajouter ${dayMenuName} au panier, ${formatCurrency(dayMenuPrice)}`}
-              className={`w-full mb-4 text-left bg-white rounded-2xl border-2 border-amber-300 overflow-hidden hover:border-amber-500 hover:shadow-xl transition-all group ${animatingId === `MENU-${todayMenu.day}` ? 'animate-cart-pop' : ''}`}
-            >
-              <div className="flex items-stretch">
-                <div className="w-28 sm:w-36 flex-shrink-0 overflow-hidden relative">
-                  <img
-                    src={menuPhoto(todayMenu) ?? '/placeholder.svg'}
-                    alt={dayMenuName}
-                    loading="lazy"
-                    onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                  />
-                </div>
-                <div className="flex-1 min-w-0 p-4">
-                  <p className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-[11px] font-black uppercase tracking-widest">
-                    <UtensilsCrossed aria-hidden className="w-3.5 h-3.5" /> Repas du jour · {todayMenu.day}
-                  </p>
-                  <h3 className="mt-2 text-base font-bold text-slate-800 truncate">{dayMenuName}</h3>
-                  <p className="text-xs text-slate-500 truncate">
-                    {(todayMenu.items ?? []).map((i) => i.name).join(', ')}
-                  </p>
-                  <p className="mt-1 text-lg font-black text-amber-600">{formatCurrency(dayMenuPrice)}</p>
-                </div>
-                <div className="flex items-center pr-4">
-                  <span className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center group-hover:bg-amber-600 transition-colors">
-                    <Plus aria-hidden className="w-5 h-5" />
-                  </span>
-                </div>
-              </div>
-            </button>
-          )}
+
           {products.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <p className="text-lg font-bold text-slate-800">Aucun produit</p>

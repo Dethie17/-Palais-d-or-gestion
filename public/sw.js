@@ -6,7 +6,7 @@
  * fichiers non hachés restent en réseau d'abord ; seuls les assets hachés par
  * Vite (/assets/…) sont mis en cache, puisque leur nom change à chaque build.
  */
-const VERSION = 'o-resto-v4';
+const VERSION = 'o-resto-v5';
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_URL = '/offline.html';
 const PRECACHE = [

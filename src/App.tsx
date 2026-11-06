@@ -168,22 +168,7 @@ function AppContent() {
   };
 
   const renderPage = () => {
-    if (user?.role === 'gestionnaire') {
-      return (
-        <div className="p-4 sm:p-8 max-w-lg mx-auto mt-10">
-          <div className="bg-white rounded-3xl border shadow-sm p-8 text-center">
-            <ShieldAlert aria-hidden className="w-14 h-14 text-slate-500 mx-auto mb-4" />
-            <h1 className="text-2xl font-extrabold text-slate-900">Espace Caissier indisponible</h1>
-            <p className="mt-2 text-sm text-slate-600">
-              Cet espace utilisateur est temporairement désactivé. Veuillez utiliser l’espace Superviseur ou Espace ISM.
-            </p>
-            <button onClick={() => void logout()} className="btn-primary mt-6">
-              Se déconnecter
-            </button>
-          </div>
-        </div>
-      );
-    }
+
     // Garde d'accès : chaque profil reste dans son périmètre (matrice des rôles)
     if (!canAccess(user?.role, currentPage)) {
       const roleDef = getRoleDef(user?.role);

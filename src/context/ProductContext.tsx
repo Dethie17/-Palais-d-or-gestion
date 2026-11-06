@@ -268,8 +268,8 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     try {
       const raw = localStorage.getItem(LS_PRODUCTS_KEY);
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as Product[];
-      return Array.isArray(parsed) ? parsed : null;
+const parsed = JSON.parse(raw) as Product[];
+return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
     } catch {
       return null;
     }

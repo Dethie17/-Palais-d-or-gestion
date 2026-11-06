@@ -40,7 +40,7 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
   const isStaff = user?.role === 'personnel';
   // Le personnel ne crée jamais de comptes caissier (rôle Direction) :
   // il se limite aux comptes client et personnel.
-  const allowedRoles: UserRole[] = isStaff ? ['client', 'personnel'] : CREATABLE_ROLES;
+  const allowedRoles: UserRole[] = isStaff ? ['client', 'personnel', 'gestionnaire'] : CREATABLE_ROLES;
 
   const [dbUsers, setDbUsers] = useState<DbUser[]>([]);
   const [offline, setOffline] = useState(false);
@@ -102,7 +102,7 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
       flash('err', 'Nom d’utilisateur requis et mot de passe de 6 caractères minimum.');
       return;
     }
-    if (isStaff && !(['client', 'personnel'] as string[]).includes(newRole)) {
+    if (isStaff && !(['client', 'personnel', 'gestionnaire'] as string[]).includes(newRole)) {
       flash('err', 'Le personnel ne peut créer que des comptes client ou personnel.');
       return;
     }
