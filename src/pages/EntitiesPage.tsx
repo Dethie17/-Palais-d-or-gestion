@@ -18,6 +18,12 @@ const EntitiesPage = () => {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  const spacesBySlug: Record<string, string[]> = {
+    'groupe-ism': ['Espace Caissier', 'Espace Parent', 'Espace Superviseur', 'Espace ISM'],
+    'dangote': ['Espace Ressource Humaine', 'Espace Employé', 'Espace Superviseur'],
+  };
 
   const load = async () => {
     setLoading(true);
@@ -75,14 +81,28 @@ const EntitiesPage = () => {
       ) : (
         <div className="grid gap-3">
           {entities.map((e) => (
-            <div key={e.id} className="bg-white rounded-2xl border p-4 flex items-center justify-between">
-              <div>
-                <p className="font-bold text-slate-800">{e.nom}</p>
-                <p className="text-xs text-slate-500">{e.slug} · {e.statut}</p>
+            <div key={e.id} className="bg-white rounded-2xl border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-slate-800">{e.nom}</p>
+                  <p className="text-xs text-slate-500">{e.slug} · {e.statut}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setOpenId(openId === e.id ? null : e.id)} className="px-3 py-2 rounded-xl border text-sm font-bold">
+                    {openId === e.id ? 'Masquer' : 'Voir les espaces'}
+                  </button>
+                  <button onClick={() => toggle(e)} className="px-3 py-2 rounded-xl border flex items-center gap-2 text-sm font-bold">
+                    <Power className="w-4 h-4" /> {e.statut === 'actif' ? 'Désactiver' : 'Activer'}
+                  </button>
+                </div>
               </div>
-              <button onClick={() => toggle(e)} className="px-3 py-2 rounded-xl border flex items-center gap-2 text-sm font-bold">
-                <Power className="w-4 h-4" /> {e.statut === 'actif' ? 'Désactiver' : 'Activer'}
-              </button>
+              {openId === e.id && (
+                <div className="flex flex-wrap gap-2">
+                  {(spacesBySlug[e.slug] ?? []).map((s) => (
+                    <span key={s} className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 text-xs font-bold">{s}</span>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
