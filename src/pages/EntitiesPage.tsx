@@ -13,7 +13,7 @@ interface Entite {
 
 const EntitiesPage = () => {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const canManage = user?.role === 'admin' || user?.role === 'personnel';
   const [entities, setEntities] = useState<Entite[]>([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
@@ -57,7 +57,7 @@ const EntitiesPage = () => {
         <Building2 className="w-6 h-6" /> Gestion des entités
       </h1>
 
-      {isAdmin && (
+      {canManage && (
         <form onSubmit={create} className="bg-white rounded-2xl border p-4 flex flex-wrap gap-3 items-end">
           <div>
             <label className="text-xs font-bold text-slate-600">Nom</label>
@@ -90,7 +90,7 @@ const EntitiesPage = () => {
                   <button onClick={() => setOpenId(openId === e.id ? null : e.id)} className="px-3 py-2 rounded-xl border text-sm font-bold">
                     {openId === e.id ? 'Masquer' : 'Voir les espaces'}
                   </button>
-                  {isAdmin && (
+                  {canManage && (
                     <button onClick={() => toggle(e)} className="px-3 py-2 rounded-xl border flex items-center gap-2 text-sm font-bold">
                       <Power className="w-4 h-4" /> {e.statut === 'actif' ? 'Désactiver' : 'Activer'}
                     </button>

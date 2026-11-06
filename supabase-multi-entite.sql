@@ -117,3 +117,17 @@ CREATE POLICY entites_select ON public.entites FOR SELECT USING (true);
 CREATE POLICY entites_insert ON public.entites FOR INSERT WITH CHECK (public.is_platform_admin());
 CREATE POLICY entites_update ON public.entites FOR UPDATE USING (public.is_platform_admin()) WITH CHECK (public.is_platform_admin());
 CREATE POLICY entites_delete ON public.entites FOR DELETE USING (public.is_platform_admin());
+-- Mise à jour RLS entites : superviseur peut aussi créer/gérer
+CREATE OR REPLACE FUNCTION public.can_manage_entities()
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.users WHERE auth_id = auth.uid() AND role IN ('admin','personnel'));
+$$;
+DROP POLICY IF EXISTS entites_insert ON public.entites;
+DROP POLICY IF EXISTS entites_update ON public.entites;
+DROP POLICY IF EXISTS entites_delete ON public.entites;
+CREATE POLICY entites_insert ON public.entites FOR INSERT WITH CHECK (public.can_manage_entities());
+CREATE POLICY entites_update ON public.entites FOR UPDATE USING (public.can_manage_entities()) WITH CHECK (public.can_manage_entities());
+CREATE POLICY entites_delete ON public.entites FOR DELETE USING (public.can_manage_entities());

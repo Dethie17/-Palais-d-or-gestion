@@ -36,7 +36,7 @@ const NAV: { page: PageName; label: string; icon: React.ReactNode; roles: UserRo
   { page: 'users', label: 'Utilisateurs', icon: <Users aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'import-eleves', label: 'Import', icon: <FileSpreadsheet aria-hidden className="w-4 h-4" />, roles: ['admin'] },
   { page: 'entities', label: 'Entités', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
-  { page: 'establishments', label: 'Établissements', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
+  { page: 'establishments', label: 'Établissements', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: [] },
   { page: 'settings', label: 'Paramètres', icon: <Settings aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
   { page: 'finance', label: 'Finance', icon: <Banknote aria-hidden className="w-4 h-4" />, roles: ['admin'] },
   { page: 'paiements', label: 'Historique paiements', icon: <Receipt aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
