@@ -78,7 +78,9 @@ export type PageName =
   | 'reclamations'
   | 'import-eleves'
   | 'paiements'
-  | 'entities';
+  | 'entities'
+  | 'dch'
+  | 'dangote-caisse';
 
 // ---------- O RESTO — modèle issu du cahier des charges ----------
 

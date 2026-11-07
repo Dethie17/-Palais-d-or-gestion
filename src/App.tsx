@@ -44,6 +44,8 @@ const SycaPayReturnPage = lazy(() => import('./pages/SycaPayReturnPage'));
 const ImportElevesPage = lazy(() => import('./pages/ImportElevesPage'));
 const HistoriquePaiementsPage = lazy(() => import('./pages/HistoriquePaiementsPage'));
 const EntitiesPage = lazy(() => import('./pages/EntitiesPage'));
+const DangoteDchPage = lazy(() => import('./pages/DangoteDchPage'));
+const DangoteCaissePage = lazy(() => import('./pages/DangoteCaissePage'));
 
 function PageLoader() {
   return (
@@ -242,6 +244,10 @@ function AppContent() {
         return <HistoriquePaiementsPage />;
       case 'entities':
         return <EntitiesPage />;
+      case 'dch':
+        return <DangoteDchPage />;
+      case 'dangote-caisse':
+        return <DangoteCaissePage />;
       case 'establishments':
         return <EstablishmentsPage />;
       case 'settings':

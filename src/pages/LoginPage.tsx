@@ -15,7 +15,7 @@ const ROLE_ORDER: UserRole[] = ['client', 'personnel', 'gestionnaire', 'admin'];
 
 const ENTITY_SPACES: Record<string, { label: string; roles: UserRole[]; roleLabels?: Partial<Record<UserRole, string>> }> = {
   'groupe-ism': { label: 'Groupe ISM', roles: ['client', 'personnel', 'gestionnaire', 'admin'] },
-  'dangote': { label: 'Dangote', roles: ['admin', 'personnel', 'client'], roleLabels: { admin: 'Ressource Humaine', personnel: 'Superviseur', client: 'Employé' } },
+  'dangote': { label: 'Dangote', roles: ['dch', 'admin', 'personnel', 'client'], roleLabels: { dch: 'DCH', admin: 'Ressource Humaine', personnel: 'Superviseur', client: 'Employé' } },
 };
 
 /** Points forts affichés sur chaque carte profil (100 % icônes Lucide). */

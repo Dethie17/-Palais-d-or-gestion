@@ -128,6 +128,20 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     role: 'admin',
     ...DIRECTION_DEF,
   },
+  dch: {
+    role: 'dch',
+    title: 'DCH Dangote',
+    icon: Briefcase,
+    mission: 'Direction du Capital Humain : gestion des employés, achats de talons et crédit repas.',
+    color: 'from-blue-700 to-blue-600',
+    tasks: [
+      { label: 'Tableau de bord crédit', page: 'dashboard', detail: 'Solde, consommation jour/mois' },
+      { label: 'Gestion employés', page: 'users', detail: 'Import CSV, QR codes, révocation' },
+      { label: 'Achats de talons', page: 'subscriptions', detail: 'Proforma → commande → facture → livraison' },
+    ],
+    forbidden: [],
+    kpis: ['Crédit restant', 'Repas du jour', 'Employés actifs'],
+  },
 };
 
 export function getRoleDef(role?: UserRole): RoleDefinition {
