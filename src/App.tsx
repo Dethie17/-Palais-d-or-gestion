@@ -44,8 +44,7 @@ const SycaPayReturnPage = lazy(() => import('./pages/SycaPayReturnPage'));
 const ImportElevesPage = lazy(() => import('./pages/ImportElevesPage'));
 const HistoriquePaiementsPage = lazy(() => import('./pages/HistoriquePaiementsPage'));
 const EntitiesPage = lazy(() => import('./pages/EntitiesPage'));
-const DangoteDchPage = lazy(() => import('./pages/DangoteDchPage'));
-const DangoteCaissePage = lazy(() => import('./pages/DangoteCaissePage'));
+const DangoteRhPage = lazy(() => import('./pages/DangoteRhPage'));
 
 function PageLoader() {
   return (
@@ -104,10 +103,14 @@ function AppContent() {
   useEffect(() => {
     // Point d'entrée selon l'espace : l'Espace ISM tombe sur le pilotage,
     // le caissier directement sur sa caisse.
-    if (user?.role === 'admin' && currentPage === 'home') {
+    if (user?.role === 'rh' && (currentPage === 'home' || currentPage === 'dashboard')) {
+      setCurrentPage('dangote-rh');
+    } else if (user?.role === 'admin' && currentPage === 'home') {
       setCurrentPage('dashboard');
     } else if (user?.role === 'gestionnaire' && (currentPage === 'home' || currentPage === 'dashboard')) {
       setCurrentPage('pos');
+    } else if (user?.role === 'dch' && (currentPage === 'home' || currentPage === 'dashboard')) {
+      setCurrentPage('dch');
     }
   }, [user?.role, currentPage]);
 
@@ -244,10 +247,8 @@ function AppContent() {
         return <HistoriquePaiementsPage />;
       case 'entities':
         return <EntitiesPage />;
-      case 'dch':
-        return <DangoteDchPage />;
-      case 'dangote-caisse':
-        return <DangoteCaissePage />;
+      case 'dangote-rh':
+        return <DangoteRhPage />;
       case 'establishments':
         return <EstablishmentsPage />;
       case 'settings':

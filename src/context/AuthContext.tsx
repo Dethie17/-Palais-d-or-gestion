@@ -77,9 +77,9 @@ export const DEMO_LOGIN_ENABLED = import.meta.env.PROD ? DEMO_FLAG === 'true' : 
  *   gestionnaire→ Caissier
  *   admin       → Espace ISM (structure partenaire)
  */
-export type UserRole = 'client' | 'personnel' | 'gestionnaire' | 'admin' | 'dch';
+export type UserRole = 'client' | 'personnel' | 'gestionnaire' | 'admin' | 'rh';
 
-const VALID_ROLES: UserRole[] = ['client', 'personnel', 'gestionnaire', 'admin', 'dch'];
+const VALID_ROLES: UserRole[] = ['client', 'personnel', 'gestionnaire', 'admin', 'rh'];
 
 /**
  * Anciens rôles stockés en base avant le découpage en 4 espaces :

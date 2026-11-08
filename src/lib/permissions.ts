@@ -29,11 +29,11 @@ export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // est réservée au Caissier.
   personnel: ['home', 'subscriptions', 'paiements', 'qrgallery', 'users', 'settings', 'profile', 'dashboard', 'paymentsuccess', 'paymentfailure', 'entities'],
   // Caissier : POS (avec scan QR élève), espace repas et historique.
-  gestionnaire: ['validation', 'menu', 'pos', 'qrgallery', 'paymentsuccess', 'paymentfailure', 'profile', 'dangote-caisse'],
+  gestionnaire: ['validation', 'menu', 'pos', 'qrgallery', 'paymentsuccess', 'paymentfailure', 'profile'],
   // Espace ISM : pilotage + suivi uniquement (sans menus/paramètres/établissements)
-  admin: [...ISM_PAGES, 'entities', 'paymentsuccess', 'paymentfailure'],
+  admin: [...ISM_PAGES, 'dangote-rh', 'paymentsuccess', 'paymentfailure'],
   // DCH Dangote : gestion employés, achats de talons, crédit repas.
-  dch: ['dashboard', 'users', 'subscriptions', 'profile', 'entities', 'dch', 'paymentsuccess', 'paymentfailure'],
+  rh: ['dangote-rh', 'profile', 'paymentsuccess', 'paymentfailure'],
 };
 
 export function canAccess(role: UserRole | undefined, page: PageName): boolean {
@@ -86,6 +86,5 @@ export const PAGE_LABEL: Record<PageName, string> = {
   'import-eleves': 'Import',
   paiements: 'Historique des paiements',
   entities: 'Entités',
-  dch: 'Espace DCH',
-  'dangote-caisse': 'Caisse Dangote',
+  'dangote-rh': 'Espace RH Dangote',
 };

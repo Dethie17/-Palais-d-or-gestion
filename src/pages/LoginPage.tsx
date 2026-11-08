@@ -7,7 +7,7 @@ import OrestoLogo from '@/components/brand/OrestoLogo';
 import {
   LogIn, AlertCircle, UserRound, LockKeyhole, Eye, EyeOff, ScanLine, UtensilsCrossed,
   ShoppingCart, LayoutDashboard, Settings, ShieldCheck, KeyRound, Loader2,
-  ArrowRight, ArrowLeft, QrCode, Wallet, Smartphone, Building2,
+  ArrowRight, ArrowLeft, QrCode, Wallet, Smartphone, Building2, Users,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -15,7 +15,7 @@ const ROLE_ORDER: UserRole[] = ['client', 'personnel', 'gestionnaire', 'admin'];
 
 const ENTITY_SPACES: Record<string, { label: string; roles: UserRole[]; roleLabels?: Partial<Record<UserRole, string>> }> = {
   'groupe-ism': { label: 'Groupe ISM', roles: ['client', 'personnel', 'gestionnaire', 'admin'] },
-  'dangote': { label: 'Dangote', roles: ['dch', 'admin', 'personnel', 'client'], roleLabels: { dch: 'DCH', admin: 'Ressource Humaine', personnel: 'Superviseur', client: 'Employé' } },
+  'dangote': { label: 'Dangote', roles: ['rh', 'personnel', 'client'], roleLabels: { rh: 'Ressource Humaine', personnel: 'Superviseur', client: 'Employé' } },
 };
 
 /** Points forts affichés sur chaque carte profil (100 % icônes Lucide). */
@@ -45,6 +45,9 @@ const ROLE_HIGHLIGHTS: Record<UserRole | 'caissier' | 'manager', { icon: LucideI
   manager: [
     { icon: LayoutDashboard, label: 'Rapports' },
     { icon: Settings, label: 'Caissiers' },
+  ],
+  rh: [
+    { icon: Building2, label: 'RH' },
   ],
 };
 

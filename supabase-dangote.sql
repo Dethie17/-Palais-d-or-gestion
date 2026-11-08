@@ -118,3 +118,15 @@ BEGIN
 END $$;
 
 -- Rollback (manuel) : DROP TABLE ... ; DROP FUNCTION ...
+-- Étendre la contrainte de rôle pour inclure dch
+ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_allowed;
+ALTER TABLE public.users ADD CONSTRAINT users_role_allowed
+  CHECK (role IN ('client','personnel','gestionnaire','admin','dch'));
+-- Étendre la contrainte de rôle pour inclure rh
+ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_allowed;
+ALTER TABLE public.users ADD CONSTRAINT users_role_allowed
+  CHECK (role IN ('client','personnel','gestionnaire','admin','dch','rh'));
+-- Étendre la contrainte de rôle pour inclure caissier-dangote
+ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_allowed;
+ALTER TABLE public.users ADD CONSTRAINT users_role_allowed
+  CHECK (role IN ('client','personnel','gestionnaire','admin','dch','rh','caissier-dangote'));

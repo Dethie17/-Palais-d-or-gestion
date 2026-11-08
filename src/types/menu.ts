@@ -79,8 +79,7 @@ export type PageName =
   | 'import-eleves'
   | 'paiements'
   | 'entities'
-  | 'dch'
-  | 'dangote-caisse';
+  | 'dangote-rh';
 
 // ---------- O RESTO — modèle issu du cahier des charges ----------
 
