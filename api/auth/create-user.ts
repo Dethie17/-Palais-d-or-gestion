@@ -29,7 +29,7 @@ import {
   sendJson,
 } from '../_lib/http.js';
 
-const VALID_ROLES = ['client', 'personnel', 'gestionnaire', 'admin'] as const;
+const VALID_ROLES = ['client', 'personnel', 'gestionnaire', 'admin', 'rh', 'superviseur-dangote', 'employe-dangote'] as const;
 type Role = (typeof VALID_ROLES)[number];
 
 interface CreateBody {
@@ -39,6 +39,7 @@ interface CreateBody {
   firstName?: unknown;
   lastName?: unknown;
   phone?: unknown;
+  entiteId?: unknown;
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
@@ -58,6 +59,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   const username = normalizeUsername(typeof body.username === 'string' ? body.username : '');
   const password = typeof body.password === 'string' ? body.password : '';
   const role = String(body.role ?? '') as Role;
+  const entiteId = typeof body.entiteId === 'string' ? body.entiteId.trim() : '';
 
   if (!isValidUsername(username)) {
     return sendError(res, 400, 'Nom d’utilisateur : 3 à 24 caractères (lettres, chiffres, . _ -).');
@@ -67,6 +69,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
   if (!VALID_ROLES.includes(role)) {
     return sendError(res, 400, 'Rôle invalide.');
+  }
+  const isDangoteRole = role === 'rh' || role === 'superviseur-dangote' || role === 'employe-dangote';
+  if (isDangoteRole && !entiteId) {
+    return sendError(res, 400, 'Entité requise pour un rôle Dangote.');
   }
 
   // Champs identité : obligatoires pour un parent, ignorés pour le personnel.
@@ -108,16 +114,28 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       role,
       auth_id: created.user.id,
       qr_token: personalQrToken(username),
+      entite_id: isDangoteRole ? entiteId : null,
     },
     password,
   );
 
   if (profileError) {
-    // Ne pas laisser un compte orphelin : sans profil, il ne peut rien faire,
-    // mais il traînerait dans la liste des comptes Auth.
     await db.auth.admin.deleteUser(created.user.id).catch(() => undefined);
     console.error('[create-user] échec insertion profil', profileError.code, profileError.message);
     return sendError(res, 500, 'Compte d’authentification créé, mais fiche métier non enregistrée.');
+  }
+
+  if (role === 'employe-dangote' && entiteId) {
+    await db.from('dangote_employes').insert({
+      entite_id: entiteId,
+      matricule: username,
+      nom: username,
+      prenom: '',
+      service: null,
+      actif: true,
+      qr_token: personalQrToken(username),
+      user_id: created.user.id,
+    }).then(() => undefined, () => undefined);
   }
 
   // 3) Parent : fiche identité (prénom, nom, téléphone). Non bloquante —

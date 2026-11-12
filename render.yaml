@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: o-resto
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 24.15.0
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: VITE_APP_URL
+        sync: false
+      - key: AUTH_EMAIL_DOMAIN
+        value: oresto-sn.com
+      - key: SYCAPAY_WEBHOOK_REQUIRE_SIGNATURE
+        value: "true"

@@ -57,6 +57,7 @@ const HistoriquePaiementsPage = () => {
   const [classe, setClasse] = useState('');
   const [recherche, setRecherche] = useState('');
   const [applied, setApplied] = useState<HistoriqueFiltres>({});
+  const [period, setPeriod] = useState<'jour' | 'semaine' | 'mois' | 'all'>('all');
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState<PaiementBrut[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -164,6 +165,32 @@ const HistoriquePaiementsPage = () => {
     setClasse('');
     setRecherche('');
     setApplied({});
+    setPeriod('all');
+    setPage(1);
+  };
+
+  const applyQuickPeriod = (p: 'jour' | 'semaine' | 'mois' | 'all') => {
+    setPeriod(p);
+    const now = new Date();
+    const toIso = (d: Date) => d.toISOString().slice(0, 10);
+    let duVal = '';
+    let auVal = '';
+    if (p === 'jour') {
+      duVal = toIso(now);
+      auVal = toIso(now);
+    } else if (p === 'semaine') {
+      const start = new Date(now);
+      start.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+      duVal = toIso(start);
+      auVal = toIso(now);
+    } else if (p === 'mois') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      duVal = toIso(start);
+      auVal = toIso(now);
+    }
+    setDu(duVal);
+    setAu(auVal);
+    setApplied({ du: duVal || undefined, au: auVal || undefined, classe: classe || undefined, recherche: recherche.trim() || undefined });
     setPage(1);
   };
 
@@ -353,6 +380,18 @@ const HistoriquePaiementsPage = () => {
 
       {/* Filtres */}
       <form onSubmit={applyFilters} data-testid="paiements-filters" className="bg-white rounded-3xl border p-4 md:p-5 shadow-sm">
+        <div className="flex flex-wrap gap-2 mb-3">
+          {(['jour', 'semaine', 'mois', 'all'] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => applyQuickPeriod(p)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${period === p ? 'bg-green-700 text-white border-green-700' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+            >
+              {p === 'jour' ? 'Jour' : p === 'semaine' ? 'Semaine' : p === 'mois' ? 'Mois' : 'Tout'}
+            </button>
+          ))}
+        </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2 items-end">
           <label className="text-xs font-bold text-slate-600">
             Du

@@ -45,6 +45,9 @@ const ImportElevesPage = lazy(() => import('./pages/ImportElevesPage'));
 const HistoriquePaiementsPage = lazy(() => import('./pages/HistoriquePaiementsPage'));
 const EntitiesPage = lazy(() => import('./pages/EntitiesPage'));
 const DangoteRhPage = lazy(() => import('./pages/DangoteRhPage'));
+const DangoteSuperviseurPage = lazy(() => import('./pages/DangoteSuperviseurPage'));
+const DangoteEmployePage = lazy(() => import('./pages/DangoteEmployePage'));
+const DangoteQrGalleryPage = lazy(() => import('./pages/DangoteQrGalleryPage'));
 
 function PageLoader() {
   return (
@@ -105,12 +108,14 @@ function AppContent() {
     // le caissier directement sur sa caisse.
     if (user?.role === 'rh' && (currentPage === 'home' || currentPage === 'dashboard')) {
       setCurrentPage('dangote-rh');
+    } else if (user?.role === 'superviseur-dangote' && (currentPage === 'home' || currentPage === 'dashboard')) {
+      setCurrentPage('dangote-superviseur');
+    } else if (user?.role === 'employe-dangote' && (currentPage === 'home' || currentPage === 'dashboard')) {
+      setCurrentPage('dangote-employe');
     } else if (user?.role === 'admin' && currentPage === 'home') {
       setCurrentPage('dashboard');
     } else if (user?.role === 'gestionnaire' && (currentPage === 'home' || currentPage === 'dashboard')) {
       setCurrentPage('pos');
-    } else if (user?.role === 'dch' && (currentPage === 'home' || currentPage === 'dashboard')) {
-      setCurrentPage('dch');
     }
   }, [user?.role, currentPage]);
 
@@ -249,6 +254,12 @@ function AppContent() {
         return <EntitiesPage />;
       case 'dangote-rh':
         return <DangoteRhPage />;
+      case 'dangote-superviseur':
+        return <DangoteSuperviseurPage />;
+      case 'dangote-employe':
+        return <DangoteEmployePage />;
+      case 'dangote-qrgallery':
+        return <DangoteQrGalleryPage />;
       case 'establishments':
         return <EstablishmentsPage />;
       case 'settings':

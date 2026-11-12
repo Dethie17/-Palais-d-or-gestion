@@ -130,15 +130,39 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
   },
   rh: {
     role: 'rh',
-    title: 'Ressource Humaine',
+    title: 'Direction du Capital Humain',
     icon: Briefcase,
-    mission: 'Espace Ressource Humaine Dangote.',
+    mission: 'Espace Direction du Capital Humain Dangote.',
     color: 'from-indigo-700 to-indigo-600',
     tasks: [
       { label: 'Espace RH', page: 'dangote-rh', detail: 'Gestion RH Dangote' },
     ],
     forbidden: [],
     kpis: ['Employés', 'Absences', 'Paie'],
+  },
+  'superviseur-dangote': {
+    role: 'superviseur-dangote',
+    title: 'Superviseur MIAM\'S',
+    icon: UtensilsCrossed,
+    mission: 'Espace Superviseur MIAM\'S Dangote.',
+    color: 'from-emerald-700 to-emerald-600',
+    tasks: [
+      { label: 'Espace Superviseur', page: 'dangote-superviseur', detail: 'Caisse et repas du jour' },
+    ],
+    forbidden: [],
+    kpis: ['Repas servis', 'Crédit restant'],
+  },
+  'employe-dangote': {
+    role: 'employe-dangote',
+    title: 'Employé Dangote',
+    icon: UserRound,
+    mission: 'Espace Employé Dangote.',
+    color: 'from-slate-700 to-slate-600',
+    tasks: [
+      { label: 'Espace Employé', page: 'dangote-employe', detail: 'Mon QR et mes repas' },
+    ],
+    forbidden: [],
+    kpis: ['Mes repas', 'Ma retenue'],
   },
 };
 

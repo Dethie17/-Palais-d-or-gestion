@@ -2,6 +2,9 @@
   "name": "o-resto",
   "private": true,
   "version": "2.1.0",
+  "engines": {
+    "node": ">=20"
+  },
   "description": "O RESTO — Gestion des repas et abonnements pour écoles et entreprises (Menus, QR Code, Wave, Dashboard)",
   "type": "module",
   "scripts": {
@@ -11,6 +14,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
+    "start": "tsx server.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -67,6 +71,7 @@
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "tsx": "^4.23.15",
     "vaul": "^0.9.9",
     "write-excel-file": "^2.3.10",
     "zod": "^3.25.76"

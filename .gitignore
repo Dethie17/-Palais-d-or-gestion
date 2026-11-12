@@ -44,3 +44,6 @@ certifs/
 .env
 *.key
 *.crt
+render.env
+render-env-*.txt
+dist-deploy.zip

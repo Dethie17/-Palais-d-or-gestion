@@ -18,6 +18,7 @@ import {
   Banknote,
   QrCode,
   LogOut,
+  UserRound,
 } from 'lucide-react';
 
 /**
@@ -27,16 +28,18 @@ import {
  */
 const NAV: { page: PageName; label: string; icon: React.ReactNode; roles: UserRole[] }[] = [
   { page: 'home', label: 'Accueil', icon: <Home aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
-  { page: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin', 'dch'] },
+  { page: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'validation', label: 'Validation repas', icon: <ScanLine aria-hidden className="w-4 h-4" />, roles: ['gestionnaire'] },
   { page: 'menu', label: 'Gestion Menu', icon: <ClipboardList aria-hidden className="w-4 h-4" />, roles: ['gestionnaire'] },
-  { page: 'subscriptions', label: 'Abonnés & paiements', icon: <Users aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin', 'dch'] },
+  { page: 'subscriptions', label: 'Abonnés & paiements', icon: <Users aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
 
   { page: 'qrgallery', label: 'QR Code', icon: <QrCode aria-hidden className="w-4 h-4" />, roles: ['personnel', 'gestionnaire'] },
-  { page: 'users', label: 'Utilisateurs', icon: <Users aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin', 'dch'] },
+  { page: 'users', label: 'Utilisateurs', icon: <Users aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'import-eleves', label: 'Import', icon: <FileSpreadsheet aria-hidden className="w-4 h-4" />, roles: ['admin'] },
   { page: 'entities', label: 'Entités', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
   { page: 'dangote-rh', label: 'Espace RH', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['rh'] },
+  { page: 'dangote-superviseur', label: 'Espace Superviseur', icon: <UtensilsCrossed aria-hidden className="w-4 h-4" />, roles: ['superviseur-dangote'] },
+  { page: 'dangote-employe', label: 'Espace Employé', icon: <UserRound aria-hidden className="w-4 h-4" />, roles: ['employe-dangote'] },
   { page: 'establishments', label: 'Établissements', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: [] },
   { page: 'settings', label: 'Paramètres', icon: <Settings aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
   { page: 'finance', label: 'Finance', icon: <Banknote aria-hidden className="w-4 h-4" />, roles: ['admin'] },

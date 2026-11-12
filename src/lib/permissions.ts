@@ -34,6 +34,8 @@ export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   admin: [...ISM_PAGES, 'dangote-rh', 'paymentsuccess', 'paymentfailure'],
   // DCH Dangote : gestion employés, achats de talons, crédit repas.
   rh: ['dangote-rh', 'profile', 'paymentsuccess', 'paymentfailure'],
+  'superviseur-dangote': ['dangote-superviseur', 'profile', 'paymentsuccess', 'paymentfailure'],
+  'employe-dangote': ['dangote-employe', 'profile', 'paymentsuccess', 'paymentfailure'],
 };
 
 export function canAccess(role: UserRole | undefined, page: PageName): boolean {
@@ -55,6 +57,9 @@ export const ROLE_LABEL: Record<UserRole, string> = {
   personnel: 'Superviseur',
   gestionnaire: 'Caissier',
   admin: 'Espace ISM',
+  rh: 'Direction du Capital Humain',
+  'superviseur-dangote': 'Superviseur MIAM\'S',
+  'employe-dangote': 'Employé Dangote',
 };
 
 /** Libellés pro des modules pour les écrans "Périmètre d'accès". */
@@ -86,5 +91,8 @@ export const PAGE_LABEL: Record<PageName, string> = {
   'import-eleves': 'Import',
   paiements: 'Historique des paiements',
   entities: 'Entités',
-  'dangote-rh': 'Espace RH Dangote',
+  'dangote-rh': 'Espace Direction du Capital Humain Dangote',
+  'dangote-superviseur': 'Espace Superviseur MIAM\'S Dangote',
+  'dangote-employe': 'Espace Employé Dangote',
+  'dangote-qrgallery': 'Gallerie QR Code',
 };

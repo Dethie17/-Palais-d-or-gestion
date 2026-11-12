@@ -23,7 +23,7 @@ const EntitiesPage = () => {
 
   const spacesBySlug: Record<string, string[]> = {
     'groupe-ism': ['Espace Caissier', 'Espace Parent', 'Espace Superviseur', 'Espace ISM'],
-    'dangote': ['Espace Ressource Humaine', 'Espace Employé', 'Espace Superviseur'],
+    'dangote': ['Espace Direction du Capital Humain', 'Espace Employé Dangote', 'Espace Superviseur MIAM\'S'],
   };
 
   const load = async () => {

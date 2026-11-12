@@ -28,6 +28,7 @@ export interface ProfileRow {
   role: string;
   auth_id: string;
   qr_token: string;
+  entite_id?: string | null;
 }
 
 export interface DbError {
@@ -74,6 +75,7 @@ export async function insertUserProfile(
     role: row.role,
     auth_id: row.auth_id,
     qr_token: row.qr_token,
+    ...(row.entite_id ? { entite_id: row.entite_id } : {}),
   };
   let res = await db.from('users').insert(target);
   let err = (res.error as DbError | null) ?? null;
@@ -88,6 +90,7 @@ export async function insertUserProfile(
       role: row.role,
       qr_token: row.qr_token,
       password: legacyPasswordHash(password),
+      ...(row.entite_id ? { entite_id: row.entite_id } : {}),
     };
     res = await db.from('users').insert(withLegacyPassword);
     err = (res.error as DbError | null) ?? null;

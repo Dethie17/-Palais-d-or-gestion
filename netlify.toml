@@ -8,6 +8,13 @@
 # Les fonctions Netlify sont servies nativement sur /.netlify/functions/*
 # Aucune redirection ne doit intercepter ce chemin.
 
+# Proxy API backend (remplacez BACKEND_URL par votre URL backend)
+[[redirects]]
+  from = "/api/*"
+  to = "https://BACKEND_URL/api/:splat"
+  status = 200
+  force = true
+
 # Routes paiement (DOIVENT être AVANT le fallback SPA)
 [[redirects]]
   from = "/paiement/success"

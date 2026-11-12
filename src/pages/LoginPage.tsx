@@ -15,7 +15,7 @@ const ROLE_ORDER: UserRole[] = ['client', 'personnel', 'gestionnaire', 'admin'];
 
 const ENTITY_SPACES: Record<string, { label: string; roles: UserRole[]; roleLabels?: Partial<Record<UserRole, string>> }> = {
   'groupe-ism': { label: 'Groupe ISM', roles: ['client', 'personnel', 'gestionnaire', 'admin'] },
-  'dangote': { label: 'Dangote', roles: ['rh', 'personnel', 'client'], roleLabels: { rh: 'Ressource Humaine', personnel: 'Superviseur', client: 'Employé' } },
+  'dangote': { label: 'Dangote', roles: ['rh', 'superviseur-dangote', 'employe-dangote'], roleLabels: { rh: 'Direction du Capital Humain', 'superviseur-dangote': 'Superviseur MIAM\'S', 'employe-dangote': 'Employé Dangote' } },
 };
 
 /** Points forts affichés sur chaque carte profil (100 % icônes Lucide). */
@@ -49,6 +49,12 @@ const ROLE_HIGHLIGHTS: Record<UserRole | 'caissier' | 'manager', { icon: LucideI
   rh: [
     { icon: Building2, label: 'RH' },
   ],
+  'superviseur-dangote': [
+    { icon: UtensilsCrossed, label: 'Caisse' },
+  ],
+  'employe-dangote': [
+    { icon: QrCode, label: 'Mon QR' },
+  ],
 };
 
 /**
@@ -65,7 +71,10 @@ const LoginPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
-  const [selectedEntity, setSelectedEntity] = useState<'groupe-ism' | 'dangote' | null>(null);
+  const [selectedEntity, setSelectedEntity] = useState<'groupe-ism' | 'dangote' | null>(() => {
+    try { return (localStorage.getItem('selectedEntity') as 'groupe-ism' | 'dangote' | null) ?? null; } catch { return null; }
+  });
+  useEffect(() => { try { if (selectedEntity) localStorage.setItem('selectedEntity', selectedEntity); } catch {} }, [selectedEntity]);
   // Verrouillage anti brute-force : compte à rebours live
   const [lockUntil, setLockUntil] = useState(0);
   const [lockLeft, setLockLeft] = useState('');

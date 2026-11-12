@@ -79,7 +79,10 @@ export type PageName =
   | 'import-eleves'
   | 'paiements'
   | 'entities'
-  | 'dangote-rh';
+  | 'dangote-rh'
+  | 'dangote-superviseur'
+  | 'dangote-employe'
+  | 'dangote-qrgallery';
 
 // ---------- O RESTO — modèle issu du cahier des charges ----------
 

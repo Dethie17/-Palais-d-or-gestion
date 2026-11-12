@@ -1,9 +1,9 @@
 -- Migration module REPAS DANGOTE (rÃ©versible)
 
--- 1. Ã‰tendre le rÃ´le users pour inclure 'dch'
+-- 1. Ã‰tendre le rÃ´le users pour inclure les rÃ´les Dangote
 ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE public.users ADD CONSTRAINT users_role_check
-  CHECK (role IN ('client','personnel','gestionnaire','admin','dch'));
+  CHECK (role IN ('client','personnel','gestionnaire','admin','rh','superviseur-dangote','employe-dangote'));
 
 -- 2. ParamÃ¨tres par entitÃ©
 CREATE TABLE IF NOT EXISTS public.dangote_parametres (
@@ -118,15 +118,65 @@ BEGIN
 END $$;
 
 -- Rollback (manuel) : DROP TABLE ... ; DROP FUNCTION ...
--- Étendre la contrainte de rôle pour inclure dch
+-- ï¿½tendre la contrainte de rï¿½le pour inclure dch
 ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_allowed;
 ALTER TABLE public.users ADD CONSTRAINT users_role_allowed
-  CHECK (role IN ('client','personnel','gestionnaire','admin','dch'));
--- Étendre la contrainte de rôle pour inclure rh
+  CHECK (role IN ('client','personnel','gestionnaire','admin','rh','superviseur-dangote','employe-dangote'));
+-- ï¿½tendre la contrainte de rï¿½le pour inclure rh
 ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_allowed;
 ALTER TABLE public.users ADD CONSTRAINT users_role_allowed
-  CHECK (role IN ('client','personnel','gestionnaire','admin','dch','rh'));
--- Étendre la contrainte de rôle pour inclure caissier-dangote
+  CHECK (role IN ('client','personnel','gestionnaire','admin','rh','superviseur-dangote','employe-dangote'));
+-- ï¿½tendre la contrainte de rï¿½le pour inclure caissier-dangote
 ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_allowed;
 ALTER TABLE public.users ADD CONSTRAINT users_role_allowed
-  CHECK (role IN ('client','personnel','gestionnaire','admin','dch','rh','caissier-dangote'));
+  CHECK (role IN ('client','personnel','gestionnaire','admin','rh','superviseur-dangote','employe-dangote'));
+-- Espaces Dangote : user_id sur employes + RLS par rï¿½le
+ALTER TABLE public.dangote_employes ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE public.dangote_employes DROP CONSTRAINT IF EXISTS dangote_employes_user_id_fkey;
+
+-- Politique lecture employï¿½ : son propre enregistrement
+DROP POLICY IF EXISTS dangote_employe_self ON public.dangote_employes;
+CREATE POLICY dangote_employe_self ON public.dangote_employes
+  FOR SELECT USING (user_id = auth.uid());
+
+-- Politique lecture superviseur : tous les employï¿½s de l'entitï¿½ (sans qr_token en clair via vue)
+DROP POLICY IF EXISTS dangote_employe_superviseur ON public.dangote_employes;
+CREATE POLICY dangote_employe_superviseur ON public.dangote_employes
+  FOR SELECT USING (
+    entite_id = public.current_entite_id()
+    AND EXISTS (SELECT 1 FROM public.users u WHERE u.auth_id = auth.uid() AND u.role = 'personnel')
+  );
+
+-- Politique RH : lecture/ï¿½criture complï¿½te
+DROP POLICY IF EXISTS dangote_employe_rh ON public.dangote_employes;
+CREATE POLICY dangote_employe_rh ON public.dangote_employes
+  FOR ALL USING (
+    entite_id = public.current_entite_id()
+    AND EXISTS (SELECT 1 FROM public.users u WHERE u.auth_id = auth.uid() AND u.role = 'rh')
+  ) WITH CHECK (
+    entite_id = public.current_entite_id()
+    AND EXISTS (SELECT 1 FROM public.users u WHERE u.auth_id = auth.uid() AND u.role = 'rh')
+  );
+
+-- Repas : employï¿½ lit ses propres repas
+DROP POLICY IF EXISTS dangote_repas_employe ON public.dangote_repas;
+CREATE POLICY dangote_repas_employe ON public.dangote_repas
+  FOR SELECT USING (
+    employe_id IN (SELECT id FROM public.dangote_employes WHERE user_id = auth.uid())
+  );
+
+-- Repas : superviseur et RH lisent tous les repas de l'entitï¿½
+DROP POLICY IF EXISTS dangote_repas_staff ON public.dangote_repas;
+CREATE POLICY dangote_repas_staff ON public.dangote_repas
+  FOR SELECT USING (
+    entite_id = public.current_entite_id()
+    AND EXISTS (SELECT 1 FROM public.users u WHERE u.auth_id = auth.uid() AND u.role IN ('personnel','rh'))
+  );
+-- ï¿½tendre les contraintes de rï¿½le pour inclure les nouveaux rï¿½les Dangote
+ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_allowed;
+ALTER TABLE public.users ADD CONSTRAINT users_role_allowed
+  CHECK (role IN ('client','personnel','gestionnaire','admin','rh','superviseur-dangote','employe-dangote'));
+ALTER TABLE public.users ADD CONSTRAINT users_role_check
+  CHECK (role IN ('client','personnel','gestionnaire','admin','rh','superviseur-dangote','employe-dangote'));
+
