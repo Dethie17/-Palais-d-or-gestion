@@ -15,6 +15,7 @@ import {
   paymentDate,
   settlementIsSupported,
   validatedPayments,
+  validatedSubscriptionIds,
 } from '@/lib/validatedPayments';
 import { revenueBreakdown } from '@/lib/revenue';
 import { ismPeriod } from '@/lib/ismFinance';
@@ -51,6 +52,18 @@ describe('Paiements validés : le règlement fait foi', () => {
     ];
     expect(settlementIsSupported(list)).toBe(true);
     expect(validatedPayments(list).map((p) => p.amount)).toEqual([1000]);
+  });
+
+  it('ne marque un abonnement payé qu’avec un règlement confirmé', () => {
+    const subscriptions = validatedSubscriptionIds([
+      { status: 'paid', subscriptionId: 'regle', settledAt: '2026-11-02T10:00:00.000Z' },
+      { status: 'paid', subscriptionId: 'non-regle', settledAt: null },
+      { status: 'paid', subscriptionId: 'sans-date' },
+      { status: 'pending', subscriptionId: 'encore-en-attente', settledAt: '2026-11-02T10:00:00.000Z' },
+      { status: 'paid' },
+    ]);
+
+    expect([...subscriptions]).toEqual(['regle']);
   });
 
   it('la date de comptage est celle du règlement', () => {

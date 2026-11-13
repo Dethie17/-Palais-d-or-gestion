@@ -70,6 +70,20 @@ export function isValidatedPayment(payment: SettlementAwarePayment): boolean {
     && payment.settledAt.length > 0;
 }
 
+/** Identifiants des abonnements liés à un paiement effectivement réglé. */
+export function validatedSubscriptionIds(
+  payments: readonly Pick<ORestoPayment, 'status' | 'settledAt' | 'subscriptionId'>[],
+): Set<string> {
+  return new Set(
+    payments
+      .flatMap((payment) => (
+        payment.subscriptionId && isValidatedPayment(payment)
+          ? [payment.subscriptionId]
+          : []
+      )),
+  );
+}
+
 /**
  * Filtre de comptabilité.
  *

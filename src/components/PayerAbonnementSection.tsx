@@ -9,6 +9,7 @@ import {
 import { cycleOfClass, CYCLE_LABEL } from '@/lib/schoolCycles';
 import { ABO_OFFICIAL, officialAboForCycle, officialPrice, type AboId } from '@/lib/aboTariffs';
 import { formatCurrency } from '@/lib/utils';
+import { validatedSubscriptionIds } from '@/lib/validatedPayments';
 import { Smartphone, Check, ChevronRight, AlertTriangle, X } from 'lucide-react';
 
 /**
@@ -70,11 +71,7 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
   }, [formulas, kids]);
   /** Abonnements des enfants sélectionnés qui portent un paiement réglé. */
   const paidSubIds = useMemo(
-    () => new Set(
-      payments
-        .filter((p) => p.status === 'paid' && p.subscriptionId)
-        .map((p) => p.subscriptionId as string),
-    ),
+    () => validatedSubscriptionIds(payments),
     [payments],
   );
   const subsOfChildren = useMemo(
