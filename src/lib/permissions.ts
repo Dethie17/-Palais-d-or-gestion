@@ -33,8 +33,8 @@ export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // Espace ISM : pilotage + suivi uniquement (sans menus/paramètres/établissements)
   admin: [...ISM_PAGES, 'dangote-rh', 'paymentsuccess', 'paymentfailure'],
   // DCH Dangote : gestion employés, achats de talons, crédit repas.
-  rh: ['dangote-rh', 'profile', 'paymentsuccess', 'paymentfailure'],
-  'superviseur-dangote': ['dangote-superviseur', 'profile', 'paymentsuccess', 'paymentfailure'],
+  rh: ['dangote-rh', 'dangote-qrgallery', 'profile', 'paymentsuccess', 'paymentfailure'],
+  'superviseur-dangote': ['dangote-superviseur', 'dangote-qrgallery', 'profile', 'paymentsuccess', 'paymentfailure'],
   'employe-dangote': ['dangote-employe', 'profile', 'paymentsuccess', 'paymentfailure'],
 };
 
