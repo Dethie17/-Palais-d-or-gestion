@@ -19,10 +19,22 @@ const DangoteEmployePage = () => {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const { data: e } = await supabase.from('dangote_employes').select('*').eq('matricule', user?.username ?? '').maybeSingle();
-      setEmploye(e as Employe | null);
-      if (e?.id) {
-        const { data: r } = await supabase.from('dangote_repas').select('*').eq('employe_id', e.id).order('created_at', { ascending: false });
+      // La fiche est reliée au compte Auth (user_id). Le matricule reste un
+      // repli pour les employés ajoutés par le RH sans compte de connexion.
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData.user?.id;
+      let employeRow: Employe | null = null;
+      if (uid) {
+        const { data } = await supabase.from('dangote_employes').select('*').eq('user_id', uid).maybeSingle();
+        employeRow = (data as Employe | null) ?? null;
+      }
+      if (!employeRow) {
+        const { data } = await supabase.from('dangote_employes').select('*').eq('matricule', user?.username ?? '').maybeSingle();
+        employeRow = (data as Employe | null) ?? null;
+      }
+      setEmploye(employeRow);
+      if (employeRow?.id) {
+        const { data: r } = await supabase.from('dangote_repas').select('*').eq('employe_id', employeRow.id).order('created_at', { ascending: false });
         setRepas((r as Repas[]) ?? []);
       }
       setLoading(false);

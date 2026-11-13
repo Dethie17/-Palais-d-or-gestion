@@ -27,7 +27,7 @@ const DangoteSuperviseurPage = () => {
   const [params, setParams] = useState<{ prix_standard: number; prix_premium: number; subvention_jour: number } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'employe-dangote' });
+  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'employe-dangote', nom: '', prenom: '', service: '' });
 
   const load = async () => {
     setLoading(true);
@@ -120,15 +120,26 @@ const DangoteSuperviseurPage = () => {
     setCreating(true);
     setMsg(null);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
       const res = await fetch('/api/auth/create-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: newUser.username, password: newUser.password, role: newUser.role, entiteId }),
+        headers,
+        body: JSON.stringify({
+          username: newUser.username,
+          password: newUser.password,
+          role: newUser.role,
+          entiteId,
+          nom: newUser.nom,
+          prenom: newUser.prenom,
+          service: newUser.service,
+        }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error ?? 'Erreur');
       setMsg(`Utilisateur ${newUser.username} créé.`);
-      setNewUser({ username: '', password: '', role: 'employe-dangote' });
+      setNewUser({ username: '', password: '', role: 'employe-dangote', nom: '', prenom: '', service: '' });
       void load();
     } catch (err) {
       setMsg(err?.message ?? 'Erreur création');
@@ -180,6 +191,13 @@ const DangoteSuperviseurPage = () => {
               <option value="rh">Direction du Capital Humain</option>
               <option value="superviseur-dangote">Superviseur MIAM'S</option>
             </select>
+            {newUser.role === 'employe-dangote' && (
+              <div className="grid sm:grid-cols-3 gap-3">
+                <input value={newUser.nom} onChange={(e) => setNewUser({ ...newUser, nom: e.target.value })} placeholder="Nom" className="px-3 py-2 border rounded-xl" required />
+                <input value={newUser.prenom} onChange={(e) => setNewUser({ ...newUser, prenom: e.target.value })} placeholder="Prénom" className="px-3 py-2 border rounded-xl" required />
+                <input value={newUser.service} onChange={(e) => setNewUser({ ...newUser, service: e.target.value })} placeholder="Service" className="px-3 py-2 border rounded-xl" />
+              </div>
+            )}
             <button disabled={creating} className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold flex items-center justify-center gap-2">
               <Plus className="w-4 h-4" /> {creating ? 'Création…' : 'Créer'}
             </button>

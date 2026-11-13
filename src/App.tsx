@@ -92,6 +92,14 @@ function AppContent() {
     }
   }, []);
 
+  // Déconnexion : repartir de la racine, sinon le compte suivant hérite de
+  // la page du précédent et tombe sur « Accès réservé ».
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setCurrentPage('home');
+    }
+  }, [isAuthenticated]);
+
   // Après login, retourner à la page demandée
   useEffect(() => {
     if (isAuthenticated && intendedPath) {

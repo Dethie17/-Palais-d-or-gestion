@@ -22,17 +22,27 @@ import { createClient } from '@supabase/supabase-js';
 import { adminClient } from './supabaseAdmin.js';
 import { usernameFromAuthEmail, isManagedAccount } from './username.js';
 
-export type AppRole = 'client' | 'personnel' | 'gestionnaire' | 'admin';
+export type AppRole =
+  | 'client'
+  | 'personnel'
+  | 'gestionnaire'
+  | 'admin'
+  | 'rh'
+  | 'superviseur-dangote'
+  | 'employe-dangote';
 
 export interface Caller {
   userId: string;
   username: string;
   role: AppRole;
   establishmentId: string | null;
+  entiteId?: string | null;
 }
 
 /** Rôles autorisés à administrer les comptes et la comptabilité. */
 export const ADMIN_ONLY: AppRole[] = ['admin'];
+/** Création de comptes : la Direction et le back-office MIAM'S Dangote. */
+export const CREATE_USER_ROLES: AppRole[] = ['admin', 'superviseur-dangote'];
 /** Rôles autorisés à valider un paiement ou servir une commande. */
 export const STAFF_OR_ADMIN: AppRole[] = ['admin', 'personnel', 'gestionnaire'];
 /**
@@ -90,7 +100,7 @@ export async function resolveCaller(req: IncomingMessage): Promise<Caller | null
   // On ne demande PAS `auth_id` : sur le schéma d'avant migration, le
   // sélectionner fait échouer la requête (colonne absente), y compris le repli
   // par email. Le filtrage par `auth_id` ci-dessous reste, lui, dans le WHERE.
-  const PROFILE_COLS = 'username, role, establishment_id';
+  const PROFILE_COLS = 'username, role, establishment_id, entite_id';
 
   // 1) Voie normale : lien direct identité ↔ Auth (colonne `auth_id`).
   const byAuthId = await db
@@ -100,7 +110,7 @@ export async function resolveCaller(req: IncomingMessage): Promise<Caller | null
     .maybeSingle();
 
   let row = (byAuthId.error ? null : byAuthId.data) as
-    | { username?: unknown; role?: unknown; establishment_id?: string | null }
+    | { username?: unknown; role?: unknown; establishment_id?: string | null; entite_id?: string | null }
     | null;
 
   // 2) Pont de transition : tant que la migration (supabase-security.sql) n'a
@@ -129,6 +139,7 @@ export async function resolveCaller(req: IncomingMessage): Promise<Caller | null
     username: row.username.trim().toLowerCase(),
     role: row.role as AppRole,
     establishmentId: row.establishment_id ?? null,
+    entiteId: row.entite_id ?? null,
   };
 }
 

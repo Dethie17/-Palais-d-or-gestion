@@ -12,7 +12,8 @@
  * Pour un parent : { username, password, role: "client", firstName, lastName, phone }
  * — l'identifiant conseillé est le numéro de téléphone du parent.
  *
- * Réservé à la DAF (role === 'admin').
+ * Réservé à la Direction (admin) et au back-office MIAM'S Dangote
+ * (superviseur-dangote, limité aux rôles et à l'entité de son périmètre).
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -20,7 +21,7 @@ import { adminClient } from '../_lib/supabaseAdmin.js';
 import { normalizeUsername, isValidUsername } from '../_lib/username.js';
 import { personalQrToken } from '../_lib/qrToken.js';
 import { insertUserProfile } from '../_lib/profile.js';
-import { requireRole, ADMIN_ONLY } from '../_lib/session.js';
+import { requireRole, CREATE_USER_ROLES } from '../_lib/session.js';
 import {
   handlePreflight,
   methodNotAllowed,
@@ -40,13 +41,17 @@ interface CreateBody {
   lastName?: unknown;
   phone?: unknown;
   entiteId?: unknown;
+  matricule?: unknown;
+  nom?: unknown;
+  prenom?: unknown;
+  service?: unknown;
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   if (req.method === 'OPTIONS') return handlePreflight(req, res);
   if (req.method !== 'POST') return methodNotAllowed(req, res, ['POST']);
 
-  const caller = await requireRole(req, res, ADMIN_ONLY);
+  const caller = await requireRole(req, res, CREATE_USER_ROLES);
   if (!caller) return;
 
   let body: CreateBody;
@@ -74,11 +79,25 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   if (isDangoteRole && !entiteId) {
     return sendError(res, 400, 'Entité requise pour un rôle Dangote.');
   }
+  // Un superviseur MIAM'S ne crée que des comptes de SON entité, et jamais
+  // un compte de direction ISM ou un parent.
+  if (caller.role === 'superviseur-dangote') {
+    if (!isDangoteRole) {
+      return sendError(res, 403, 'Un superviseur MIAM\'S ne peut créer que des comptes Dangote.');
+    }
+    if (!caller.entiteId || caller.entiteId !== entiteId) {
+      return sendError(res, 403, 'Entité non autorisée.');
+    }
+  }
 
   // Champs identité : obligatoires pour un parent, ignorés pour le personnel.
   const firstName = typeof body.firstName === 'string' ? body.firstName.trim() : '';
   const lastName = typeof body.lastName === 'string' ? body.lastName.trim() : '';
   const phone = typeof body.phone === 'string' ? body.phone.replace(/\D/g, '') : '';
+  const matricule = typeof body.matricule === 'string' ? body.matricule.trim() : '';
+  const nom = typeof body.nom === 'string' ? body.nom.trim() : '';
+  const prenom = typeof body.prenom === 'string' ? body.prenom.trim() : '';
+  const service = typeof body.service === 'string' ? body.service.trim() : '';
   if (role === 'client') {
     if (!firstName || !lastName) {
       return sendError(res, 400, 'Indiquez le nom et prénom du parent.');
@@ -126,16 +145,25 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   if (role === 'employe-dangote' && entiteId) {
-    await db.from('dangote_employes').insert({
+    const { error: employeError } = await db.from('dangote_employes').insert({
       entite_id: entiteId,
-      matricule: username,
-      nom: username,
-      prenom: '',
-      service: null,
+      // Le matricule reste l'identifiant de connexion : la fiche employé et
+      // le compte Auth désignent ainsi la même personne.
+      matricule: matricule || username,
+      nom: nom || username,
+      prenom,
+      service: service || null,
       actif: true,
       qr_token: personalQrToken(username),
       user_id: created.user.id,
-    }).then(() => undefined, () => undefined);
+    });
+    if (employeError) {
+      // Pas de compte à moitié créé : on annule la fiche et l'identité Auth.
+      await db.from('users').delete().eq('username', username);
+      await db.auth.admin.deleteUser(created.user.id).catch(() => undefined);
+      console.error('[create-user] échec insertion employé', employeError.code, employeError.message);
+      return sendError(res, 500, 'Fiche employé non enregistrée. Réessayez.');
+    }
   }
 
   // 3) Parent : fiche identité (prénom, nom, téléphone). Non bloquante —
