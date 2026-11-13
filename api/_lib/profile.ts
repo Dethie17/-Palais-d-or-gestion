@@ -69,45 +69,34 @@ export async function insertUserProfile(
   row: ProfileRow,
   password: string,
 ): Promise<DbError | null> {
-  // 1) Schéma cible : identité portée par Supabase Auth, pas de `password`.
-  const target = {
+  const base = {
     username: row.username,
     role: row.role,
-    auth_id: row.auth_id,
     qr_token: row.qr_token,
     ...(row.entite_id ? { entite_id: row.entite_id } : {}),
   };
-  let res = await db.from('users').insert(target);
-  let err = (res.error as DbError | null) ?? null;
-  if (!err) return null;
-  if (isFatal(err)) return err;
+  const legacyPassword = legacyPasswordHash(password);
+  const attempts = [
+    // 1) Schéma cible : identité portée par Supabase Auth, pas de `password`.
+    { ...base, auth_id: row.auth_id },
+    // 2) Schéma hybride : `auth_id` présent, mais `password` encore NOT NULL.
+    { ...base, auth_id: row.auth_id, password: legacyPassword },
+    // 3) Schéma actuel : pas d'`auth_id`, `password` obligatoire.
+    { ...base, password: legacyPassword },
+    // 4) Dernier recours : ni `auth_id` ni `password`.
+    base,
+  ];
 
-  // 2) Schéma actuel : pas d'`auth_id`, `password` obligatoire → on écrit
-  //    l'empreinte legacy pour que la connexion de transition marche.
-  if (columnMissing(err, 'auth_id') || isPasswordNotNull(err)) {
-    const withLegacyPassword = {
-      username: row.username,
-      role: row.role,
-      qr_token: row.qr_token,
-      password: legacyPasswordHash(password),
-      ...(row.entite_id ? { entite_id: row.entite_id } : {}),
-    };
-    res = await db.from('users').insert(withLegacyPassword);
+  let err: DbError | null = null;
+  for (const attempt of attempts) {
+    const res = await db.from('users').insert(attempt);
     err = (res.error as DbError | null) ?? null;
     if (!err) return null;
     if (isFatal(err)) return err;
-
-    // 3) Dernier recours : ni `auth_id` ni `password` (schéma hybride) — on
-    //    n'insère que l'essentiel.
-    if (columnMissing(err, 'password')) {
-      res = await db.from('users').insert({
-        username: row.username,
-        role: row.role,
-        qr_token: row.qr_token,
-      });
-      err = (res.error as DbError | null) ?? null;
-      if (!err) return null;
-    }
+    const retryable = columnMissing(err, 'auth_id')
+      || columnMissing(err, 'password')
+      || isPasswordNotNull(err);
+    if (!retryable) return err;
   }
 
   return err;
