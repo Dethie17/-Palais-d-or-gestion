@@ -34,12 +34,9 @@ function useCountdown(expiresAt: string) {
   return { left, label: `${mm}:${ss}` };
 }
 
-/** Delai avant l'envoi automatique vers l'application de paiement (ms). */
-export const AUTO_REDIRECT_DELAY_MS = 3000;
-
 /**
  * Nom de l'application vers laquelle on envoie le client, pour l'afficher
- * dans le bandeau (« Redirection vers Wave dans 3 s… »).
+ * dans le bandeau de redirection.
  */
 function autoTargetLabel(challenge: PaymentChallenge | undefined, methodLabel: string): string {
   if (challenge?.kind === 'qr') return "l'application Orange Money / Max it";
@@ -101,39 +98,25 @@ const PaymentModal = ({ wave, initialPhone, error, confirming, onConfirm, onPaid
   /**
    * Envoi automatique vers l'application de paiement (Wave, Max it…).
    *
-   * Le parent n'a plus à chercher un bouton : 3 secondes après l'ouverture,
+   * Le parent n'a plus à chercher un bouton : dès l'ouverture,
    * on le dépose directement dans son application pour valider. Navigation
    * dans le même onglet (pas window.open) : aucun bloqueur de popups ne peut
    * l'empêcher, et l'opérateur le ramène ici via l'adresse de retour.
-   * « Rester ici » annule l'envoi (le parent paie depuis un autre appareil).
    */
-  const [autoCancelled, setAutoCancelled] = useState(false);
-  const [autoLeft, setAutoLeft] = useState(0);
   const autoFiredRef = useRef<string | null>(null);
   useEffect(() => {
-    setAutoCancelled(false);
-    setAutoLeft(0);
     // Nouvelle demande = nouvel envoi potentiel.
     autoFiredRef.current = null;
   }, [autoUrl, wave.reference]);
   useEffect(() => {
-    if (!autoUrl || isDemo || autoCancelled || autoFiredRef.current) return;
-    setAutoLeft(AUTO_REDIRECT_DELAY_MS);
-    const step = setInterval(() => {
-      setAutoLeft((left) => Math.max(0, left - 1000));
-    }, 1000);
+    if (!autoUrl || isDemo || autoFiredRef.current) return;
     const fire = setTimeout(() => {
       autoFiredRef.current = autoUrl;
-      clearInterval(step);
       setWaiting(true);
       window.location.href = autoUrl;
-    }, AUTO_REDIRECT_DELAY_MS);
-    return () => {
-      clearInterval(step);
-      clearTimeout(fire);
-    };
-  }, [autoUrl, isDemo, autoCancelled]);
-  const autoCountdown = autoLeft > 0 ? Math.ceil(autoLeft / 1000) : 0;
+    }, 0);
+    return () => clearTimeout(fire);
+  }, [autoUrl, isDemo]);
 
   useEffect(() => {
     if (isDemo || !onSync) return;
@@ -232,12 +215,11 @@ const PaymentModal = ({ wave, initialPhone, error, confirming, onConfirm, onPaid
         </div>
 
         {/* ---------- Mode fournisseur réel ---------- */}
-        {autoUrl && !autoCancelled && (
+        {autoUrl && (
           <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-center">
             <Loader2 className="w-6 h-6 mx-auto text-blue-600 animate-spin" />
             <p className="mt-2 text-sm font-bold text-slate-800">
-              Redirection vers {autoTargetLabel(wave.challenge, wave.methodLabel)}
-              {autoCountdown > 0 ? ` dans ${autoCountdown} s…` : '…'}
+              Redirection vers {autoTargetLabel(wave.challenge, wave.methodLabel)} pour valider le paiement…
             </p>
             <button
               onClick={() => {
@@ -248,35 +230,9 @@ const PaymentModal = ({ wave, initialPhone, error, confirming, onConfirm, onPaid
               className="mt-3 w-full py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700"
             >
               Ouvrir maintenant
-            </button>
-            <button
-              onClick={() => setAutoCancelled(true)}
-              className="mt-2 w-full py-2 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-700 hover:underline"
-            >
-              Rester ici (je paie depuis un autre appareil)
             </button>
             <p className="mt-2 text-[11px] text-slate-500">
               Vous serez déposé dans votre application pour valider. Vous reviendrez ici automatiquement après avoir payé.
-            </p>
-          </div>
-        )}
-        {autoUrl && autoCancelled && (
-          <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-center">
-            <p className="text-sm font-bold text-slate-800">
-              Envoi automatique annulé
-            </p>
-            <button
-              onClick={() => {
-                autoFiredRef.current = autoUrl;
-                setWaiting(true);
-                window.location.href = autoUrl;
-              }}
-              className="mt-3 w-full py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700"
-            >
-              Ouvrir maintenant
-            </button>
-            <p className="mt-2 text-[11px] text-slate-500">
-              Vérifiez le montant avant de valider dans votre application.
             </p>
           </div>
         )}

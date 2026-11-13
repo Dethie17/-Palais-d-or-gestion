@@ -239,9 +239,8 @@ describe('Regles de production', () => {
 /**
  * Envoi automatique vers l'application de paiement.
  *
- * Le parent ne doit plus chercher de bouton : le modal le dépose tout seul
- * dans Wave / Max it, avec un compte à rebours et une porte de sortie
- * (« Rester ici ») pour payer depuis un autre appareil.
+ * Le parent ne doit plus chercher de bouton ni patienter : le modal le dépose
+ * directement dans Wave / Max it.
  */
 describe('Envoi automatique vers Wave / Max it', () => {
   const base = {
@@ -288,29 +287,18 @@ describe('Envoi automatique vers Wave / Max it', () => {
     );
   }
 
-  it('affiche un compte à rebours avant l’envoi', () => {
-    renderAuto();
-    expect(screen.getByText(/dans 3 s/)).toBeTruthy();
-  });
-
-  it('envoie vers Wave au bout du délai', () => {
+  it('envoie immédiatement vers Wave', () => {
     renderAuto();
     act(() => {
-      vi.advanceTimersByTime(3000);
+      vi.runOnlyPendingTimers();
     });
     expect(window.location.href).toBe(WAVE_URL);
   });
 
-  it('« Rester ici » annule l’envoi automatique', () => {
+  it('ne propose pas d’étape intermédiaire avant la redirection', () => {
     renderAuto();
-    fireEvent.click(screen.getByRole('button', { name: /Rester ici/ }));
-    expect(screen.getByText(/Envoi automatique annulé/)).toBeTruthy();
-    act(() => {
-      vi.advanceTimersByTime(10000);
-    });
-    expect(window.location.href).toBe('http://localhost/');
-    // Le parent peut toujours partir manuellement.
-    expect(screen.getByRole('button', { name: /Ouvrir maintenant/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Rester ici/ })).toBeNull();
+    expect(screen.getByText(/Redirection vers Wave pour valider le paiement/)).toBeTruthy();
   });
 
   it('envoie vers Max it sur téléphone quand le défi est un QR Orange', () => {
@@ -326,9 +314,8 @@ describe('Envoi automatique vers Wave / Max it', () => {
     });
     expect(screen.getAllByText(/Max it/).length).toBeGreaterThanOrEqual(2);
     act(() => {
-      vi.advanceTimersByTime(3000);
+      vi.runOnlyPendingTimers();
     });
     expect(window.location.href).toBe('https://maxit.orange.com/pay/x');
   });
 });
-
