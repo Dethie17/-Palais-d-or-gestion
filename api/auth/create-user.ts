@@ -18,7 +18,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { adminClient } from '../_lib/supabaseAdmin.js';
-import { normalizeUsername, isValidUsername } from '../_lib/username.js';
+import { normalizeUsername, isValidUsername, STAFF_SIGNUP_FLAG } from '../_lib/username.js';
 import { personalQrToken } from '../_lib/qrToken.js';
 import { insertUserProfile } from '../_lib/profile.js';
 import { requireRole, CREATE_USER_ROLES } from '../_lib/session.js';
@@ -118,6 +118,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     email,
     password,
     email_confirm: true,
+    // Marqueur « créé par O RESTO » : il autorise le pont email → fiche
+    // métier tant que la colonne `auth_id` n'existe pas en base.
+    app_metadata: { oresto: STAFF_SIGNUP_FLAG },
   });
   if (createError || !created?.user) {
     // Message volontairement vague : il ne doit pas révéler quelles

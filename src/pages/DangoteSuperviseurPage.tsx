@@ -113,6 +113,7 @@ const DangoteSuperviseurPage = () => {
     });
     setMsg(`Repas validé pour ${selected.prenom} ${selected.nom}. Montant déduit : ${retenue} FCFA.`);
     setSelected(null); setQrInput('');
+    void load();
   };
 
   const createUser = async (e: React.FormEvent) => {
