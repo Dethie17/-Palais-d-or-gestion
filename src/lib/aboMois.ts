@@ -4,17 +4,16 @@
  * peut être réglée tranche par tranche).
  *
  * Règles :
- * - UN même mois ne peut être couvert qu'UNE fois pour un enfant donné :
- *   les mois déjà couverts par un abonnement (payé OU demandé non réglé)
- *   sont marqués « Payé / En cours » et interdits ;
+ * - Un mois civil n'est couvert que si l'abonnement couvre toute la période,
+ *   du premier au dernier instant du mois. Un abonnement qui commence ou finit
+ *   en cours de mois ne marque donc pas ce mois entier comme payé ;
  * - le montant vient TOUJOURS de la formule du cycle de la classe de
  *   l'enfant (référentiel schoolCycles), jamais d'une entrée du parent ;
  * - les mois sélectionnés doivent être consécutifs : ils forment un
  *   seul abonnement (start = 1er du premier mois, end = 1er du mois
  *   suivant le dernier mois couvert) réglé par UN seul paiement.
- *   La base protège en plus par contrainte d'exclusion
- *   (supabase-o-resto-final-2026.sql §3) : deux abonnements du même
- *   enfant qui se chevauchent sont refusés par PostgreSQL.
+ *   Des périodes distinctes peuvent se chevaucher ; la base interdit
+ *   seulement deux périodes avec le même début exact pour un enfant.
  */
 import type { Subscription } from '@/types/menu';
 
@@ -71,7 +70,7 @@ export function prochainsMois(n: number, now: Date = new Date(), minimum = '2026
   return out;
 }
 
-/** Vrai si l'abonnement couvre le mois donné (chevauchement d'intervalle). */
+/** Vrai si l'abonnement couvre le mois civil complet, pas seulement quelques jours. */
 export function abonnementCouvreMois(sub: Pick<Subscription, 'startDate' | 'endDate' | 'status'>, yyyyMM: MoisCle): boolean {
   if (sub.status === 'cancelled') return false;
   const debut = new Date(`${yyyyMM}-01T00:00:00Z`).getTime();
@@ -79,16 +78,14 @@ export function abonnementCouvreMois(sub: Pick<Subscription, 'startDate' | 'endD
   const s = new Date(sub.startDate).getTime();
   const e = new Date(sub.endDate).getTime();
   if (![debut, fin, s, e].every(Number.isFinite)) return false;
-  // Chevauchement strict : l'abonnement couvre le mois si son intervalle
-  // intersecte le mois (les bornes pointent le 1er du mois, incluses).
-  return s < fin && e > debut;
+  return s <= debut && e >= fin - 1;
 }
 
 /** Ensemble des mois couverts par les abonnements de l'enfant. */
 export function moisCouverts(subs: Pick<Subscription, 'startDate' | 'endDate' | 'status'>[]): Set<MoisCle> {
   const set = new Set<MoisCle>();
   subs.forEach((s) => {
-    // Parcours des limites de mois couverts : du mois de début au mois de fin.
+    // Parcours des limites de mois concernés : du mois de début au mois de fin.
     const debut = cleMois(s.startDate);
     const fin = cleMois(s.endDate);
     if (!debut || !fin) return;
@@ -127,8 +124,8 @@ export interface MoisAvecEtat {
  * État de chaque mois proposé au paiement :
  * - « payé »    : couvert par un abonnement réglé (un paiement PAYÉ le lie) ;
  * - « attente » : couvert par un abonnement en attente (tentative non conclue
- *   — le mois reste verrouillé, la base refusant le chevauchement, mais le
- *   parent peut libérer la réservation d'un clic) ;
+ *   — le mois reste verrouillé, mais le parent peut libérer la réservation
+ *   d'un clic ;
  * - « libre »   : disponible pour un nouveau paiement.
  * Un abonnement réglé couvre TOUS les mois de son intervalle (paiement unique
  * pour N mois consécutifs) : ces mois sont tous « payé ».

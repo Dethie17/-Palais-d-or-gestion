@@ -20,8 +20,8 @@ import { Smartphone, Check, ChevronRight, AlertTriangle, X } from 'lucide-react'
  * revenir payer d'autres mois plus tard (paiements multiples).
  *
  * État de chaque mois :
- * - « Payé » (verrouillé) : couvert par un abonnement dont au moins un paiement
- *   est PAYÉ en base — pas un simple statut de réservation ;
+ * - « Payé » (verrouillé) : le mois civil entier est couvert par un abonnement
+ *   dont au moins un paiement est confirmé côté serveur ;
  * - « En attente » (verrouillé, libérable) : une tentative non aboutie bloque
  *   le mois ; un clic l'annule et libère le mois ;
  * - libre : sélectionnable.
@@ -315,7 +315,7 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
           </div>
         )}
         <p className="text-[11px] text-slate-400">
-          Règles : montant recalculé depuis la formule de la classe de l’enfant · paiement en une opération possible sur plusieurs mois consécutifs, puis de nouveaux paiements plus tard · « Payé » = mois réglé · « En attente » = demande jamais soldée, libérable d’un clic.
+          Règles : montant recalculé depuis la formule de la classe de l’enfant · paiement en une opération possible sur plusieurs mois consécutifs, puis de nouveaux paiements plus tard · « Payé » = mois civil entièrement couvert par un règlement confirmé · « En attente » = demande jamais soldée, libérable d’un clic.
         </p>
       </div>
     </div>

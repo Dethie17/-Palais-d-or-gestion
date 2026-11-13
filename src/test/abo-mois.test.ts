@@ -31,9 +31,14 @@ describe('aboMois — clés et libellés', () => {
 });
 
 describe('aboMois — couverture des mois (règle : un mois payé une fois)', () => {
-  it('abonnement mensuel classique (début en cours de mois)', () => {
-    const s = sub('2026-10-12T09:00:00Z', '2026-10-31T23:59:59Z');
+  it('abonnement qui couvre le mois civil complet', () => {
+    const s = sub('2026-10-01T00:00:00Z', '2026-10-31T23:59:59.999Z');
     expect(abonnementCouvreMois(s, '2026-10')).toBe(true);
+    expect(abonnementCouvreMois(s, '2026-11')).toBe(false);
+  });
+
+  it('abonnement partiel payé ne marque pas le mois suivant payé', () => {
+    const s = sub('2026-10-19T11:52:27Z', '2026-11-18T11:52:27Z');
     expect(abonnementCouvreMois(s, '2026-11')).toBe(false);
   });
 
@@ -45,8 +50,8 @@ describe('aboMois — couverture des mois (règle : un mois payé une fois)', ()
   });
 
   it('deux abonnements consécutifs se rejoignent au 1er : aucun mois double', () => {
-    const oct = sub('2026-10-07T00:00:00Z', '2026-10-31T23:59:59Z');
-    const nov = sub('2026-11-01T00:00:00Z', '2026-11-30T23:59:59Z');
+    const oct = sub('2026-10-01T00:00:00Z', '2026-10-31T23:59:59.999Z');
+    const nov = sub('2026-11-01T00:00:00Z', '2026-11-30T23:59:59.999Z');
     const couverts = moisCouverts([oct, nov]);
     expect([...couverts]).toEqual(['2026-10', '2026-11']);
   });
@@ -80,6 +85,15 @@ describe('aboMois — état par mois (payé / en attente / libre)', () => {
     expect(etats[0].etat).toBe('paye');
     expect(etats[1].etat).toBe('libre');
     expect(etats[2].etat).toBe('libre');
+  });
+
+  it('un abonnement payé du 19 octobre au 18 novembre laisse novembre sélectionnable', () => {
+    const etats = etatMoisPourAbonnements(
+      [subId('S-TOKPE', '2026-10-19T11:52:27Z', '2026-11-18T11:52:27Z')],
+      new Set(['S-TOKPE']),
+      offerts,
+    );
+    expect(etats[1].etat).toBe('libre');
   });
 
   it('un abonnement réglé couvre tous les mois de son intervalle (un paiement pour N mois)', () => {

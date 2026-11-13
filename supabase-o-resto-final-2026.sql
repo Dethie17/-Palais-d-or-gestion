@@ -322,16 +322,15 @@ create index if not exists idx_children_qr on public.children (qr_token);
 create index if not exists idx_children_parent on public.children (parent_username);
 create index if not exists idx_children_class on public.children (class_name);
 
--- Règle métier : UN même mois d'UN même enfant ne peut être réglé qu'une
--- fois. Concrètement, deux abonnements du même enfant ne peuvent pas se
--- chevaucher : le double paiement du même mois est refusé en base (la
--- borne fin est exclue — deux abonnements consécutifs se rejoignent
--- proprement le 1er). Les lignes sans enfant (tickets sans carte) ne
--- sont pas contraintes.
+-- Règle métier : un enfant ne peut pas avoir deux abonnements actifs/en
+-- attente avec le même début de période. Des périodes qui se chevauchent
+-- peuvent coexister, par exemple si un parent règle novembre alors qu'un
+-- abonnement commencé en octobre couvre encore une partie de novembre.
+-- Les lignes sans enfant (tickets sans carte) ne sont pas contraintes.
 create extension if not exists btree_gist with schema extensions;
 
--- Pré-flight : si des abonnements historiques se chevauchent déjà
--- (mêmes jours, même enfant), la création de la contrainte échouerait
+-- Pré-flight : si des abonnements historiques ont déjà un début identique
+-- (même enfant), la création de l'index échouerait
 -- sans explication. On liste le premier pair en conflit pour corriger
 -- l'article concerné (statut → cancelled) avant de rejouer le fichier.
 -- id est de type texte dans le schéma réel (ids « C-… » des enfants) :
@@ -352,23 +351,21 @@ begin
        and b.status in ('active', 'pending')
        and a.status in ('active', 'pending')
        where a.child_id = v_child
-         and (a.start_date)::date < (b.end_date)::date
-         and (b.start_date)::date < (a.end_date)::date
+         and a.start_date = b.start_date
      limit 1;
     if v_d1 is not null then
-      raise exception 'abonnements qui se chevauchent pour l''enfant % (début % et %) : passer l''un des deux en « cancelled » puis rejouer', v_child, v_d1, v_d2;
+      raise exception 'abonnements au même début de période pour l''enfant % (début % et %) : passer l''un des deux en « cancelled » puis rejouer', v_child, v_d1, v_d2;
     end if;
     v_d1 := null; v_d2 := null;
   end loop;
 end $$;
 
 -- Règle métier posée en index btree simple : deux abonnements ACTIFS du
--- même enfant ne peuvent pas commencer le même jour (le double paiement du
--- même mois est interdit en base). NB : la contrainte d'exclusion GiST
+-- même enfant ne peuvent pas avoir le même début exact. NB : la contrainte d'exclusion GiST
 -- (recouvrements d'intervalles au sens strict) a été abandonnée : elle exige
 -- l'extension btree_gist dont les classes d'opérateurs texte n'étaient pas
 -- résolubles sur cette base (42704), et la règle réellement utile au
--- service est l'unicité du couple (enfant, début de mois). Les deux
+-- service est l'unicité du couple (enfant, début exact). Les deux
 -- abonnements consécutifs d'un même enfant (mois suivants) restent
 -- autorisés — ce sont des dates de début différentes.
 -- NB : start_date est de type TEXTE dans le schéma réel. Le cast
@@ -377,7 +374,7 @@ end $$;
 -- l'expression d'un index (42P17 « functions in index expression must be
 -- marked IMMUTABLE »). L'unicité est donc posée sur (child_id, start_date)
 -- TEL QUEL : l'application écrit la date de début en ISO normalisé
--- (« YYYY-MM-DD ») et le cas visé est le double règlement du même mois —
+-- (« YYYY-MM-DD ») et le cas visé est le doublon du même début de période —
 -- deux lignes au même couple (enfant, date de début). Les abonnements des
 -- mois suivants (dates différentes) restent possibles pour le même enfant.
 create unique index if not exists subscriptions_no_overlap_per_child
