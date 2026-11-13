@@ -41,6 +41,7 @@ const MenuRecreationPage = lazy(() => import('./pages/MenuRecreationPage'));
 const PaymentSuccessPage = lazy(() => import('./pages/PaymentSuccessPage'));
 const PaymentFailurePage = lazy(() => import('./pages/PaymentFailurePage'));
 const SycaPayReturnPage = lazy(() => import('./pages/SycaPayReturnPage'));
+const DangotePaymentReturnPage = lazy(() => import('./pages/DangotePaymentReturnPage'));
 const ImportElevesPage = lazy(() => import('./pages/ImportElevesPage'));
 const HistoriquePaiementsPage = lazy(() => import('./pages/HistoriquePaiementsPage'));
 const EntitiesPage = lazy(() => import('./pages/EntitiesPage'));
@@ -77,6 +78,7 @@ function AppContent() {
   // qui revient du paiement sans session valide doit quand même voir où en
   // est son règlement, pas un formulaire de login.
   const [sycaPayReturn, setSycaPayReturn] = useState<'ok' | 'echec' | null>(null);
+  const [dangotePayReturn, setDangotePayReturn] = useState<'ok' | 'echec' | null>(null);
   useEffect(() => {
     const path = window.location.pathname.replace(/\/+$/, '');
     if (path === '/paiement/success') {
@@ -89,6 +91,10 @@ function AppContent() {
       setSycaPayReturn('ok');
     } else if (path === '/paiement/sycapay/echec') {
       setSycaPayReturn('echec');
+    } else if (path === '/paiement/dangote/ok') {
+      setDangotePayReturn('ok');
+    } else if (path === '/paiement/dangote/echec') {
+      setDangotePayReturn('echec');
     }
   }, []);
 
@@ -137,6 +143,14 @@ function AppContent() {
     return (
       <Suspense fallback={<PageLoader />}>
         <SycaPayReturnPage outcome={sycaPayReturn} onNavigate={navigateTo} />
+      </Suspense>
+    );
+  }
+
+  if (dangotePayReturn) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <DangotePaymentReturnPage outcome={dangotePayReturn} />
       </Suspense>
     );
   }

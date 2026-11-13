@@ -79,6 +79,25 @@ export async function settle(args: SettleArgs, db: SupabaseClient = adminClient(
     p_event_id: args.eventId ?? null,
   };
 
+  // Dépôt de budget Dangote : la référence porte le préfixe DGT- et la ligne
+  // vit dans dangote_paiements. On ne tente surtout pas oresto_settle_payment,
+  // qui répondrait « unknown » puis ferait échouer le webhook.
+  if (args.reference.startsWith('DGT-')) {
+    const { data, error } = await db.rpc('dangote_settle_payment', {
+      ...common,
+      p_status: null,
+    });
+    if (error) {
+      if (isMissingFunction(error)) {
+        throw new Error(
+          'Fonction dangote_settle_payment() absente : exécutez supabase-dangote-pro.sql dans le SQL Editor Supabase.',
+        );
+      }
+      throw new Error(`Règlement Dangote impossible : ${error.message}`);
+    }
+    return (data ?? { outcome: 'unknown' }) as SettleOutcome;
+  }
+
   // Paiement combiné multi-enfants : le groupe a priorité sur le règlement
   // standard afin d'activer tous les abonnements liés à une transaction unique.
   const { data: groupData, error: groupError } = await db.rpc('oresto_settle_payment_group', {

@@ -87,10 +87,6 @@ CREATE TABLE IF NOT EXISTS public.dangote_repas (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Contrainte d'unicité partielle : un seul repas subventionné par jour/employé
-CREATE UNIQUE INDEX IF NOT EXISTS dangote_repas_subvention_unique
-  ON public.dangote_repas (employe_id, date_jour)
-  WHERE subvention_appliquee > 0 AND statut = 'valide';
 
 -- Seed params pour Dangote
 INSERT INTO public.dangote_parametres (entite_id)
