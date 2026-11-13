@@ -73,6 +73,7 @@ const PaymentModal = ({ wave, initialPhone, error, confirming, onConfirm, onPaid
   // Seul le fournisseur décide. Un code qui traînerait dans la session ne
   // fait plus passer un paiement réel pour une démonstration.
   const isDemo = wave.provider === 'demo';
+  const initiationFailed = !isDemo && Boolean(wave.error) && !wave.challenge;
   const phoneValid = isValidSnPhone(phone);
   const codeValid = /^\d{6}$/.test(code.trim());
 
@@ -119,12 +120,12 @@ const PaymentModal = ({ wave, initialPhone, error, confirming, onConfirm, onPaid
   }, [autoUrl, isDemo]);
 
   useEffect(() => {
-    if (isDemo || !onSync) return;
+    if (isDemo || !wave.challenge || !onSync) return;
     // On ne commence à interroger qu'une fois que le client a eu le temps de
     // payer ; sinon on brûle des appels pour rien.
     const kick = setTimeout(() => setWaiting(true), 4000);
     return () => clearTimeout(kick);
-  }, [isDemo, onSync]);
+  }, [isDemo, onSync, wave.challenge]);
 
   useEffect(() => {
     if (!waiting || !onSync) return;
@@ -191,10 +192,12 @@ const PaymentModal = ({ wave, initialPhone, error, confirming, onConfirm, onPaid
           <div>
             <p className="text-xs text-slate-400">Montant à payer</p>
             <p className="text-2xl font-extrabold">{wave.amountLabel}</p>
-            <p className="text-xs text-slate-300 mt-1">
-              Marchand : <strong>{wave.merchantName}</strong> • {wave.merchantNumber}
-              {phone && <span className="block text-slate-400">Depuis : {phone}</span>}
-            </p>
+            {wave.method === 'wave' && (
+              <p className="text-xs text-slate-300 mt-1">
+                Marchand : <strong>{wave.merchantName}</strong> • {wave.merchantNumber}
+                {phone && <span className="block text-slate-400">Depuis : {phone}</span>}
+              </p>
+            )}
           </div>
           <div className="text-right">
             <p className="text-xs text-slate-400 flex items-center gap-1 justify-end">
@@ -255,7 +258,7 @@ const PaymentModal = ({ wave, initialPhone, error, confirming, onConfirm, onPaid
           </div>
         )}
 
-        <ol className="mt-4 space-y-2 text-sm text-slate-600">
+        {!initiationFailed && <ol className="mt-4 space-y-2 text-sm text-slate-600">
           {wave.steps.map((s, i) => (
             <li key={i} className="flex gap-2">
               <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[11px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -264,22 +267,22 @@ const PaymentModal = ({ wave, initialPhone, error, confirming, onConfirm, onPaid
               <span>{s}</span>
             </li>
           ))}
-        </ol>
+        </ol>}
 
-        {!isDemo && onSync && (
+        {!initiationFailed && !isDemo && onSync && (
           <label className="block text-sm font-bold text-slate-700 mt-4 mb-1.5">
             Votre numéro {wave.methodLabel} <span className="font-normal text-slate-400">(ex : 77 123 45 67)</span>
           </label>
         )}
-        <input
+        {!initiationFailed && <input
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           inputMode="tel"
           placeholder="77 123 45 67"
           aria-label="Numéro de téléphone"
           className={`w-full px-4 py-3 rounded-xl border-2 outline-none font-semibold ${phone === '' || phoneValid ? 'border-slate-200 focus:border-blue-500' : 'border-red-300 focus:border-red-400'}`}
-        />
-        {phone !== '' && !phoneValid && (
+        />}
+        {!initiationFailed && phone !== '' && !phoneValid && (
           <p className="mt-1 text-xs font-semibold text-red-600">Numéro invalide (format Sénégal : 77, 78, 76, 75, 70…).</p>
         )}
 
@@ -324,7 +327,7 @@ const PaymentModal = ({ wave, initialPhone, error, confirming, onConfirm, onPaid
         )}
 
         {/* ---------- Écran d'attente ---------- */}
-        {!isDemo && (
+        {!isDemo && !initiationFailed && wave.challenge && (
           <div className="mt-4 rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-center">
             {waiting ? (
               <>
@@ -357,9 +360,11 @@ const PaymentModal = ({ wave, initialPhone, error, confirming, onConfirm, onPaid
           </div>
         )}
 
-        <p className="mt-3 text-center text-xs text-slate-400">
-          La carte s’active automatiquement après confirmation du paiement.
-        </p>
+        {!initiationFailed && (
+          <p className="mt-3 text-center text-xs text-slate-400">
+            La carte s’active automatiquement après confirmation du paiement.
+          </p>
+        )}
       </div>
     </div>
   );

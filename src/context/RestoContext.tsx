@@ -1420,7 +1420,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       // sa présence faisait passer un paiement SycaPay pour une démo, et
       // l'écran affichait un code à saisir au lieu de rediriger.
       const { demoCode: _codeDemo, ...base } = {
-        ...initiateWavePayment(input.amount, input.method as 'wave', input.reference),
+        ...initiateWavePayment(input.amount, input.method, input.reference),
         paymentId,
         kind,
         provider: activeProvider.id,
@@ -1434,6 +1434,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           return {
             ...base,
             provider: activeProvider.id,
+            steps: [],
             error: isProviderMethod(input.method)
               ? "Paiement momentanément indisponible. Aucun montant n'a été débité — réessayez dans quelques instants."
               : "Ce moyen de paiement n'est pas disponible en ligne.",
@@ -1459,7 +1460,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           return {
             ...base,
             provider: activeProvider.id,
-            challenge: { kind: 'prompt', phone: input.phone ?? '', label: activeProvider.label },
+            steps: [],
             error: result.error ?? 'Paiement refusé.',
           };
         }
@@ -1477,7 +1478,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         return {
           ...base,
           provider: activeProvider.id,
-          challenge: { kind: 'prompt', phone: input.phone ?? '', label: activeProvider.label },
+          steps: [],
           error: message,
         };
       }

@@ -1,6 +1,6 @@
 import type { ORestoPaymentMethod } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
-import type { PaymentChallenge } from '@/lib/payments/types';
+import type { PaymentChallenge, ProviderMethod } from '@/lib/payments/types';
 
 export type MobileMethod = 'wave';
 
@@ -20,7 +20,7 @@ export interface WavePaymentRequest {
   reference: string;
   amount: number;
   amountLabel: string;
-  method: MobileMethod;
+  method: ProviderMethod;
   methodLabel: string;
   merchantNumber: string;
   merchantName: string;
@@ -102,7 +102,7 @@ export function methodLabel(method: ORestoPaymentMethod): string {
     case 'cash':
       return 'Espèces';
     case 'mobile_money':
-      return 'Mobile Money';
+      return 'Max it (Orange Money)';
     case 'card':
       return 'Carte bancaire';
     case 'balance':
@@ -126,7 +126,7 @@ function randomCode(): string {
  */
 export function initiateWavePayment(
   amount: number,
-  method: MobileMethod,
+  method: ProviderMethod,
   reference: string,
 ): WavePaymentRequest {
   // Le code de démonstration n'existe qu'en développement. En
@@ -150,12 +150,23 @@ export function initiateWavePayment(
     ussdCode: '#144#',
     expiresAt: new Date(Date.now() + WAVE_TTL_MS).toISOString(),
     demoCode,
-    steps: [
-      `Ouvrez Wave et envoyez ${formatCurrency(amount)} au marchand ${WAVE_MERCHANT_NAME} (${WAVE_MERCHANT_NUMBER}).`,
-      `Motif / référence : ${reference}.`,
-      'Validez avec votre code secret Wave.',
-      'Saisissez ci-dessous le code de confirmation à 6 chiffres pour activer votre carte.',
-    ],
+    steps: method === 'wave'
+      ? [
+          `Ouvrez Wave et envoyez ${formatCurrency(amount)} au marchand ${WAVE_MERCHANT_NAME} (${WAVE_MERCHANT_NUMBER}).`,
+          `Motif / référence : ${reference}.`,
+          'Validez avec votre code secret Wave.',
+          'Saisissez ci-dessous le code de confirmation à 6 chiffres pour activer votre carte.',
+        ]
+      : method === 'mobile_money'
+        ? [
+            'Confirmez la demande dans Orange Money / Max it.',
+            `Vérifiez le montant : ${formatCurrency(amount)}.`,
+            'Validez avec votre code secret.',
+          ]
+        : [
+            'Finalisez le paiement sur la page sécurisée de votre banque.',
+            `Vérifiez le montant : ${formatCurrency(amount)}.`,
+          ],
   };
 }
 

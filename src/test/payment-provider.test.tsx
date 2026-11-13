@@ -5,6 +5,7 @@ import { render, act, waitFor, screen, fireEvent } from '@testing-library/react'
 import { RestoProvider, useResto } from '@/context/RestoContext';
 import WavePaymentModal from '@/components/WavePaymentModal';
 import { initiateWavePayment, checkWaveCode } from '@/lib/wave';
+import { sycaPayProvider } from '@/lib/payments/sycaPay';
 
 /**
  * Le contrat du registre de paiement.
@@ -132,6 +133,7 @@ describe('Intégration au contexte', () => {
       const sub = api.subscribe('parent-syca', 'F2');
       subId = sub.id;
     });
+
     act(() => {
       const { payment } = api.paySubscription(subId, 'wave');
       paymentId = payment.id;
@@ -158,7 +160,43 @@ describe('Intégration au contexte', () => {
       expect(['pending', 'unknown', 'paid']).toContain(status.status);
     });
   });
-});/** * Le modal de paiement est le seul ecran qui sait rendre un defi SycaPay. * * Il a deja casse en production : les variables du bandeau de redirection * etaient utilisees sans avoir ete definies, et le modal plantait des son * ouverture. Ces tests rendent reellement le composant, avec chaque forme * de defi, pour que ce genre d'erreur ne passe plus. */describe('Rendu du modal de paiement', () => {  const base = {    reference: 'PAY-TEST',    amount: 100,    amountLabel: '100 FCFA',    methodLabel: 'Wave',    merchantName: 'O RESTO',    merchantNumber: '771234567',    expiresAt: new Date(Date.now() + 600000).toISOString(),    steps: ['Ouvrez le lien', 'Validez'],  };  function renderModal(challenge: unknown, provider = 'sycapay') {    return render(      <WavePaymentModal        wave={{ ...base, provider, challenge } as never}        confirming={false}        onConfirm={() => {}}        onPaid={() => {}}        onClose={() => {}}      />,    );  }  it('affiche le bandeau de redirection pour un lien Wave', () => {    renderModal({ kind: 'redirect', url: 'https://pay.wave.com/c/x', label: 'Wave' });    expect(screen.getByText(/Redirection vers/)).toBeTruthy();    expect(screen.getByRole('button', { name: /Ouvrir maintenant/ })).toBeTruthy();  });  it('propose les applications Orange Money sans planter sur le QR', () => {    renderModal({      kind: 'qr',      qrCode: 'iVBORw0KGgo=',      deepLinks: [        { app: 'MAXIT', url: 'https://sugu.orange-sonatel.com/x' },        { app: 'OM', url: 'https://sugu.orange-senatel.com/y' },      ],    });    expect(screen.getByText(/Scannez pour payer/)).toBeTruthy();    expect(screen.getByRole('button', { name: /Ouvrir Max it/ })).toBeTruthy();  });  it('rend un defi ou l operateur pousse l invite sur le telephone', () => {    renderModal({ kind: 'prompt', phone: '771234567', label: 'Mobile Money' });    expect(screen.getByText(/Validez la demande/)).toBeTruthy();  });  it('reste en mode demo sans jamais rediriger', () => {    const { container } = renderModal(      { kind: 'prompt', phone: '771234567', label: 'Wave' },      'demo',    );    expect(container.querySelector('input[placeholder="77 123 45 67"]')).toBeTruthy();    expect(screen.queryByText(/Redirection vers/)).toBeNull();  });});
+});
+
+describe('Routage des moyens SycaPay', () => {
+  it('envoie Orange Money au service correspondant et conserve son lien de paiement', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (_path: string, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return {
+        ok: true,
+        json: async () => ({ ok: true, redirectUrl: 'https://pay.orange.test/checkout' }),
+      } as Response;
+    }));
+
+    const result = await sycaPayProvider.startPayment({
+      reference: 'PAY-ORANGE-1',
+      amount: 1000,
+      method: 'mobile_money',
+      phone: '771234567',
+    });
+
+    expect(requestBody?.codeService).toBe('SN_PM_OM');
+    expect(result.challenge).toEqual({
+      kind: 'redirect',
+      url: 'https://pay.orange.test/checkout',
+      label: 'Orange Money',
+    });
+  });
+
+  it('prépare les consignes Orange Money sans instructions Wave', () => {
+    const session = initiateWavePayment(1000, 'mobile_money', 'PAY-ORANGE-2');
+    expect(session.methodLabel).toBe('Max it (Orange Money)');
+    expect(session.steps.join(' ')).toMatch(/Orange Money/);
+    expect(session.steps.join(' ')).not.toMatch(/Wave/);
+  });
+});
+
+/** * Le modal de paiement est le seul ecran qui sait rendre un defi SycaPay. * * Il a deja casse en production : les variables du bandeau de redirection * etaient utilisees sans avoir ete definies, et le modal plantait des son * ouverture. Ces tests rendent reellement le composant, avec chaque forme * de defi, pour que ce genre d'erreur ne passe plus. */describe('Rendu du modal de paiement', () => {  const base = {    reference: 'PAY-TEST',    amount: 100,    amountLabel: '100 FCFA',    methodLabel: 'Wave',    merchantName: 'O RESTO',    merchantNumber: '771234567',    expiresAt: new Date(Date.now() + 600000).toISOString(),    steps: ['Ouvrez le lien', 'Validez'],  };  function renderModal(challenge: unknown, provider = 'sycapay') {    return render(      <WavePaymentModal        wave={{ ...base, provider, challenge } as never}        confirming={false}        onConfirm={() => {}}        onPaid={() => {}}        onClose={() => {}}      />,    );  }  it('affiche le bandeau de redirection pour un lien Wave', () => {    renderModal({ kind: 'redirect', url: 'https://pay.wave.com/c/x', label: 'Wave' });    expect(screen.getByText(/Redirection vers/)).toBeTruthy();    expect(screen.getByRole('button', { name: /Ouvrir maintenant/ })).toBeTruthy();  });  it('propose les applications Orange Money sans planter sur le QR', () => {    renderModal({      kind: 'qr',      qrCode: 'iVBORw0KGgo=',      deepLinks: [        { app: 'MAXIT', url: 'https://sugu.orange-sonatel.com/x' },        { app: 'OM', url: 'https://sugu.orange-senatel.com/y' },      ],    });    expect(screen.getByText(/Scannez pour payer/)).toBeTruthy();    expect(screen.getByRole('button', { name: /Ouvrir Max it/ })).toBeTruthy();  });  it('rend un defi ou l operateur pousse l invite sur le telephone', () => {    renderModal({ kind: 'prompt', phone: '771234567', label: 'Mobile Money' });    expect(screen.getByText(/Validez la demande/)).toBeTruthy();  });  it('reste en mode demo sans jamais rediriger', () => {    const { container } = renderModal(      { kind: 'prompt', phone: '771234567', label: 'Wave' },      'demo',    );    expect(container.querySelector('input[placeholder="77 123 45 67"]')).toBeTruthy();    expect(screen.queryByText(/Redirection vers/)).toBeNull();  });});
 /**
  * Les regles de production du paiement.
  *
@@ -317,5 +355,37 @@ describe('Envoi automatique vers Wave / Max it', () => {
       vi.runOnlyPendingTimers();
     });
     expect(window.location.href).toBe('https://maxit.orange.com/pay/x');
+  });
+});
+
+describe('Erreur d’initiation SycaPay', () => {
+  it('n’affiche pas un échec comme une demande envoyée à Wave ou Orange Money', () => {
+    render(
+      <WavePaymentModal
+        wave={{
+          reference: 'PAY-ORANGE-ERROR',
+          amount: 1000,
+          amountLabel: '1 000 FCFA',
+          method: 'mobile_money',
+          methodLabel: 'Max it (Orange Money)',
+          merchantName: 'O RESTO',
+          merchantNumber: '771234567',
+          expiresAt: new Date(Date.now() + 600000).toISOString(),
+          steps: [],
+          provider: 'sycapay',
+          error: 'Appel SycaPay impossible : socket hang up',
+        } as never}
+        confirming={false}
+        onConfirm={() => {}}
+        onSync={async () => ({ status: 'pending' })}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByText('Payer avec Max it (Orange Money)')).toBeTruthy();
+    expect(screen.getByText(/socket hang up/)).toBeTruthy();
+    expect(screen.queryByText(/Validez la demande/)).toBeNull();
+    expect(screen.queryByText(/Wave/)).toBeNull();
+    expect(screen.queryByText(/La carte s’active automatiquement/)).toBeNull();
   });
 });

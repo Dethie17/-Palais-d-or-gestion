@@ -133,7 +133,11 @@ function toChallenge(payload: ApiEnvelope, method: ProviderMethod, input: StartP
     return { kind: 'qr' as const, qrCode: payload.qrCode, deepLinks, ...(expiresAt ? { expiresAt } : {}) };
   }
   // Rien à afficher : l'opérateur pousse l'invite sur le téléphone du client.
-  return { kind: 'prompt' as const, phone: input.phone ?? '', label: method === 'wave' ? 'Wave' : 'Mobile Money' };
+  return {
+    kind: 'prompt' as const,
+    phone: input.phone ?? '',
+    label: method === 'wave' ? 'Wave' : 'Max it (Orange Money)',
+  };
 }
 
 export const sycaPayProvider: PaymentProvider = {
