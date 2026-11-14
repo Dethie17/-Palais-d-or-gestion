@@ -30,7 +30,7 @@ export function appBaseUrl(): string {
   const configured = (import.meta.env.VITE_APP_URL as string | undefined)?.trim();
   if (configured && /^https?:\/\//.test(configured)) return configured.replace(/\/+$/, '');
   if (typeof window !== 'undefined' && window.location.origin) return window.location.origin;
-  return 'https://oresto-sn.com';
+  return 'https://orestosn.com';
 }
 
 /**
@@ -264,6 +264,9 @@ export interface HealthReport {
   mode: 'sycapay' | 'demo';
   sycapay: boolean;
   database: boolean;
+  paymentGroups?: boolean;
+  paymentGroupsError?: string | null;
+  unsettledPaidPayments?: number;
   sycapayError?: string | null;
   databaseError?: string | null;
 }

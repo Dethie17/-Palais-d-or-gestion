@@ -39,11 +39,11 @@ import {
   initProvider,
   isProviderMethod,
   provider,
-  startPayment,
   stepsFor,
 } from '@/lib/payments';
 import { recallPayerPhone, rememberPayerPhone } from '@/lib/payments/payerPhone';
-import type { PaymentStatus, ProviderMethod, StartPaymentInput, StartPaymentResult } from '@/lib/payments/types';
+import { startPaymentWhenVisible } from '@/lib/payments/startPaymentWhenVisible';
+import type { PaymentStatus, ProviderMethod, StartPaymentInput } from '@/lib/payments/types';
 import { getClientQrToken, isPersonalQrToken, getChildQrToken } from '@/lib/clientQr';
 import { generateSecureQrToken } from '@/lib/secureQr';
 import { postAdminJson } from '@/lib/adminApi';
@@ -54,6 +54,7 @@ import { inferCycleFromClass, normalizeCycle, canonicalClassName } from '@/lib/s
 import { decodeMenuDescription, encodeMenuDescription, foldDayPriceIntoItems, publishedDays } from '@/lib/menus';
 import { referenceMonth, referenceWeek } from '@/data/cantineWeek';
 import { menuMonthDays } from '@/lib/menuDates';
+import { cleMois, debutDeMoisIso, moisSuivant } from '@/lib/aboMois';
 
 /**
  * Écritures Supabase « best-effort » : l'application continue en local quand
@@ -140,29 +141,6 @@ if (typeof window !== 'undefined') {
  * Réponse de /api/sycapay/initiate quand la commande n'est pas encore visible
  * en base : ce n'est pas un refus du client, seulement une course.
  */
-const TRANSACTION_INCONNUE = /n['’]est pas la v/;
-
-/**
- * Démarre un paiement chez la passerelle en tolérant le délai de visibilité
- * de la ligne de commande.
- *
- * La commande et la requête de paiement sont écrites au moment même où la
- * passerelle est appelée. Si l'écriture n'est pas encore visible, la route
- * répond 403 et le parent verrait un échec alors qu'il n'a rien envoyé :
- * on réessaie ce seul cas quelques instants, sans jamais rejouer un vrai refus.
- */
-async function startPaymentWhenVisible(input: StartPaymentInput): Promise<StartPaymentResult> {
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return await startPayment(input);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '';
-      if (attempt >= 4 || !TRANSACTION_INCONNUE.test(message)) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 400));
-    }
-  }
-}
-
 const LS_KEYS = {
   establishments: 'o-resto-establishments-v1',
   formulas: 'o-resto-formulas-v1',
@@ -1215,14 +1193,16 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     (clientUsername: string, formulaId: string, childId?: string) => {
       const formula = formulas.find((f) => f.id === formulaId);
       if (!formula) throw new Error('Formule inconnue');
-      const now = new Date();
+      // Un abonnement mensuel couvre toujours un mois civil entier : le
+      // premier jour du mois courant, jusqu'au premier du mois suivant.
+      const month = cleMois(new Date()) as string;
       const child = childId ? childrenList.find((c) => c.id === childId) : undefined;
       const subscription: Subscription = {
         id: uid('S'),
         clientUsername,
         formulaId,
-        startDate: now.toISOString(),
-        endDate: endOfMonthIso(now),
+        startDate: debutDeMoisIso(month),
+        endDate: debutDeMoisIso(moisSuivant(month, 1)),
         status: 'pending',
         mealsRemaining: formula.mealsIncluded,
         qrToken: child ? child.qrToken : newQrToken(),
@@ -1342,9 +1322,13 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const now = new Date();
       const nowMs = now.getTime();
       const scheduledStart = new Date(target.startDate).getTime();
-      const isFuture = Number.isFinite(scheduledStart) && scheduledStart > nowMs;
-      const startDate = isFuture ? target.startDate : now.toISOString();
-      const endDate = isFuture ? target.endDate : endOfMonthIso(now);
+      const scheduledEnd = new Date(target.endDate).getTime();
+      // La période est fixée à la réservation (mois civils choisis par le
+      // parent) : l'encaissement ne doit jamais la réécrire avec la date du
+      // jour, sinon un abonnement du 1er au 1er devient un mois partiel.
+      const hasScheduledPeriod = Number.isFinite(scheduledStart) && Number.isFinite(scheduledEnd);
+      const startDate = hasScheduledPeriod ? target.startDate : now.toISOString();
+      const endDate = hasScheduledPeriod ? target.endDate : endOfMonthIso(now);
 
       // Ticket du jour : +1 repas sur la carte de l'enfant, sans toucher aux
       // autres abonnements de l'enfant.
@@ -1978,9 +1962,13 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         return null;
       }
 
-      // Période suivante : le lendemain de la fin en cours, jamais avant.
-      const start = nextPeriodStart(sub.endDate, now);
-      const end = endOfThatMonth(start);
+      // Période suivante : le mois civil du lendemain de la fin en cours,
+      // jamais un mois partiel. Un abonnement terminé le 18 novembre renouvelle
+      // donc le mois de novembre entier, et non « du 19 au 30 novembre ».
+      const nextDay = nextPeriodStart(sub.endDate, now);
+      const renewalMonth = cleMois(nextDay) as string;
+      const start = new Date(debutDeMoisIso(renewalMonth));
+      const end = new Date(debutDeMoisIso(moisSuivant(renewalMonth, 1)));
       const renewal: Subscription = {
         id: uid('S'),
         clientUsername: sub.clientUsername,

@@ -9,6 +9,15 @@
 ALTER TABLE IF EXISTS wallet_transactions ADD COLUMN IF NOT EXISTS payment_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_wallettx_payment_id ON wallet_transactions(payment_id);
 
+-- Compatibilité historique : les paiements déjà marqués payés avant
+-- settled_at sont ratifiés, conformément à la migration comptable.
+ALTER TABLE public.oresto_payments ADD COLUMN IF NOT EXISTS settled_at timestamptz;
+ALTER TABLE public.oresto_payments ADD COLUMN IF NOT EXISTS paid_at timestamptz;
+UPDATE public.oresto_payments
+SET paid_at = COALESCE(paid_at, settled_at, created_at),
+    settled_at = COALESCE(settled_at, paid_at, created_at)
+WHERE status = 'paid' AND settled_at IS NULL;
+
 -- 2. Règlement d'un paiement : mise à jour d'oresto_settle_payment
 CREATE OR REPLACE FUNCTION oresto_settle_payment(
   p_reference TEXT,
@@ -119,16 +128,19 @@ BEGIN
       RETURN jsonb_build_object('outcome', 'unknown_formula', 'reference', p_reference);
     END IF;
 
+    -- Conserver la période demandée au paiement : les dates correspondent aux
+    -- mois choisis par le parent, pas à la date de confirmation SycaPay.
     UPDATE subscriptions SET
       status = 'active',
-      meals_remaining = GREATEST(meals_remaining, v_formula.meals_included),
-      start_date = NOW(),
-      end_date = v_end_of_month
+      meals_remaining = GREATEST(meals_remaining, v_formula.meals_included)
     WHERE id = v_sub.id;
 
-    -- Un seul abonnement actif par bénéficiaire.
+    -- Un seul abonnement actif par bénéficiaire : on n'expire QUE les
+    -- périodes réellement terminées. Un mois futur déjà payé ne doit jamais
+    -- désactiver la carte du mois en cours.
     UPDATE subscriptions SET status = 'expired'
     WHERE id <> v_sub.id AND status = 'active'
+      AND end_date < NOW()
       AND (
         (v_sub.child_id IS NOT NULL AND child_id = v_sub.child_id)
         OR (v_sub.child_id IS NULL AND child_id IS NULL AND client_username = v_sub.client_username)

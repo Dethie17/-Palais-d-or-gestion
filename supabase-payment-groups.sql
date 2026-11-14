@@ -40,7 +40,7 @@ BEGIN
     WHERE s.client_username = v_payment.client_username
       AND s.status IN ('pending', 'cancelled', 'active')
       AND ABS(EXTRACT(EPOCH FROM (s.created_at - v_payment.created_at))) <= 300
-    HAVING COUNT(*) > 1;
+    HAVING COUNT(DISTINCT s.child_id) > 1;
     SELECT * INTO v_group FROM public.oresto_payment_groups WHERE payment_reference = p_reference;
     IF NOT FOUND THEN
       RETURN jsonb_build_object('outcome', 'unknown');

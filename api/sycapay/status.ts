@@ -14,6 +14,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import {
   call,
   describeError,
@@ -64,27 +65,78 @@ async function handleHealth(res: ServerResponse) {
     sycapayError = err instanceof SycaPayConfigError ? err.message : 'configuration illisible';
   }
 
-  let dbOk = false;
+  let settlementOk = false;
   let dbError: string | undefined;
   try {
     const { error } = await adminClient().rpc('oresto_settle_payment', {
       p_reference: '__health__',
       p_tag: 'PENDING',
     });
-    dbOk = !error;
+    settlementOk = !error;
     if (error) dbError = error.message;
   } catch (err) {
-    dbOk = false;
+    settlementOk = false;
     dbError = err instanceof SupabaseAdminConfigError ? err.message : (err as Error).message;
   }
 
+  let paymentSchemaOk = false;
+  let unsettledPaidPayments = 0;
+  try {
+    const db = adminClient();
+    const { error } = await db
+      .from('oresto_payments')
+      .select('settled_at, paid_at')
+      .limit(0);
+    paymentSchemaOk = !error;
+    if (error && !dbError) dbError = 'Colonnes de règlement manquantes : exécutez supabase-o-resto-final-2026.sql.';
+    if (paymentSchemaOk) {
+      const { count, error: countError } = await db
+        .from('oresto_payments')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'paid')
+        .is('settled_at', null);
+      if (countError) {
+        if (!dbError) dbError = 'État des anciens paiements impossible à vérifier.';
+      } else {
+        unsettledPaidPayments = count ?? 0;
+      }
+    }
+  } catch {
+    paymentSchemaOk = false;
+    if (!dbError) dbError = 'Schéma des paiements inaccessible.';
+  }
+
+  let paymentGroupsOk = false;
+  try {
+    const db = adminClient();
+    const groupTable = await db
+      .from('oresto_payment_groups')
+      .select('payment_reference, subscription_ids, child_ids')
+      .limit(0);
+    const groupFunction = await db.rpc('oresto_settle_payment_group', {
+      p_reference: `__health__${randomUUID()}`,
+      p_tag: 'PENDING',
+      p_provider_tx: null,
+      p_event_id: null,
+    });
+    paymentGroupsOk = !groupTable.error && !groupFunction.error;
+  } catch {
+    paymentGroupsOk = false;
+  }
+
+  const database = settlementOk && paymentSchemaOk;
   return sendJson(res, 200, {
-    ok: sycapayOk && dbOk,
+    ok: sycapayOk && database,
     sycapay: sycapayOk,
     sycapayError: sycapayError ?? null,
-    database: dbOk,
+    database,
     databaseError: dbError ?? null,
-    mode: sycapayOk && dbOk ? 'sycapay' : 'demo',
+    unsettledPaidPayments,
+    paymentGroups: paymentGroupsOk,
+    paymentGroupsError: paymentGroupsOk
+      ? null
+      : 'Paiements de plusieurs enfants non configurés : exécutez supabase-payment-groups.sql.',
+    mode: sycapayOk && database ? 'sycapay' : 'demo',
     webhookSignatureRequired: (process.env.SYCAPAY_WEBHOOK_REQUIRE_SIGNATURE ?? 'true').toLowerCase() !== 'false',
     configured: isSycaPayConfigured(),
   });

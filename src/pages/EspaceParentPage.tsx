@@ -242,14 +242,16 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     const { payment } = paySubscription(firstSub.id, method, firstSub, montant);
     payment.groupSubscriptionIds = subscriptionsToPay.map((sub) => sub.id);
 
-    const { error: groupError } = await supabase.from('oresto_payment_groups').upsert({
-      payment_reference: payment.reference,
-      subscription_ids: subscriptionsToPay.map((sub) => sub.id),
-      child_ids: children.map((child) => child.id),
-      parent_username: username,
-    });
-    if (groupError) {
-      throw new Error(`Impossible de préparer le paiement multi-enfants: ${groupError.message}`);
+    if (subscriptionsToPay.length > 1) {
+      const { error: groupError } = await supabase.from('oresto_payment_groups').upsert({
+        payment_reference: payment.reference,
+        subscription_ids: subscriptionsToPay.map((sub) => sub.id),
+        child_ids: children.map((child) => child.id),
+        parent_username: username,
+      });
+      if (groupError) {
+        throw new Error(`Impossible de préparer le paiement multi-enfants: ${groupError.message}`);
+      }
     }
 
     const session = await openProviderPayment(

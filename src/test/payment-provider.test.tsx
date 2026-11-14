@@ -4,8 +4,9 @@ import type { PaymentProvider } from '@/lib/payments/types';
 import { render, act, waitFor, screen, fireEvent } from '@testing-library/react';
 import { RestoProvider, useResto } from '@/context/RestoContext';
 import WavePaymentModal from '@/components/WavePaymentModal';
-import { initiateWavePayment, checkWaveCode } from '@/lib/wave';
+import { initiateWavePayment, checkWaveCode, isMobileMethod } from '@/lib/wave';
 import { sycaPayProvider } from '@/lib/payments/sycaPay';
+import { supabase } from '@/lib/supabase';
 
 /**
  * Le contrat du registre de paiement.
@@ -97,6 +98,14 @@ describe('Registre de paiement', () => {
     expect(isProviderMethod('balance')).toBe(false);
   });
 
+  it('traite Orange Money comme un paiement mobile, pas comme un paiement au comptoir', () => {
+    expect(isMobileMethod('wave')).toBe(true);
+    expect(isMobileMethod('mobile_money')).toBe(true);
+    expect(isMobileMethod('cash')).toBe(false);
+    expect(isMobileMethod('balance')).toBe(false);
+    expect(isMobileMethod('card')).toBe(false);
+  });
+
   it('adapt les consignes à la forme du défi', () => {
     expect(stepsFor({ kind: 'qr', qrCode: 'x', deepLinks: [] }, 1900).join(' ')).toMatch(/scannez/i);
     expect(stepsFor({ kind: 'hosted', url: 'https://x', label: 'Carte' }, 1900).join(' ')).toMatch(/carte/i);
@@ -163,15 +172,26 @@ describe('Intégration au contexte', () => {
 });
 
 describe('Routage des moyens SycaPay', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   it('envoie Orange Money au service correspondant et conserve son lien de paiement', async () => {
     let requestBody: Record<string, unknown> | undefined;
-    vi.stubGlobal('fetch', vi.fn(async (_path: string, init?: RequestInit) => {
+    vi.spyOn(supabase.auth, 'getSession').mockResolvedValue({
+      data: { session: null },
+      error: null,
+    });
+    const fetchMock = vi.fn(async (_path: string, init?: RequestInit) => {
       requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
       return {
         ok: true,
         json: async () => ({ ok: true, redirectUrl: 'https://pay.orange.test/checkout' }),
       } as Response;
-    }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('AbortSignal', { timeout: () => undefined });
 
     const result = await sycaPayProvider.startPayment({
       reference: 'PAY-ORANGE-1',
@@ -180,6 +200,8 @@ describe('Routage des moyens SycaPay', () => {
       phone: '771234567',
     });
 
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(requestBody?.codeService).toBe('SN_PM_OM');
     expect(result.challenge).toEqual({
       kind: 'redirect',

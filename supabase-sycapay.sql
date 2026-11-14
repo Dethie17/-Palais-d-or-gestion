@@ -167,16 +167,18 @@ BEGIN
       RETURN jsonb_build_object('outcome', 'unknown_formula', 'reference', p_reference);
     END IF;
 
+    -- Conserver la période demandée au paiement (notamment les mois choisis).
     UPDATE subscriptions SET
       status = 'active',
-      meals_remaining = GREATEST(meals_remaining, v_formula.meals_included),
-      start_date = NOW(),
-      end_date = NOW() + (v_formula.duration_days || ' days')::INTERVAL
+      meals_remaining = GREATEST(meals_remaining, v_formula.meals_included)
     WHERE id = v_sub.id;
 
-    -- Un seul abonnement actif par bénéficiaire.
+    -- Un seul abonnement actif par bénéficiaire : on n'expire QUE les
+    -- périodes réellement terminées. Un mois futur déjà payé ne doit jamais
+    -- désactiver la carte du mois en cours.
     UPDATE subscriptions SET status = 'expired'
     WHERE id <> v_sub.id AND status = 'active'
+      AND end_date < NOW()
       AND (
         (v_sub.child_id IS NOT NULL AND child_id = v_sub.child_id)
         OR (v_sub.child_id IS NULL AND child_id IS NULL AND client_username = v_sub.client_username)

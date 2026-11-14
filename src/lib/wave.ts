@@ -2,7 +2,7 @@ import type { ORestoPaymentMethod } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
 import type { PaymentChallenge, ProviderMethod } from '@/lib/payments/types';
 
-export type MobileMethod = 'wave';
+export type MobileMethod = 'wave' | 'mobile_money';
 
 /**
  * Session de paiement en cours : ce qu'un écran doit afficher pendant qu'un
@@ -81,7 +81,7 @@ export const WAVE_BUSINESS_NAME =
 export const WAVE_TTL_MS = 15 * 60 * 1000;
 
 export function isMobileMethod(method: ORestoPaymentMethod): method is MobileMethod {
-  return method === 'wave';
+  return method === 'wave' || method === 'mobile_money';
 }
 
 /**
