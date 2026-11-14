@@ -126,6 +126,9 @@ describe('Espace Abonné — rendu général', () => {
     expect(screen.getAllByText(/Aïcha Diallo/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/CIA/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/CIB/).length).toBeGreaterThanOrEqual(1);
+
+    // Les mois non réglés affichent clairement « Impayé ».
+    expect(screen.getAllByText('Impayé').length).toBeGreaterThanOrEqual(1);
   });
 
   it('la semaine publiée s’affiche en consultation (pas d’achat en ligne)', async () => {

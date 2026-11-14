@@ -10,7 +10,7 @@ import { cycleOfClass, CYCLE_LABEL } from '@/lib/schoolCycles';
 import { ABO_OFFICIAL, officialAboForCycle, officialPrice, type AboId } from '@/lib/aboTariffs';
 import { formatCurrency } from '@/lib/utils';
 import { validatedSubscriptionIds } from '@/lib/validatedPayments';
-import { Smartphone, Check, ChevronRight, AlertTriangle, X } from 'lucide-react';
+import { Smartphone, Check, AlertTriangle, X } from 'lucide-react';
 
 /**
  * Espace Abonné — « Payer l'abonnement ».
@@ -24,7 +24,7 @@ import { Smartphone, Check, ChevronRight, AlertTriangle, X } from 'lucide-react'
  *   dont au moins un paiement est confirmé côté serveur ;
  * - « En attente » (verrouillé, libérable) : une tentative non aboutie bloque
  *   le mois ; un clic l'annule et libère le mois ;
- * - libre : sélectionnable.
+ * - « Impayé » : mois non réglé, sélectionnable pour un nouveau paiement.
  * Le total est recalculé ici au tarif officiel × mois ; le paiement part chez
  * SycaPay (Wave ou Max it) qui envoie le client automatiquement dans son
  * application.
@@ -209,7 +209,7 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
                     onClick={() => { if (libre) toggleMois(m.cle); }}
                     disabled={!libre}
                     aria-pressed={checked}
-                    aria-label={m.etat === 'paye' ? `${m.label} déjà payé` : m.etat === 'attente' ? `${m.label} en attente` : `Choisir ${m.label}`}
+                    aria-label={m.etat === 'paye' ? `${m.label} déjà payé` : m.etat === 'attente' ? `${m.label} en attente` : `Choisir ${m.label} — impayé`}
                     className="flex items-center gap-2 min-w-0 flex-1 text-left disabled:cursor-not-allowed"
                   >
                     <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${!libre ? 'border-slate-200' : checked ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'}`}>
@@ -231,7 +231,9 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
                       <X className="w-3 h-3" /> En attente
                     </button>
                   )}
-                  {libre && <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />}
+                  {libre && (
+                    <span data-testid={`abo-impaye-${m.cle}`} className="text-[10px] font-black text-red-600 whitespace-nowrap">Impayé</span>
+                  )}
                 </div>
               );
             })}
@@ -315,7 +317,7 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
           </div>
         )}
         <p className="text-[11px] text-slate-400">
-          Règles : montant recalculé depuis la formule de la classe de l’enfant · paiement en une opération possible sur plusieurs mois consécutifs, puis de nouveaux paiements plus tard · « Payé » = mois civil entièrement couvert par un règlement confirmé · « En attente » = demande jamais soldée, libérable d’un clic.
+          Règles : montant recalculé depuis la formule de la classe de l’enfant · paiement en une opération possible sur plusieurs mois consécutifs, puis de nouveaux paiements plus tard · « Payé » = mois civil entièrement couvert par un règlement confirmé · « Impayé » = mois non réglé, sélectionnable · « En attente » = demande jamais soldée, libérable d’un clic.
         </p>
       </div>
     </div>
