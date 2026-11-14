@@ -118,15 +118,21 @@ const SubscriptionsAdminPage = () => {
    * dans l'onglet Utilisateurs — cette page n'est pas un registre
    * d'inscription.
    */
-  const settledSubIds = useMemo(
-    () => new Set(
-      payments
-        .filter((p) => p.status === 'paid' && p.subscriptionId
-          && (!settlementKnown || Boolean(p.settledAt) || validatedIds.has(p.id)))
-        .map((p) => p.subscriptionId as string),
-    ),
-    [payments, settlementKnown, validatedIds],
-  );
+  const settledSubIds = useMemo(() => {
+    const ids = new Set<string>();
+    payments
+      .filter((p) => p.status === 'paid'
+        && (!settlementKnown || Boolean(p.settledAt) || validatedIds.has(p.id)))
+      .forEach((p) => {
+        const subscriptionIds = p.groupSubscriptionIds?.length
+          ? p.groupSubscriptionIds
+          : p.subscriptionId
+            ? [p.subscriptionId]
+            : [];
+        subscriptionIds.forEach((id) => ids.add(id));
+      });
+    return ids;
+  }, [payments, settlementKnown, validatedIds]);
   const paidSubs = subscriptions.filter((s) => settledSubIds.has(s.id));
   const filteredSubs = paidSubs.filter((s) => filter === 'all' || s.status === filter);
   const pendingPayments = payments.filter((p) => p.status === 'pending');

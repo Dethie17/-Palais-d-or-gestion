@@ -39,6 +39,21 @@ export interface PaiementBrut {
   createdAt: string;
   paidAt: string | null;
   settledAt: string | null;
+  /** Tous les abonnements couverts par un paiement multi-enfants. */
+  groupSubscriptionIds: string[];
+  /** Tous les enfants bénéficiaires du groupe. */
+  groupChildIds: string[];
+}
+
+/** Tous les abonnements liés au paiement (groupe, sinon premier abonnement). */
+export function paiementSubscriptionIds(
+  p: Pick<PaiementBrut, 'subscriptionId' | 'groupSubscriptionIds'>,
+): string[] {
+  return p.groupSubscriptionIds.length
+    ? p.groupSubscriptionIds
+    : p.subscriptionId
+      ? [p.subscriptionId]
+      : [];
 }
 
 /** Date affichée : le règlement réel, sinon la création de l'opération. */
@@ -179,7 +194,60 @@ function mapRow(r: RowBrut): PaiementBrut {
     createdAt: String(r.created_at ?? ''),
     paidAt: r.paid_at ? String(r.paid_at) : null,
     settledAt: r.settled_at ? String(r.settled_at) : null,
+    groupSubscriptionIds: [],
+    groupChildIds: [],
   };
+}
+
+/**
+ * Complète les paiements avec leur groupe multi-enfants.
+ *
+ * La table `oresto_payment_groups` n'a pas de clé étrangère vers
+ * `oresto_payments` : PostgREST ne peut pas l'embarquer. On la lit par
+ * paquets de références. C'est un enrichissement : si la table n'est pas
+ * encore installée, l'historique reste lisible avec le premier abonnement.
+ */
+async function attachPaymentGroups(rows: PaiementBrut[]): Promise<void> {
+  const refs = Array.from(new Set(
+    rows.map((r) => r.reference).filter((ref): ref is string => Boolean(ref)),
+  ));
+  if (refs.length === 0) return;
+  const byRef = new Map<string, { subscriptionIds: string[]; childIds: string[] }>();
+  const CHUNK = 200;
+  for (let i = 0; i < refs.length; i += CHUNK) {
+    const chunk = refs.slice(i, i + CHUNK);
+    try {
+      const { data, error } = await supabase
+        .from('oresto_payment_groups')
+        .select('payment_reference, subscription_ids, child_ids')
+        .in('payment_reference', chunk);
+      if (error) {
+        if (/42P01|PGRST205|does not exist/i.test(error.message)) return;
+        continue;
+      }
+      (data ?? []).forEach((raw) => {
+        const row = raw as Record<string, unknown>;
+        const ref = row.payment_reference ? String(row.payment_reference) : '';
+        if (!ref) return;
+        byRef.set(ref, {
+          subscriptionIds: Array.isArray(row.subscription_ids)
+            ? (row.subscription_ids as unknown[]).map(String)
+            : [],
+          childIds: Array.isArray(row.child_ids)
+            ? (row.child_ids as unknown[]).map(String)
+            : [],
+        });
+      });
+    } catch {
+      // Enrichissement best-effort : ne bloque jamais le registre.
+    }
+  }
+  rows.forEach((row) => {
+    const group = row.reference ? byRef.get(row.reference) : undefined;
+    if (!group) return;
+    row.groupSubscriptionIds = group.subscriptionIds;
+    row.groupChildIds = group.childIds;
+  });
 }
 
 /** Remontée d'erreur lisible, en français. */
@@ -209,7 +277,9 @@ export async function fetchPaiementsPage(opts: {
   if (error) throw new Error(error.message);
   const dataRows: RowBrut[] = Array.isArray(data) ? (data as unknown as RowBrut[]) : [];
   const total = count ?? dataRows.length;
-  return { rows: dataRows.map(mapRow), total };
+  const rows = dataRows.map(mapRow);
+  await attachPaymentGroups(rows);
+  return { rows, total };
 }
 
 /** TOUTES les lignes filtrées (export), par lots. */
@@ -233,5 +303,7 @@ export async function fetchTousPaiements(opts: {
     all.push(...rows);
     if (rows.length < HISTO_EXPORT_BATCH) break;
   }
-  return all.slice(0, max);
+  const sliced = all.slice(0, max);
+  await attachPaymentGroups(sliced);
+  return sliced;
 }

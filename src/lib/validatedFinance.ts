@@ -60,6 +60,7 @@ function toAccountable(row: ValidatedPaymentRow): AccountablePayment {
     status: row.status ?? 'paid',
     createdAt: row.createdAt ?? settledAt ?? row.paidAt ?? '',
     subscriptionId: row.subscriptionId ?? undefined,
+    groupSubscriptionIds: row.groupSubscriptionIds ?? undefined,
     formulaId: row.formulaId ?? undefined,
     paidAt: row.paidAt ?? undefined,
     settledAt,
@@ -94,6 +95,7 @@ export function accountablePayments(
       status: p.status,
       createdAt: p.createdAt,
       subscriptionId: p.subscriptionId,
+      groupSubscriptionIds: p.groupSubscriptionIds,
       formulaId: p.formulaId,
       paidAt: p.paidAt,
       // La base a répondu et ce paiement n'y est pas : il n'est pas réglé.

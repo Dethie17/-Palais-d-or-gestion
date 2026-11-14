@@ -126,13 +126,22 @@ export async function settle(args: SettleArgs, db: SupabaseClient = adminClient(
         const created = new Date(sub.created_at).getTime();
         return ['pending', 'cancelled', 'active'].includes(sub.status)
           && Number.isFinite(created) && Number.isFinite(paymentTime)
-          && Math.abs(created - paymentTime) <= 5 * 60 * 1000;
+          && Math.abs(created - paymentTime) <= 60 * 1000;
       }).map((sub: any) => sub.id)),
     ]));
-    if (inferredIds.length > 1) {
+    // Un groupe multi-enfants couvre au moins deux enfants différents : une
+    // fenêtre courte + cette contrainte évitent de fusionner deux paiements
+    // distincts créés à quelques minutes d'intervalle.
+    const inferredChildIds = Array.from(new Set(
+      (siblings ?? [])
+        .filter((sub: any) => inferredIds.includes(sub.id))
+        .map((sub: any) => sub.child_id)
+        .filter(Boolean),
+    ));
+    if (inferredIds.length > 1 && inferredChildIds.length > 1) {
       const childIds = Array.from(new Set([
         ...(typeof payment.child_id === 'string' ? [payment.child_id] : []),
-        ...((siblings ?? []).filter((sub: any) => inferredIds.includes(sub.id)).map((sub: any) => sub.child_id).filter(Boolean)),
+        ...inferredChildIds,
       ]));
       await db.from('oresto_payment_groups').upsert({
         payment_reference: args.reference,

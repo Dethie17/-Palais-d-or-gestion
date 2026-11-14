@@ -30,6 +30,7 @@ interface ValidatedPayment {
   method: string | null;
   status: string | null;
   subscriptionId: string | null;
+  groupSubscriptionIds: string[] | null;
   clientUsername: string | null;
   formulaId: string | null;
   createdAt: string | null;
@@ -63,6 +64,7 @@ function toPayment(row: Record<string, unknown>): ValidatedPayment {
     method: str(row.method),
     status: str(row.status),
     subscriptionId: str(row.subscription_id),
+    groupSubscriptionIds: null,
     clientUsername: str(row.client_username),
     formulaId: str(row.formula_id),
     createdAt: str(row.created_at),
@@ -136,8 +138,43 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
   // 3) Restriction de période (la vue est déjà filtrée côté base quand les
   //    RPC existent ; on la refait ici pour un résultat homogène).
+  // Groupes multi-enfants : une transaction peut couvrir plusieurs
+  // abonnements. La vue ne porte pas cette liste ; on la rattache par
+  // référence pour que la comptabilité compte chaque enfant.
+  const groupByRef = new Map<string, string[]>();
+  const refs = Array.from(new Set(
+    rows.map((r) => str(r.reference)).filter((ref): ref is string => Boolean(ref)),
+  ));
+  for (let i = 0; i < refs.length; i += 200) {
+    const chunk = refs.slice(i, i + 200);
+    const { data, error } = await db
+      .from('oresto_payment_groups')
+      .select('payment_reference, subscription_ids')
+      .in('payment_reference', chunk);
+    if (error) {
+      if (!isMissingRelation(error)) {
+        console.warn('[finance/validated] groupes illisibles :', error.message);
+      }
+      continue;
+    }
+    (data ?? []).forEach((raw) => {
+      const row = raw as Record<string, unknown>;
+      const ref = str(row.payment_reference);
+      if (!ref) return;
+      groupByRef.set(ref, Array.isArray(row.subscription_ids)
+        ? (row.subscription_ids as unknown[]).map(String)
+        : []);
+    });
+  }
+
   const payments = rows
-    .map(toPayment)
+    .map((row) => {
+      const payment = toPayment(row);
+      if (payment.reference) {
+        payment.groupSubscriptionIds = groupByRef.get(payment.reference) ?? null;
+      }
+      return payment;
+    })
     .filter((p) => {
       if (!start) return true;
       const at = p.paidAt ?? p.settledAt ?? p.createdAt;

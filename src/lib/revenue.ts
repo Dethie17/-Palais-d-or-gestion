@@ -1,6 +1,6 @@
 import type { Formula, KioskOrder, Order, Subscription, WalletTx } from '@/types/menu';
 import { isAboPayment } from './ismFinance';
-import { isCountedPayment, paymentDate, type AccountablePayment } from './validatedPayments';
+import { isCountedPayment, paymentDate, paymentSubscriptionIds, type AccountablePayment } from './validatedPayments';
 
 /**
  * Chiffre d'affaires de O RESTO : uniquement ce qui a été VENDU et les
@@ -101,7 +101,12 @@ export function revenueBreakdown(source: RevenueSource, sinceMs = 0): RevenueBre
 
   return {
     subscriptions,
-    subscriptionCount: abos.length,
+    // Un paiement groupé couvre plusieurs abonnements : le compteur
+    // d'abonnements doit refléter chaque enfant, pas chaque transaction.
+    subscriptionCount: abos.reduce(
+      (count, p) => count + Math.max(1, paymentSubscriptionIds(p).length),
+      0,
+    ),
     salesCaisse,
     salesKiosk,
     salesTickets,

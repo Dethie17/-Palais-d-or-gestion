@@ -25,6 +25,7 @@ const layec = () => {
   api.gte = vi.fn(() => api);
   api.lte = vi.fn(() => api);
   api.or = vi.fn(() => api);
+  api.in = vi.fn(() => api);
   return api;
 };
 const fromMock = vi.fn((_t: string) => layec());
@@ -51,6 +52,7 @@ import {
   moisLibelle,
   moisDeIsoDate,
   paiementsStatusLabel,
+  paiementSubscriptionIds,
   contraintePaiements,
   formatDateJJMMAAAA,
   formatHeureHHMM,
@@ -87,6 +89,17 @@ describe('Historique des paiements — helpers', () => {
     expect(paiementsStatusLabel('paid')).toBe('Payé');
     expect(paiementsStatusLabel('pending')).toBe('En attente');
     expect(paiementsStatusLabel('unknown')).toBe('unknown');
+  });
+
+  it('retrouve tous les abonnements d’un paiement groupé', () => {
+    expect(paiementSubscriptionIds({
+      subscriptionId: 'enfant-1',
+      groupSubscriptionIds: ['enfant-1', 'enfant-2'],
+    })).toEqual(['enfant-1', 'enfant-2']);
+    expect(paiementSubscriptionIds({
+      subscriptionId: 'seul',
+      groupSubscriptionIds: [],
+    })).toEqual(['seul']);
   });
 
   it('construit la contrainte or (enfants, abonnements, parents)', () => {

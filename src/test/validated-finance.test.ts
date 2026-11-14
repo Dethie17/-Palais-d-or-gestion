@@ -66,6 +66,19 @@ describe('Paiements validés : le règlement fait foi', () => {
     expect([...subscriptions]).toEqual(['regle']);
   });
 
+  it('marque TOUS les abonnements d’un paiement groupé réglé', () => {
+    const subscriptions = validatedSubscriptionIds([
+      {
+        status: 'paid',
+        subscriptionId: 'enfant-1',
+        groupSubscriptionIds: ['enfant-1', 'enfant-2'],
+        settledAt: '2026-11-12T12:29:38.000Z',
+      },
+    ]);
+
+    expect([...subscriptions]).toEqual(['enfant-1', 'enfant-2']);
+  });
+
   it('la date de comptage est celle du règlement', () => {
     const p = paid(1000, { settledAt: '2026-10-08T10:00:00.000Z', paidAt: '2026-10-07T10:00:00.000Z' });
     expect(paymentDate(p)).toBe(new Date('2026-10-08T10:00:00.000Z').getTime());
@@ -121,5 +134,36 @@ describe('Chiffre d’affaires : hors paiements non réglés', () => {
       0,
     );
     expect(ism.ismAbo).toBe(2000);
+  });
+
+  it('compte chaque abonnement d’un paiement groupé dans l’ISM', () => {
+    const settings = {
+      ismPerSubscription: 2000, ismSalesPct: 0.5, schoolPerSubscription: 2000,
+      otherSalesPct: 0.5, touchpointPct: 0, sycapayPct: 0,
+      ismSubscriptionPct: 0, paydounyaPct: 0,
+    };
+    const deuxSubs = [
+      { id: 'SUB-1', formulaId: 'F1' } as Subscription,
+      { id: 'SUB-2', formulaId: 'F1' } as Subscription,
+    ];
+    const ism = ismPeriod(
+      [{
+        amount: 54000,
+        status: 'paid',
+        createdAt: '2026-11-12T12:00:00.000Z',
+        settledAt: '2026-11-12T12:29:38.000Z',
+        subscriptionId: 'SUB-1',
+        groupSubscriptionIds: ['SUB-1', 'SUB-2'],
+        formulaId: 'F1',
+      }],
+      [],
+      deuxSubs,
+      formulas,
+      settings,
+      new Date('2026-11-01T00:00:00.000Z').getTime(),
+      0,
+    );
+    expect(ism.aboCount).toBe(2);
+    expect(ism.ismAbo).toBe(4000);
   });
 });

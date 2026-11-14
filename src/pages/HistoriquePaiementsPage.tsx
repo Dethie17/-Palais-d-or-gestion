@@ -12,6 +12,7 @@ import {
   moisDeIsoDate,
   moisLibelle,
   moisLibelleRange,
+  paiementSubscriptionIds,
   contraintePaiements,
   type HistoriqueFiltres,
   type PaiementBrut,
@@ -247,6 +248,63 @@ const HistoriquePaiementsPage = () => {
     };
   };
 
+  /**
+   * Un paiement multi-enfants couvre plusieurs abonnements : on produit une
+   * ligne par enfant, avec sa part du montant. Un paiement simple garde la
+   * mise en forme historique (mois calculés depuis l'abonnement).
+   */
+  const enrichLignes = (p: PaiementBrut): HistoLigne[] => {
+    const subIds = paiementSubscriptionIds(p);
+    if (subIds.length <= 1) return [enrich(p)];
+
+    const date = formatDateJJMMAAAA(paiementDate(p));
+    const heure = formatHeureHHMM(paiementDate(p));
+    const statut = paiementsStatusLabel(p.status);
+    const parts = subIds.map((subscriptionId, index) => {
+      const sub = subById.get(subscriptionId);
+      const childId = sub?.childId ?? p.groupChildIds[index];
+      const child = childId ? childById.get(childId) : undefined;
+      const parentUsername = child?.parentUsername ?? sub?.clientUsername ?? p.clientUsername ?? '';
+      const profile = parentProfileOf(parentUsername);
+      const formula = sub ? formulas.find((f) => f.id === sub.formulaId) : undefined;
+      const start = sub ? new Date(sub.startDate) : null;
+      const end = sub ? new Date(sub.endDate) : null;
+      const months = start && end && Number.isFinite(start.getTime()) && Number.isFinite(end.getTime())
+        ? Math.max(1, (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()))
+        : 1;
+      const expected = formula && formula.price > 0 ? formula.price * months : 0;
+      return {
+        nomParent: profile?.lastName ?? '',
+        prenomParent: profile?.firstName ?? '',
+        telephone: formatParentPhone(profile?.phone ?? parentUsername) || '—',
+        enfantNom: child?.lastName ?? '',
+        enfantPrenom: child?.firstName ?? '',
+        classe: child?.className ?? '—',
+        mois: sub ? moisLibelleRange(sub.startDate, sub.endDate) : '—',
+        expected,
+      };
+    });
+
+    const totalExpected = parts.reduce((sum, part) => sum + part.expected, 0);
+    const useExpected = parts.every((part) => part.expected > 0) && totalExpected === p.amount;
+    const base = Math.floor(p.amount / parts.length);
+    const remainder = p.amount - base * parts.length;
+
+    return parts.map((part, index) => ({
+      nomParent: part.nomParent,
+      prenomParent: part.prenomParent,
+      telephone: part.telephone,
+      montant: useExpected ? part.expected : base + (index < remainder ? 1 : 0),
+      enfantNom: part.enfantNom,
+      enfantPrenom: part.enfantPrenom,
+      classe: part.classe,
+      mois: part.mois,
+      date,
+      heure,
+      statut,
+    }));
+  };
+
   const genereSousTitre = (): string => {
     const parts: string[] = [];
     if (applied.du) parts.push(`À partir du ${formatDateJJMMAAAA(`${applied.du}T00:00:00Z`)}`);
@@ -261,7 +319,7 @@ const HistoriquePaiementsPage = () => {
     setError('');
     try {
       const all = await fetchTousPaiements({ filtres: applied, conn, constraint: contrainteActuelle() });
-      const lignes = all.map(enrich);
+      const lignes = all.flatMap(enrichLignes);
       if (lignes.length === 0) {
         setError('Aucun paiement à exporter pour ces critères.');
         return;
@@ -339,7 +397,6 @@ const HistoriquePaiementsPage = () => {
   };
 
   const totalPages = Math.max(1, Math.ceil(total / HISTO_PAGE_SIZE));
-  const startIndex = (page - 1) * HISTO_PAGE_SIZE;
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
@@ -498,10 +555,9 @@ const HistoriquePaiementsPage = () => {
               </tr>
             </thead>
             <tbody>
-              {(rows ?? []).map((p) => {
-                const l = enrich(p);
-                return (
-                  <tr key={p.id} data-testid="paiement-row" className="border-t border-slate-100 hover:bg-slate-50/60">
+              {(rows ?? []).flatMap((p) => (
+                enrichLignes(p).map((l, index) => (
+                  <tr key={`${p.id}-${index}`} data-testid="paiement-row" className="border-t border-slate-100 hover:bg-slate-50/60">
                     <td className="p-3 font-semibold text-slate-800">{l.nomParent || '—'}</td>
                     <td className="p-3 text-slate-700">{l.prenomParent || '—'}</td>
                     <td className="p-3 text-xs whitespace-nowrap tabular-nums text-slate-600">{l.telephone}</td>
@@ -520,8 +576,8 @@ const HistoriquePaiementsPage = () => {
                       </span>
                     </td>
                   </tr>
-                );
-              })}
+                ))
+              ))}
               {(rows ?? []).length === 0 && !loading && !error && (
                 <tr><td colSpan={10} className="p-8 text-center text-slate-400">Aucun paiement pour ces critères.</td></tr>
               )}
@@ -534,8 +590,7 @@ const HistoriquePaiementsPage = () => {
         <PaiementsPagination
           page={page}
           totalPages={totalPages}
-          startIndex={startIndex}
-          rowCount={rows?.length ?? 0}
+          rowCount={(rows ?? []).reduce((sum, p) => sum + enrichLignes(p).length, 0)}
           total={total}
           onPage={setPage}
           loading={loading}
@@ -547,10 +602,9 @@ const HistoriquePaiementsPage = () => {
         {!loading && (rows ?? []).length === 0 && !error && (
           <p className="bg-white rounded-2xl border p-6 text-center text-slate-400 text-sm">Aucun paiement pour ces critères.</p>
         )}
-        {(rows ?? []).map((p) => {
-          const l = enrich(p);
-          return (
-            <div key={p.id} className="bg-white rounded-2xl border p-4 shadow-sm space-y-1.5" data-testid="paiement-card">
+        {(rows ?? []).flatMap((p) => (
+          enrichLignes(p).map((l, index) => (
+            <div key={`${p.id}-${index}`} className="bg-white rounded-2xl border p-4 shadow-sm space-y-1.5" data-testid="paiement-card">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-black text-slate-900 text-sm">{[l.nomParent, l.prenomParent].filter(Boolean).join(' ') || 'Parent'}</p>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black whitespace-nowrap ${p.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : p.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
@@ -570,13 +624,12 @@ const HistoriquePaiementsPage = () => {
                 <span>Le {l.date} à {l.heure}</span>
               </p>
             </div>
-          );
-        })}
+          ))
+        ))}
         <PaiementsPagination
           page={page}
           totalPages={totalPages}
-          startIndex={startIndex}
-          rowCount={rows?.length ?? 0}
+          rowCount={(rows ?? []).reduce((sum, p) => sum + enrichLignes(p).length, 0)}
           total={total}
           onPage={setPage}
           loading={loading}
@@ -586,15 +639,17 @@ const HistoriquePaiementsPage = () => {
   );
 };
 
-function PaiementsPagination({ page, totalPages, startIndex, rowCount, total, onPage, loading }: {
-  page: number; totalPages: number; startIndex: number; rowCount: number; total: number;
+function PaiementsPagination({ page, totalPages, rowCount, total, onPage, loading }: {
+  page: number; totalPages: number; rowCount: number; total: number;
   onPage: (n: number) => void; loading: boolean;
 }) {
   return (
     <div data-testid="paiements-pagination" className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 bg-slate-50/60">
       <p className="text-xs text-slate-500">
-        {total === 0 ? 'Aucun résultat' : `${startIndex + 1}–${startIndex + rowCount} sur ${total}`}
-        {totalPages > 1 ? ` — page ${page} / ${totalPages}` : ''}
+        {total === 0
+          ? 'Aucun résultat'
+          : `${total} paiement${total > 1 ? 's' : ''}${rowCount > total ? ` · ${rowCount} lignes` : ''}`}
+        {totalPages > 1 ? ` · page ${page} / ${totalPages}` : ''}
       </p>
       <div className="flex items-center gap-2">
         <button

@@ -1,6 +1,6 @@
 import type { FinanceSettings, Formula, Order, Subscription } from '@/types/menu';
 import { FORMULA_CYCLE } from './schoolCycles';
-import { isCountedPayment, paymentDate, type AccountablePayment } from './validatedPayments';
+import { isCountedPayment, paymentDate, paymentSubscriptionIds, type AccountablePayment } from './validatedPayments';
 
 /**
  * Comptabilité ISM 2026 (règle DG) :
@@ -9,18 +9,30 @@ import { isCountedPayment, paymentDate, type AccountablePayment } from './valida
  * Solde mensuel à verser à l'ISM = part abos + part ventes.
  */
 
+export function resolvePaymentFormulaIds(p: AccountablePayment, subs: Subscription[]): string[] {
+  const ids = paymentSubscriptionIds(p);
+  const fromSubs = ids
+    .map((id) => subs.find((s) => s.id === id)?.formulaId)
+    .filter((id): id is string => Boolean(id));
+  if (fromSubs.length > 0) return fromSubs;
+  return p.formulaId ? [p.formulaId] : [];
+}
+
 export function resolvePaymentFormulaId(p: AccountablePayment, subs: Subscription[]): string | undefined {
-  return p.formulaId ?? subs.find((s) => s.id === p.subscriptionId)?.formulaId;
+  return resolvePaymentFormulaIds(p, subs)[0];
 }
 
 /** Un paiement compte comme abonnement (tout sauf ticket connu). */
 export function isAboPayment(p: AccountablePayment, subs: Subscription[], formulas: Formula[]): boolean {
-  const fid = resolvePaymentFormulaId(p, subs);
+  const fids = resolvePaymentFormulaIds(p, subs);
   // Le ticket du jour est une vente à l'unité (pas un abonnement) : il rentre
   // dans le CA « ventes » (ISM prend son % dessus), jamais dans les 2 000 FCFA/abo.
-  if (fid === 'TICKET-JOUR') return false;
-  const f = formulas.find((x) => x.id === fid);
-  return f ? f.kind !== 'ticket' : true;
+  if (fids.length === 0) return true;
+  return fids.some((fid) => {
+    if (fid === 'TICKET-JOUR') return false;
+    const f = formulas.find((x) => x.id === fid);
+    return f ? f.kind !== 'ticket' : true;
+  });
 }
 
 export interface IsmSplit {
@@ -57,8 +69,13 @@ export function ismPeriod(
     return isCountedPayment(p, payments) && t >= sinceMs && t < untilMs && isAboPayment(p, subscriptions, formulas);
   });
   const split: IsmSplit = { primaire: 0, lycee: 0, hebdo: 0, autres: 0 };
-  for (const p of paidAbo) {
-    const fid = resolvePaymentFormulaId(p, subscriptions);
+  // Un paiement groupé couvre plusieurs abonnements : chaque enfant compte
+  // pour sa propre part ISM, pas une seule fois pour la transaction.
+  const aboFormulaIds = paidAbo.flatMap((p) => {
+    const fids = resolvePaymentFormulaIds(p, subscriptions);
+    return fids.length > 0 ? fids : [undefined];
+  });
+  for (const fid of aboFormulaIds) {
     if (fid === 'F1') split.hebdo += 1;
     else if (fid && FORMULA_CYCLE[fid] === 'lycee') split.lycee += 1;
     else if (fid && FORMULA_CYCLE[fid] === 'primaire') split.primaire += 1;
@@ -69,9 +86,10 @@ export function ismPeriod(
     : orders
         .filter((o) => o.status === 'completed' && o.createdAt.getTime() >= sinceMs && o.createdAt.getTime() < untilMs)
         .reduce((s, o) => s + o.total, 0);
-  const ismAbo = paidAbo.length * settings.ismPerSubscription;
+  const aboCount = aboFormulaIds.length;
+  const ismAbo = aboCount * settings.ismPerSubscription;
   const ismSales = Math.round((salesGross * settings.ismSalesPct) / 100);
-  return { aboCount: paidAbo.length, split, ismAbo, salesGross, ismSales, total: ismAbo + ismSales };
+  return { aboCount, split, ismAbo, salesGross, ismSales, total: ismAbo + ismSales };
 }
 
 export function monthStart(d = new Date()): Date {

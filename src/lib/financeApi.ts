@@ -21,6 +21,7 @@ export interface ValidatedPaymentRow {
   method: string | null;
   status: string | null;
   subscriptionId: string | null;
+  groupSubscriptionIds: string[] | null;
   clientUsername: string | null;
   formulaId: string | null;
   createdAt: string | null;

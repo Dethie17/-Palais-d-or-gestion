@@ -152,6 +152,8 @@ export interface ORestoPayment {
   settledAt?: string;
   /** Groupes de paiement multi-enfants : abonnements couverts par une seule transaction. */
   groupSubscriptionIds?: string[];
+  /** Enfants bénéficiaires du groupe (même ordre que `groupSubscriptionIds`). */
+  groupChildIds?: string[];
 }
 
 export interface MealValidation {

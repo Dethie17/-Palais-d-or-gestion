@@ -91,8 +91,20 @@ $$;
 
 ALTER TABLE public.oresto_payment_groups ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS oresto_payment_groups_parent_insert ON public.oresto_payment_groups;
+DROP POLICY IF EXISTS oresto_payment_groups_parent_select ON public.oresto_payment_groups;
+DROP POLICY IF EXISTS oresto_payment_groups_parent_update ON public.oresto_payment_groups;
+
+-- Un parent ne voit et ne modifie que ses propres groupes ; le staff voit tout.
+CREATE POLICY oresto_payment_groups_parent_select ON public.oresto_payment_groups
+  FOR SELECT TO authenticated
+  USING (public.is_staff() OR parent_username = public.current_app_username());
 CREATE POLICY oresto_payment_groups_parent_insert ON public.oresto_payment_groups
-  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  FOR INSERT TO authenticated
+  WITH CHECK (public.is_staff() OR parent_username = public.current_app_username());
+CREATE POLICY oresto_payment_groups_parent_update ON public.oresto_payment_groups
+  FOR UPDATE TO authenticated
+  USING (public.is_staff() OR parent_username = public.current_app_username())
+  WITH CHECK (public.is_staff() OR parent_username = public.current_app_username());
 GRANT SELECT, INSERT, UPDATE ON public.oresto_payment_groups TO authenticated;
 
 REVOKE ALL ON FUNCTION public.oresto_settle_payment_group(TEXT, TEXT, TEXT, TEXT) FROM PUBLIC;

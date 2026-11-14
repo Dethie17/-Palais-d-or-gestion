@@ -784,7 +784,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         if (!sessionData.session) return;
         const parentSession = sessionData.session.user.app_metadata?.oresto === 'parent';
         const ignored = { data: null, error: null } as const;
-        const [estRes, formRes, subRes, payRes, valRes, childRes, walletRes, txRes, setRes, expRes, weekRes, profRes, reclRes, reclMsgRes, kioskRes] = await Promise.all(parentSession ? [
+        const [estRes, formRes, subRes, payRes, valRes, childRes, walletRes, txRes, setRes, expRes, weekRes, profRes, reclRes, reclMsgRes, kioskRes, groupRes] = await Promise.all(parentSession ? [
           Promise.resolve(ignored),
           Promise.resolve(ignored),
           supabase.from('subscriptions').select('*').order('created_at', { ascending: false }).limit(500),
@@ -798,6 +798,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           supabase.from('reclamations').select('*').order('updated_at', { ascending: false }).limit(500),
           supabase.from('reclamation_messages').select('*').order('created_at', { ascending: true }).limit(2000),
           supabase.from('kiosk_orders').select('*').order('created_at', { ascending: false }).limit(300),
+          supabase.from('oresto_payment_groups').select('*').limit(2000),
         ] : [
           supabase.from('establishments').select('*'),
           supabase.from('formulas').select('*'),
@@ -814,6 +815,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           supabase.from('reclamations').select('*').order('updated_at', { ascending: false }).limit(500),
           supabase.from('reclamation_messages').select('*').order('created_at', { ascending: true }).limit(2000),
           supabase.from('kiosk_orders').select('*').order('created_at', { ascending: false }).limit(300),
+          supabase.from('oresto_payment_groups').select('*').limit(2000),
         ]);
 
         // Le schéma « réclamations » peut ne pas être installé (script SQL non
@@ -863,18 +865,39 @@ export function RestoProvider({ children }: { children: ReactNode }) {
             })),
           );
         }
+        // Un paiement groupé porte plusieurs abonnements dans une seule
+        // transaction : la table de groupes est la seule source de cette
+        // liste. Sans elle, seul le premier enfant resterait marqué payé.
+        const groupByReference = new Map<string, { subscriptionIds: string[]; childIds: string[] }>();
+        const groupRows = (groupRes.data ?? []) as Array<{
+          payment_reference?: string | null;
+          subscription_ids?: string[] | null;
+          child_ids?: string[] | null;
+        }>;
+        groupRows.forEach((row) => {
+          if (!row.payment_reference) return;
+          groupByReference.set(row.payment_reference, {
+            subscriptionIds: Array.isArray(row.subscription_ids) ? row.subscription_ids : [],
+            childIds: Array.isArray(row.child_ids) ? row.child_ids : [],
+          });
+        });
         if (payRes.data && payRes.data.length > 0) {
           setPayments(
-            payRes.data.map((r) => ({
-              id: r.id, subscriptionId: r.subscription_id ?? undefined,
-              clientUsername: r.client_username ?? undefined, formulaId: r.formula_id ?? undefined,
-              amount: Number(r.amount), method: r.method, status: r.status,
-              reference: r.reference, createdAt: r.created_at,
-              // Règlement : c'est l'horodatage serveur qui fait foi en
-              // comptabilité (v_paiements_valides côté base).
-              paidAt: r.paid_at ?? undefined,
-              settledAt: r.settled_at ?? undefined,
-            })),
+            payRes.data.map((r) => {
+              const group = groupByReference.get(r.reference ?? '');
+              return {
+                id: r.id, subscriptionId: r.subscription_id ?? undefined,
+                clientUsername: r.client_username ?? undefined, formulaId: r.formula_id ?? undefined,
+                amount: Number(r.amount), method: r.method, status: r.status,
+                reference: r.reference, createdAt: r.created_at,
+                // Règlement : c'est l'horodatage serveur qui fait foi en
+                // comptabilité (v_paiements_valides côté base).
+                paidAt: r.paid_at ?? undefined,
+                settledAt: r.settled_at ?? undefined,
+                groupSubscriptionIds: group?.subscriptionIds.length ? group.subscriptionIds : undefined,
+                groupChildIds: group?.childIds.length ? group.childIds : undefined,
+              };
+            }),
           );
         }
         if (valRes.data && valRes.data.length > 0) {
@@ -1531,9 +1554,12 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       // jamais à partir d'une entrée libre du parent ; le débit réel est
       // validé au retour par le pont SycaPay.
       const price = amountOverride && Number.isFinite(amountOverride) && amountOverride > 0 ? amountOverride : priceNorm;
-      // Déduplication : réutiliser le pending existant même méthode
+      // Déduplication : réutiliser le pending existant même méthode et même
+      // montant. Un montant différent (ex. paiement groupé recalculé) doit
+      // créer une nouvelle transaction, pas recycler une ancienne référence.
       const existingPending = payments.find(
-        (p) => p.subscriptionId === subscriptionId && p.status === 'pending' && p.method === method,
+        (p) => p.subscriptionId === subscriptionId && p.status === 'pending' && p.method === method
+          && p.amount === price,
       );
       if (existingPending) {
         if (isMobileMethod(method)) {

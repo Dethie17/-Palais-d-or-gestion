@@ -45,6 +45,7 @@ export interface AccountablePayment {
   status: string;
   createdAt: string;
   subscriptionId?: string | null;
+  groupSubscriptionIds?: string[] | null;
   formulaId?: string | null;
   paidAt?: string | null;
   settledAt?: string | null;
@@ -71,16 +72,24 @@ export function isValidatedPayment(payment: SettlementAwarePayment): boolean {
 }
 
 /** Identifiants des abonnements liés à un paiement effectivement réglé. */
+export function paymentSubscriptionIds(
+  payment: Pick<AccountablePayment, 'subscriptionId' | 'groupSubscriptionIds'>,
+): string[] {
+  const ids = payment.groupSubscriptionIds?.length
+    ? payment.groupSubscriptionIds
+    : payment.subscriptionId
+      ? [payment.subscriptionId]
+      : [];
+  return ids.filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
 export function validatedSubscriptionIds(
-  payments: readonly Pick<ORestoPayment, 'status' | 'settledAt' | 'subscriptionId'>[],
+  payments: readonly Pick<ORestoPayment, 'status' | 'settledAt' | 'subscriptionId' | 'groupSubscriptionIds'>[],
 ): Set<string> {
   return new Set(
     payments
-      .flatMap((payment) => (
-        payment.subscriptionId && isValidatedPayment(payment)
-          ? [payment.subscriptionId]
-          : []
-      )),
+      .filter(isValidatedPayment)
+      .flatMap(paymentSubscriptionIds),
   );
 }
 

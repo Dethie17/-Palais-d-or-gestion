@@ -87,6 +87,9 @@ async function authHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
+/** Timeout des appels à la passerelle : ni attente infinie, ni socket hang up. */
+const SYCAPAY_TIMEOUT_MS = 30_000;
+
 /** Erreur HTTP : on tente de lire le message métier renvoyé par la fonction. */
 async function postJson<T extends ApiEnvelope>(path: string, body: unknown): Promise<T> {
   let response: Response;
@@ -95,9 +98,16 @@ async function postJson<T extends ApiEnvelope>(path: string, body: unknown): Pro
       method: 'POST',
       headers: await authHeaders(),
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(SYCAPAY_TIMEOUT_MS),
     });
-  } catch {
-    throw new Error('Passerelle de paiement injoignable. Vérifiez votre connexion et réessayez.');
+  } catch (err) {
+    // Une coupure réseau pendant l'appel ne doit jamais remonter en « socket
+    // hang up » brut : on la traduit en message d'action pour le parent.
+    throw new Error(
+      err instanceof Error && err.name === 'TimeoutError'
+        ? 'La passerelle de paiement met trop de temps à répondre. Réessayez.'
+        : 'Passerelle de paiement injoignable. Vérifiez votre connexion et réessayez.',
+    );
   }
 
   let payload: ApiEnvelope = {};
@@ -154,19 +164,26 @@ export const sycaPayProvider: PaymentProvider = {
 
   async startPayment(input: StartPaymentInput): Promise<StartPaymentResult> {
     const codeService = SERVICE_BY_METHOD[input.method];
-    const payload = await postJson('/api/sycapay/initiate', {
-      reference: input.reference,
-      amount: input.amount,
-      codeService,
-      numeroBeneficiaire: input.phone,
-      nomMarchand: 'O RESTO',
-      // Obligatoires sur SN_PM_WAVE et SN_PM_OM : l'opérateur y ramène le
-      // client après validation. Le retour n'est PAS un reçu — c'est un
-      // simple écran d'attente.
-      urlSuccess: returnUrl('/ok', input.reference),
-      urlFailed: returnUrl('/echec', input.reference),
-      metadata: { ref: input.reference, amount: String(input.amount) },
-    });
+    let payload: ApiEnvelope;
+    try {
+      payload = await postJson('/api/sycapay/initiate', {
+        reference: input.reference,
+        amount: input.amount,
+        codeService,
+        numeroBeneficiaire: input.phone,
+        nomMarchand: 'O RESTO',
+        // Obligatoires sur SN_PM_WAVE et SN_PM_OM : l'opérateur y ramène le
+        // client après validation. Le retour n'est PAS un reçu — c'est un
+        // simple écran d'attente.
+        urlSuccess: returnUrl('/ok', input.reference),
+        urlFailed: returnUrl('/echec', input.reference),
+        metadata: { ref: input.reference, amount: String(input.amount) },
+      });
+    } catch (err) {
+      // L'initiation a échoué côté réseau : le parent doit pouvoir réessayer,
+      // pas voir une erreur technique non attrapée.
+      return { ok: false, error: err instanceof Error ? err.message : 'Impossible d’initier le paiement.' };
+    }
 
     const challenge = input.method === 'card'
       ? { kind: 'hosted' as const, url: payload.checkoutUrl ?? '', label: 'Carte bancaire' }
@@ -184,15 +201,20 @@ export const sycaPayProvider: PaymentProvider = {
   },
 
   async startCardCheckout(input: StartPaymentInput): Promise<StartPaymentResult> {
-    const payload = await postJson('/api/sycapay/card', {
-      reference: input.reference,
-      amount: input.amount,
-      codeService: SERVICE_BY_METHOD.card,
-      urlSuccess: returnUrl('/ok', input.reference),
-      urlFailed: returnUrl('/echec', input.reference),
-      payerName: input.payerName,
-      metadata: { ref: input.reference, amount: String(input.amount) },
-    });
+    let payload: ApiEnvelope;
+    try {
+      payload = await postJson('/api/sycapay/card', {
+        reference: input.reference,
+        amount: input.amount,
+        codeService: SERVICE_BY_METHOD.card,
+        urlSuccess: returnUrl('/ok', input.reference),
+        urlFailed: returnUrl('/echec', input.reference),
+        payerName: input.payerName,
+        metadata: { ref: input.reference, amount: String(input.amount) },
+      });
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Impossible d’initier le paiement.' };
+    }
     if (!payload.checkoutUrl) {
       return { ok: false, error: 'SycaPay n’a pas renvoyé de lien de paiement.' };
     }
@@ -203,7 +225,24 @@ export const sycaPayProvider: PaymentProvider = {
   },
 
   async checkStatus(reference: string): Promise<PaymentStatus> {
-    const payload = await postJson('/api/sycapay/status', { reference });
+    let payload: ApiEnvelope;
+    try {
+      payload = await postJson('/api/sycapay/status', { reference });
+    } catch (err) {
+      // L'écran d'attente ne doit jamais planter sur une coupure réseau : il
+      // garde le paiement « pending » et proposera une nouvelle vérification.
+      return {
+        status: 'pending',
+        reference,
+        outcome: null,
+        addedMeals: null,
+        transactionId: null,
+        errorCode: null,
+        error: err instanceof Error ? err.message : 'Passerelle injoignable.',
+        expired: false,
+        retryable: true,
+      };
+    }
     const status = (payload.status ?? 'pending') as PaymentStatus['status'];
     return {
       status,
