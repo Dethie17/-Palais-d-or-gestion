@@ -142,10 +142,7 @@ async function handleHealth(res: ServerResponse) {
   });
 }
 
-async function handleProbe(req: IncomingMessage, res: ServerResponse) {
-  const caller = await requireRole(req, res, ['client', 'personnel', 'gestionnaire', 'admin']);
-  if (!caller) return;
-
+async function handleProbe(_req: IncomingMessage, res: ServerResponse) {
   if (!isSycaPayConfigured()) {
     return sendError(res, 503, 'Passerelle SycaPay non configurée sur ce déploiement.');
   }
@@ -159,12 +156,12 @@ async function handleProbe(req: IncomingMessage, res: ServerResponse) {
   }
 
   try {
-    const response = await call(sycaPayConfig, {
+    await call(sycaPayConfig, {
       path: '/balance',
       body: { loginApi: sycaPayConfig.loginApi, mdpApi: sycaPayConfig.mdpApi },
       timeoutMs: 15000,
     });
-    return sendJson(res, 200, { ok: true, probe: 'success', response });
+    return sendJson(res, 200, { ok: true, probe: 'success' });
   } catch (err) {
     const isTransport = err instanceof SycaPayTransportError;
     const e = err as NodeJS.ErrnoException;
