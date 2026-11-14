@@ -238,8 +238,31 @@ export function call<T extends SycaPayEnvelope = SycaPayEnvelope>(
       return;
     }
 
-    req.on('timeout', () => req.destroy(new SycaPayTransportError(`Délai dépassé sur ${path}`)));
-    req.on('error', (err) => reject(asTransportError(err)));
+    const outbound: { remoteAddress?: string; remotePort?: number; localAddress?: string; localPort?: number } = {};
+    req.on('socket', (socket) => {
+      outbound.remoteAddress = socket.remoteAddress;
+      outbound.remotePort = socket.remotePort;
+      outbound.localAddress = socket.localAddress;
+      outbound.localPort = socket.localPort;
+    });
+    req.on('timeout', () => {
+      console.error('[sycapay] timeout', { path, timeoutMs, ...outbound });
+      req.destroy(new SycaPayTransportError(`Délai dépassé sur ${path}`));
+    });
+    req.on('error', (err) => {
+      const e = err as NodeJS.ErrnoException;
+      console.error('[sycapay] transport error', {
+        path,
+        code: e.code,
+        errno: e.errno,
+        syscall: e.syscall,
+    address: (e as { address?: string }).address,
+    port: (e as { port?: number }).port,
+        ...outbound,
+        message: e.message,
+      });
+      reject(asTransportError(err));
+    });
     req.write(payload);
     req.end();
   });

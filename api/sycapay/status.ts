@@ -142,10 +142,52 @@ async function handleHealth(res: ServerResponse) {
   });
 }
 
+async function handleProbe(req: IncomingMessage, res: ServerResponse) {
+  const caller = await requireRole(req, res, ['client', 'personnel', 'gestionnaire', 'admin']);
+  if (!caller) return;
+
+  if (!isSycaPayConfigured()) {
+    return sendError(res, 503, 'Passerelle SycaPay non configurée sur ce déploiement.');
+  }
+
+  let sycaPayConfig;
+  try {
+    sycaPayConfig = readConfig();
+  } catch (err) {
+    if (err instanceof SycaPayConfigError) return sendError(res, 500, err.message);
+    throw err;
+  }
+
+  try {
+    const response = await call(sycaPayConfig, {
+      path: '/balance',
+      body: { loginApi: sycaPayConfig.loginApi, mdpApi: sycaPayConfig.mdpApi },
+      timeoutMs: 15000,
+    });
+    return sendJson(res, 200, { ok: true, probe: 'success', response });
+  } catch (err) {
+    const isTransport = err instanceof SycaPayTransportError;
+    const e = err as NodeJS.ErrnoException;
+    return sendJson(res, 502, {
+      ok: false,
+      probe: 'failed',
+      error: isTransport ? err.message : (err as Error).message,
+      code: e.code ?? null,
+      syscall: e.syscall ?? null,
+      address: (e as { address?: string }).address ?? null,
+      port: (e as { port?: number }).port ?? null,
+    });
+  }
+}
+
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   if (req.method === 'OPTIONS') return handlePreflight(req, res);
   // GET = sonde publique ; POST = rattrapage d'une transaction.
-  if (req.method === 'GET') return handleHealth(res);
+  if (req.method === 'GET') {
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    if (url.searchParams.get('probe') === '1') return handleProbe(req, res);
+    return handleHealth(res);
+  }
   if (req.method !== 'POST') return methodNotAllowed(req, res, ['GET', 'POST']);
 
   // statusV2 ne se contente pas de lire : il déclenche le même règlement que
