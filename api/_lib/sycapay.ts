@@ -256,12 +256,14 @@ export function call<T extends SycaPayEnvelope = SycaPayEnvelope>(
         code: e.code,
         errno: e.errno,
         syscall: e.syscall,
-    address: (e as { address?: string }).address,
-    port: (e as { port?: number }).port,
+        address: e.address,
+        port: e.port,
         ...outbound,
         message: e.message,
       });
-      reject(asTransportError(err));
+      const transportErr = asTransportError(err);
+      (transportErr as unknown as { outbound?: typeof outbound }).outbound = { ...outbound };
+      reject(transportErr);
     });
     req.write(payload);
     req.end();

@@ -173,6 +173,7 @@ async function handleProbe(_req: IncomingMessage, res: ServerResponse) {
       syscall: e.syscall ?? null,
       address: (e as { address?: string }).address ?? null,
       port: (e as { port?: number }).port ?? null,
+      outbound: (err as { outbound?: unknown }).outbound ?? null,
     });
   }
 }
