@@ -256,8 +256,8 @@ export function call<T extends SycaPayEnvelope = SycaPayEnvelope>(
         code: e.code,
         errno: e.errno,
         syscall: e.syscall,
-        address: e.address,
-        port: e.port,
+        address: (e as { address?: string }).address,
+        port: (e as { port?: number }).port,
         ...outbound,
         message: e.message,
       });
