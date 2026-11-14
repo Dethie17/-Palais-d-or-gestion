@@ -174,7 +174,7 @@ const SettingsPage = ({ onNavigate }: SettingsPageProps) => {
     }
 
     if (isSupabaseConfigured) {
-      const done = await postAdminAction('/api/auth/set-password', {
+      const done = await postAdminAction('/api/auth/create-user?action=set-password', {
         username: key,
         password: resetPassword,
       });

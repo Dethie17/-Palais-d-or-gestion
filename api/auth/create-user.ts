@@ -2,6 +2,8 @@
  * POST /api/auth/create-user
  *
  * Crée un compte de personnel à partir de l'écran Paramètres → Comptes.
+ * Gère aussi la réinitialisation de mot de passe (`?action=set-password`)
+ * pour rester sous la limite de fonctions serverless du plan Vercel Hobby.
  *
  * Pourquoi une fonction serveur et pas un `insert` depuis le navigateur :
  * créer un compte Supabase Auth exige la clé de service, qui n'a rien à faire
@@ -11,9 +13,12 @@
  * Corps : { "username": "awa", "password": "…", "role": "personnel" }
  * Pour un parent : { username, password, role: "client", firstName, lastName, phone }
  * — l'identifiant conseillé est le numéro de téléphone du parent.
+ * Réinitialisation : POST /api/auth/create-user?action=set-password
+ * avec { "username": "awa", "password": "…" }
  *
- * Réservé à la Direction (admin) et au back-office MIAM'S Dangote
+ * Création réservée à la Direction (admin) et au back-office MIAM'S Dangote
  * (superviseur-dangote, limité aux rôles et à l'entité de son périmètre).
+ * Réinitialisation réservée aux rôles autorisés à supprimer un compte.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -21,7 +26,7 @@ import { adminClient } from '../_lib/supabaseAdmin.js';
 import { normalizeUsername, isValidUsername, STAFF_SIGNUP_FLAG } from '../_lib/username.js';
 import { personalQrToken } from '../_lib/qrToken.js';
 import { insertUserProfile } from '../_lib/profile.js';
-import { requireRole, CREATE_USER_ROLES } from '../_lib/session.js';
+import { requireRole, CREATE_USER_ROLES, DELETE_USER_ROLES } from '../_lib/session.js';
 import {
   handlePreflight,
   methodNotAllowed,
@@ -51,7 +56,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   if (req.method === 'OPTIONS') return handlePreflight(req, res);
   if (req.method !== 'POST') return methodNotAllowed(req, res, ['POST']);
 
-  const caller = await requireRole(req, res, CREATE_USER_ROLES);
+  // Ancienne route /api/auth/set-password : conservée pour les clients déjà
+  // chargés et pour le serveur Render qui mappe encore cette URL ici.
+  const requestUrl = req.url ?? '';
+  const pathname = requestUrl.split('?')[0];
+  const query = new URLSearchParams(requestUrl.split('?')[1] ?? '');
+  const isPasswordReset = query.get('action') === 'set-password' || pathname === '/api/auth/set-password';
+
+  const caller = await requireRole(req, res, isPasswordReset ? DELETE_USER_ROLES : CREATE_USER_ROLES);
   if (!caller) return;
 
   let body: CreateBody;
@@ -59,6 +71,36 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     body = await readJson<CreateBody>(req);
   } catch {
     return sendError(res, 400, 'Corps JSON invalide.');
+  }
+
+  if (isPasswordReset) {
+    const resetUsername = typeof body.username === 'string' ? body.username.trim().toLowerCase() : '';
+    const resetPassword = typeof body.password === 'string' ? body.password : '';
+
+    if (!resetUsername) return sendError(res, 400, 'Nom d’utilisateur obligatoire.');
+    if (resetPassword.length < 8) return sendError(res, 400, 'Mot de passe de 8 caractères minimum.');
+
+    const db = adminClient();
+
+    const { data: profile, error: lookupError } = await db
+      .from('users')
+      .select('auth_id')
+      .eq('username', resetUsername)
+      .maybeSingle();
+
+    if (lookupError || !profile) {
+      return sendError(res, 404, 'Compte introuvable.');
+    }
+
+    const authId = (profile as { auth_id?: string | null }).auth_id;
+    if (!authId) {
+      return sendError(res, 409, 'Ce compte n’est pas encore rattaché à un compte d’authentification.');
+    }
+
+    const { error } = await db.auth.admin.updateUserById(authId, { password: resetPassword });
+    if (error) return sendError(res, 500, 'Réinitialisation impossible.');
+
+    return sendJson(res, 200, { ok: true, username: resetUsername });
   }
 
   const username = normalizeUsername(typeof body.username === 'string' ? body.username : '');

@@ -3,6 +3,7 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/auth/set-password", "destination": "/api/auth/create-user?action=set-password" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [

@@ -26,7 +26,7 @@ const apiRoutes: Record<string, string> = {
   '/api/auth/delete-user': 'api/auth/delete-user.ts',
   '/api/auth/login-parent': 'api/auth/login-parent.ts',
   '/api/auth/login-staff': 'api/auth/login-staff.ts',
-  '/api/auth/set-password': 'api/auth/set-password.ts',
+  '/api/auth/set-password': 'api/auth/create-user.ts',
   '/api/dangote': 'api/dangote.ts',
   '/api/finance/settle-payment': 'api/finance/settle-payment.ts',
   '/api/finance/validated': 'api/finance/validated.ts',
