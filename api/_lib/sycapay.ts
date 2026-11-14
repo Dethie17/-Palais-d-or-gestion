@@ -251,13 +251,20 @@ export function call<T extends SycaPayEnvelope = SycaPayEnvelope>(
     });
     req.on('error', (err) => {
       const e = err as NodeJS.ErrnoException;
+      const sock = (req as { socket?: { remoteAddress?: string; remotePort?: number; localAddress?: string; localPort?: number } }).socket;
+      if (sock) {
+        outbound.remoteAddress = outbound.remoteAddress ?? sock.remoteAddress;
+        outbound.remotePort = outbound.remotePort ?? sock.remotePort;
+        outbound.localAddress = outbound.localAddress ?? sock.localAddress;
+        outbound.localPort = outbound.localPort ?? sock.localPort;
+      }
       console.error('[sycapay] transport error', {
         path,
         code: e.code,
         errno: e.errno,
         syscall: e.syscall,
-        address: (e as { address?: string }).address,
-        port: (e as { port?: number }).port,
+        address: e.address,
+        port: e.port,
         ...outbound,
         message: e.message,
       });

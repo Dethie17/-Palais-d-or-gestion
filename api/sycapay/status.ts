@@ -155,13 +155,26 @@ async function handleProbe(_req: IncomingMessage, res: ServerResponse) {
     throw err;
   }
 
+  // Découverte de l'IP sortante réelle du conteneur Render, pour savoir
+  // quelle adresse envoyer à SycaPay pour l'allowlist.
+  let outboundIp: string | null = null;
+  try {
+    const ipRes = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(5000) });
+    if (ipRes.ok) {
+      const ipData = (await ipRes.json()) as { ip?: string };
+      outboundIp = ipData.ip ?? null;
+    }
+  } catch {
+    outboundIp = null;
+  }
+
   try {
     await call(sycaPayConfig, {
       path: '/balance',
       body: { loginApi: sycaPayConfig.loginApi, mdpApi: sycaPayConfig.mdpApi },
       timeoutMs: 15000,
     });
-    return sendJson(res, 200, { ok: true, probe: 'success' });
+    return sendJson(res, 200, { ok: true, probe: 'success', outboundIp });
   } catch (err) {
     const isTransport = err instanceof SycaPayTransportError;
     const e = err as NodeJS.ErrnoException;
@@ -174,6 +187,7 @@ async function handleProbe(_req: IncomingMessage, res: ServerResponse) {
       address: (e as { address?: string }).address ?? null,
       port: (e as { port?: number }).port ?? null,
       outbound: (err as { outbound?: unknown }).outbound ?? null,
+      outboundIp,
     });
   }
 }
