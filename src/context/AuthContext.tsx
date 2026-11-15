@@ -120,6 +120,7 @@ interface AuthContextType {
   loginParent: (phone: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
+  changeUsername: (newUsername: string) => Promise<boolean>;
   isAuthenticated: boolean;
   loading: boolean;
 }
@@ -830,6 +831,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return false;
   };
 
+  const changeUsername = async (newUsername: string): Promise<boolean> => {
+    if (!user || user.role !== 'admin') return false;
+    const trimmed = newUsername.trim().toLowerCase();
+    if (!trimmed || trimmed.length < 3) return false;
+    if (trimmed === user.username.trim().toLowerCase()) return true;
+
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.auth.updateUser({ email: authEmailFor(trimmed) });
+      if (error) return false;
+    }
+
+    // Mise à jour locale / démo
+    const key = user.username.trim().toLowerCase();
+    const demo = DEMO_ACCOUNTS[key];
+    if (demo) {
+      DEMO_ACCOUNTS[trimmed] = { ...demo, username: trimmed };
+      delete DEMO_ACCOUNTS[key];
+    }
+    const locals = getLocalUsers();
+    const idx = locals.findIndex((u) => u.username === key);
+    if (idx >= 0) {
+      locals[idx] = { ...locals[idx], username: trimmed };
+      localStorage.setItem('o-resto-local-users', JSON.stringify(locals));
+    }
+
+    // Mettre à jour l'état utilisateur
+    setUser((prev) => (prev ? { ...prev, username: trimmed } : prev));
+    return true;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -838,6 +869,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginParent,
         logout,
         changePassword,
+        changeUsername,
         isAuthenticated: user !== null,
         loading,
       }}

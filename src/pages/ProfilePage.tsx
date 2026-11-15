@@ -10,14 +10,33 @@ import ConfirmDialog from '@/components/ConfirmDialog';
  * Présentation premium : carte sombre, avatar rôle, boutons soignés.
  */
 const ProfilePage = () => {
-  const { user, logout, changePassword } = useAuth();
+  const { user, logout, changePassword, changeUsername } = useAuth();
   const roleDef = getRoleDef(user?.role);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [newUsername, setNewUsername] = useState('');
+  const [usernameMessage, setUsernameMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleChangeUsername = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUsernameMessage(null);
+    if (!newUsername.trim() || newUsername.trim().length < 3) {
+      setUsernameMessage({ type: 'error', text: 'Le nom d’utilisateur doit contenir au moins 3 caractères' });
+      return;
+    }
+    const success = await changeUsername(newUsername);
+    if (success) {
+      setUsernameMessage({ type: 'success', text: 'Nom d’utilisateur modifié avec succès !' });
+      setNewUsername('');
+      setTimeout(() => setUsernameMessage(null), 2000);
+    } else {
+      setUsernameMessage({ type: 'error', text: 'Modification impossible' });
+    }
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,6 +109,30 @@ const ProfilePage = () => {
         </div>
 
         <div className="relative bg-white rounded-t-3xl p-6 space-y-3">
+          {user.role === 'admin' && (
+            <form onSubmit={handleChangeUsername} className="space-y-3">
+              {usernameMessage && (
+                <div className={`rounded-xl px-4 py-3 text-sm font-semibold flex items-center gap-2 ${usernameMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                  {usernameMessage.type === 'success' ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                  {usernameMessage.text}
+                </div>
+              )}
+              <input
+                type="text"
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value)}
+                placeholder="Nouveau nom d'utilisateur"
+                autoComplete="username"
+                className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-900 font-medium focus:border-slate-900 focus:outline-none transition-colors"
+              />
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-700 transition-colors"
+              >
+                Changer le nom d'utilisateur
+              </button>
+            </form>
+          )}
           <button
             onClick={() => setShowLogoutConfirm(true)}
             className="w-full py-4 rounded-2xl bg-gradient-to-r from-red-500 to-pink-600 text-white font-bold text-base hover:shadow-lg hover:shadow-red-500/30 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
