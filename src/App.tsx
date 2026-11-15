@@ -30,7 +30,6 @@ const QRCodePage = lazy(() => import('./pages/QRCodePage'));
 const ParentQrPage = lazy(() => import('./pages/ParentQrPage'));
 const QrGalleryPage = lazy(() => import('./pages/QrGalleryPage'));
 const ValidationPage = lazy(() => import('./pages/ValidationPage'));
-const ComplaintsPage = lazy(() => import('./pages/ComplaintsPage'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const EstablishmentsPage = lazy(() => import('./pages/EstablishmentsPage'));
@@ -262,8 +261,6 @@ function AppContent() {
         return <QrGalleryPage />;
       case 'validation':
         return <ValidationPage />;
-      case 'reclamations':
-        return <ComplaintsPage />;
 
       case 'users':
         return <UsersPage />;

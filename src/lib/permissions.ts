@@ -28,8 +28,8 @@ export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // y compris les réclamations. La caisse (POS, encaissement, espace repas)
   // est réservée au Caissier.
   personnel: ['home', 'subscriptions', 'paiements', 'qrgallery', 'users', 'settings', 'profile', 'dashboard', 'paymentsuccess', 'paymentfailure', 'entities'],
-  // Caissier : POS (avec scan QR élève), espace repas et historique.
-  gestionnaire: ['validation', 'menu', 'pos', 'qrgallery', 'paymentsuccess', 'paymentfailure', 'profile'],
+  // Caissier : POS uniquement (caisse, scan QR élève).
+  gestionnaire: ['pos', 'paymentsuccess', 'paymentfailure', 'profile'],
   // Espace ISM : pilotage + suivi uniquement (sans menus/paramètres/établissements)
   admin: [...ISM_PAGES, 'dangote-rh', 'paymentsuccess', 'paymentfailure'],
   // DCH Dangote : gestion employés, achats de talons, crédit repas.
