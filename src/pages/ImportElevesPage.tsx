@@ -194,26 +194,20 @@ function ImportHistory({ refreshKey }: { refreshKey: number }) {
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-100">
               <th className="px-4 py-3">Date</th>
+              <th className="px-4 py-3">Heure</th>
               <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3 text-right">Lignes</th>
-              <th className="px-4 py-3 text-right">Créés</th>
-              <th className="px-4 py-3 text-right">Doublons</th>
-              <th className="px-4 py-3 text-right">Erreurs</th>
-              <th className="px-4 py-3">Par</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-slate-50 last:border-0">
                 <td className="px-4 py-3 text-slate-600">
-                  {new Date(r.created_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+                  {new Date(r.created_at).toLocaleDateString('fr-FR', { dateStyle: 'short' })}
+                </td>
+                <td className="px-4 py-3 text-slate-600">
+                  {new Date(r.created_at).toLocaleTimeString('fr-FR', { timeStyle: 'short' })}
                 </td>
                 <td className="px-4 py-3 font-semibold text-slate-700">{KIND_LABEL[r.kind] ?? r.kind}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.total_rows}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-emerald-700 font-bold">{r.created_count}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-amber-700">{r.duplicate_count}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-red-600">{r.error_count}</td>
-                <td className="px-4 py-3 text-slate-500">{r.created_by ?? '—'}</td>
               </tr>
             ))}
           </tbody>
