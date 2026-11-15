@@ -238,12 +238,17 @@ export function call<T extends SycaPayEnvelope = SycaPayEnvelope>(
       return;
     }
 
-    const outbound: { remoteAddress?: string; remotePort?: number; localAddress?: string; localPort?: number } = {};
+    const outbound: { remoteAddress?: string; remotePort?: number; localAddress?: string; localPort?: number; tlsProtocol?: string; tlsCipher?: string } = {};
     req.on('socket', (socket) => {
       outbound.remoteAddress = socket.remoteAddress;
       outbound.remotePort = socket.remotePort;
       outbound.localAddress = socket.localAddress;
       outbound.localPort = socket.localPort;
+      socket.on('secureConnect', () => {
+        const tlsSock = socket as unknown as { getProtocol?: () => string; getCipher?: () => { name?: string } };
+        outbound.tlsProtocol = tlsSock.getProtocol?.();
+        outbound.tlsCipher = tlsSock.getCipher?.()?.name;
+      });
     });
     req.on('timeout', () => {
       console.error('[sycapay] timeout', { path, timeoutMs, ...outbound });

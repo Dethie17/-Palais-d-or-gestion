@@ -168,13 +168,22 @@ async function handleProbe(_req: IncomingMessage, res: ServerResponse) {
     outboundIp = null;
   }
 
+  // Test HTTPS simple (sans mTLS) vers SycaPay : vérifie si le TCP+TLS passe.
+  let plainHttps: { ok: boolean; status?: number; error?: string } = { ok: false };
+  try {
+    const r = await fetch(sycaPayConfig.baseUrl + '/', { signal: AbortSignal.timeout(10000) });
+    plainHttps = { ok: true, status: r.status };
+  } catch (e) {
+    plainHttps = { ok: false, error: (e as Error).message };
+  }
+
   try {
     await call(sycaPayConfig, {
       path: '/balance',
       body: { loginApi: sycaPayConfig.loginApi, mdpApi: sycaPayConfig.mdpApi },
       timeoutMs: 15000,
     });
-    return sendJson(res, 200, { ok: true, probe: 'success', outboundIp });
+    return sendJson(res, 200, { ok: true, probe: 'success', outboundIp, plainHttps });
   } catch (err) {
     const isTransport = err instanceof SycaPayTransportError;
     const e = err as NodeJS.ErrnoException;
@@ -188,6 +197,7 @@ async function handleProbe(_req: IncomingMessage, res: ServerResponse) {
       port: (e as { port?: number }).port ?? null,
       outbound: (err as { outbound?: unknown }).outbound ?? null,
       outboundIp,
+      plainHttps,
     });
   }
 }
