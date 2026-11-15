@@ -174,8 +174,8 @@ function ImportHistory({ refreshKey }: { refreshKey: number }) {
     setLoading(true);
     fetchImportBatches(10).then((res) => {
       if (!alive) return;
-      setRows(res.rows);
-      setVisible(!res.missing && res.rows.length > 0);
+      setRows(res.rows.filter((r) => r.kind === 'parents'));
+      setVisible(!res.missing && res.rows.some((r) => r.kind === 'parents'));
       setLoading(false);
     });
     return () => { alive = false; };
