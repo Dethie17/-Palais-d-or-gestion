@@ -19,7 +19,7 @@ export function DangotePageHeader({
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div className="flex items-start gap-3">
         {icon ? (
-          <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-green-700 text-white shadow-sm">
+          <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
             {icon}
           </div>
         ) : null}
@@ -51,23 +51,23 @@ export function StatCard({
 }) {
   const tones: Record<string, string> = {
     default: 'bg-white border-slate-200',
-    green: 'bg-emerald-50/70 border-emerald-200',
-    amber: 'bg-amber-50/70 border-amber-200',
-    red: 'bg-red-50/70 border-red-200',
-    blue: 'bg-sky-50/70 border-sky-200',
+    green: 'bg-white border-l-4 border-l-emerald-600 border-slate-200',
+    amber: 'bg-white border-l-4 border-l-amber-500 border-slate-200',
+    red: 'bg-white border-l-4 border-l-red-500 border-slate-200',
+    blue: 'bg-white border-l-4 border-l-sky-600 border-slate-200',
     slate: 'bg-slate-900 border-slate-900 text-white',
   };
   return (
-    <div className={cn('rounded-2xl border p-4 shadow-sm', tones[tone])}>
+    <div className={cn('rounded-xl border p-5 shadow-sm transition-shadow hover:shadow-md', tones[tone])}>
       <div className="flex items-start justify-between gap-3">
-        <p className={cn('text-xs font-bold uppercase tracking-wide', tone === 'slate' ? 'text-slate-300' : 'text-slate-500')}>
+        <p className={cn('text-[11px] font-semibold uppercase tracking-wider', tone === 'slate' ? 'text-slate-300' : 'text-slate-500')}>
           {label}
         </p>
         {icon ? <span className={tone === 'slate' ? 'text-slate-300' : 'text-slate-400'}>{icon}</span> : null}
       </div>
-      <p className="mt-2 text-2xl font-black tracking-tight">{value}</p>
+      <p className="mt-3 text-2xl font-bold tracking-tight text-slate-900">{value}</p>
       {hint ? (
-        <p className={cn('mt-1 text-xs', tone === 'slate' ? 'text-slate-300' : 'text-slate-500')}>{hint}</p>
+        <p className={cn('mt-1.5 text-xs', tone === 'slate' ? 'text-slate-300' : 'text-slate-500')}>{hint}</p>
       ) : null}
     </div>
   );
@@ -87,17 +87,17 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={cn('rounded-2xl border border-slate-200 bg-white shadow-sm', className)}>
+    <section className={cn('rounded-xl border border-slate-200 bg-white shadow-sm', className)}>
       {(title || description || actions) && (
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            {title ? <h2 className="text-sm font-black text-slate-900">{title}</h2> : null}
+            {title ? <h2 className="text-sm font-semibold text-slate-900">{title}</h2> : null}
             {description ? <p className="mt-0.5 text-xs text-slate-500">{description}</p> : null}
           </div>
           {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
         </div>
       )}
-      <div className="p-4">{children}</div>
+      <div className="p-5">{children}</div>
     </section>
   );
 }
