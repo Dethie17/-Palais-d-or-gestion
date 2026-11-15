@@ -504,7 +504,7 @@ const DangoteRhPage = () => {
         <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-slate-100 p-1">
           <TabsTrigger value="apercu" className="gap-1.5"><LayoutDashboard className="h-4 w-4" /> Vue d’ensemble</TabsTrigger>
           <TabsTrigger value="employes" className="gap-1.5"><Users className="h-4 w-4" /> Employés</TabsTrigger>
-          <TabsTrigger value="menus" className="gap-1.5"><UtensilsCrossed className="h-4 w-4" /> Menus</TabsTrigger>
+
           <TabsTrigger value="budget" className="gap-1.5"><Wallet className="h-4 w-4" /> Budget</TabsTrigger>
           <TabsTrigger value="rapports" className="gap-1.5"><BarChart3 className="h-4 w-4" /> Rapports</TabsTrigger>
           <TabsTrigger value="parametres" className="gap-1.5"><Settings className="h-4 w-4" /> Paramètres</TabsTrigger>
@@ -541,42 +541,6 @@ const DangoteRhPage = () => {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <Panel
-              title="Menus du jour"
-              description={formatDateFr(today)}
-              actions={<button className={secondaryButtonClass} onClick={() => setTab('menus')}>Gérer</button>}
-            >
-              {menusAujourdhui.length === 0 ? (
-                <EmptyState title="Aucun menu publié aujourd’hui" description="Créez les menus standard et premium pour cadrer les prix du jour." />
-              ) : (
-                <div className="space-y-3">
-                  {menusAujourdhui.map((menu) => {
-                    const plats = platsForMenu(menu);
-                    return (
-                      <div key={menu.id} className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-black text-slate-900">{menu.titre}</p>
-                              <StatusBadge tone={menu.type_repas === 'premium' ? 'amber' : 'green'}>
-                                {menu.type_repas === 'premium' ? 'Premium' : 'Standard'}
-                              </StatusBadge>
-                              {!menu.actif ? <StatusBadge tone="red">Inactif</StatusBadge> : null}
-                            </div>
-                            {menu.description ? <p className="mt-1 text-xs text-slate-500">{menu.description}</p> : null}
-                          </div>
-                          <p className="text-sm font-black text-green-800">{formatMoney(menu.prix, devise)}</p>
-                        </div>
-                        <p className="mt-2 text-xs text-slate-500">
-                          {plats.length > 0 ? plats.map((plat) => plat.nom).join(' · ') : 'Aucun plat détaillé'}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Panel>
-
             <Panel title="Alertes stock" description="Plats au niveau ou sous le seuil d’alerte.">
               {lowStock.length === 0 ? (
                 <EmptyState title="Aucune alerte stock" description="Tous les plats suivis sont au-dessus de leur seuil." />
@@ -748,79 +712,6 @@ const DangoteRhPage = () => {
               </div>
             )}
           </Panel>
-        </TabsContent>
-
-        <TabsContent value="menus" className="space-y-4">
-          <Panel
-            title="Menus du jour"
-            description="Publiez le menu standard et le menu premium. Le prix du menu s’applique à la validation."
-            actions={
-              <div className="flex flex-wrap items-center gap-2">
-                <button className={secondaryButtonClass} onClick={() => setMenuDate(shiftDate(menuDate, -1))}>
-                  <CalendarDays className="h-4 w-4" /> Veille
-                </button>
-                <input type="date" className={`${inputClass} w-40`} value={menuDate} onChange={(event) => setMenuDate(event.target.value)} />
-                <button className={secondaryButtonClass} onClick={() => setMenuDate(shiftDate(menuDate, 1))}>
-                  <CalendarDays className="h-4 w-4" /> Lendemain
-                </button>
-              </div>
-            }
-          >
-            <div className="grid gap-3 lg:grid-cols-2">
-              {(['standard', 'premium'] as const).map((type) => {
-                const menu = menuFor(type);
-                const plats = platsForMenu(menu);
-                return (
-                  <div key={type} className="rounded-2xl border border-slate-200 p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-black text-slate-900">{type === 'premium' ? 'Menu premium' : 'Menu standard'}</p>
-                          <StatusBadge tone={type === 'premium' ? 'amber' : 'green'}>{type}</StatusBadge>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500">{formatDateFr(menuDate)}</p>
-                      </div>
-                      {menu ? (
-                        <div className="flex gap-1">
-                          <button className={secondaryButtonClass} onClick={() => openMenuEditor(type)}>
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <button className={dangerButtonClass} onClick={() => void deleteMenu(menu)}>
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button className={primaryButtonClass} onClick={() => openMenuEditor(type)}>
-                          <Plus className="h-4 w-4" /> Créer
-                        </button>
-                      )}
-                    </div>
-                    {menu ? (
-                      <>
-                        <p className="mt-3 text-lg font-black text-slate-900">{menu.titre}</p>
-                        {menu.description ? <p className="mt-1 text-sm text-slate-500">{menu.description}</p> : null}
-                        <p className="mt-2 text-sm font-bold text-green-800">{formatMoney(menu.prix, devise)}</p>
-                        <div className="mt-3 flex flex-wrap gap-1">
-                          {plats.length > 0 ? plats.map((plat) => (
-                            <span key={plat.id} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{plat.nom}</span>
-                          )) : <span className="text-xs text-slate-400">Aucun plat détaillé</span>}
-                        </div>
-                      </>
-                    ) : (
-                      <p className="mt-3 text-sm text-slate-500">Aucun menu publié pour cette date.</p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </Panel>
-
-          <DangoteCataloguePanel
-            entiteId={entiteId}
-            categories={dashboard?.categories ?? []}
-            plats={dashboard?.plats ?? []}
-            onChanged={() => void load(true)}
-          />
         </TabsContent>
 
         <TabsContent value="budget" className="space-y-4">
