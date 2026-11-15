@@ -403,6 +403,16 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     return [...payList, ...walletList, ...validList].sort((a, b) => +new Date(b.date) - +new Date(a.date));
   }, [myPayments, username, kids, childTxs, histChild, myValidations, allMine, soldeAfterByTx]);
 
+  const mealsByDay = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const v of myValidations(username)) {
+      if (v.status !== 'accepted') continue;
+      const day = v.validatedAt.slice(0, 10);
+      map.set(day, (map.get(day) ?? 0) + 1);
+    }
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [myValidations, username]);
+
   const sortedMenus = [...weeklyMenus].sort((a, b) => a.day.localeCompare(b.day));
   const publishedMenus = publishedDays(sortedMenus).filter((m) => /^2026-11-(0[2-9]|[12][0-9]|30)$/.test(m.day));
   const menuDuJour = publishedMenus.find((m) => m.day === todayName)
@@ -450,6 +460,22 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
 
         {/* ===== QR DES ENFANTS (style clair, en haut de page) ===== */}
         <QrCartesEnfants kids={kids} />
+
+        {/* ===== HISTORIQUE DES REPAS PAR JOUR ===== */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-bold text-slate-900 mb-3">Historique des repas servis</h2>
+          {mealsByDay.length === 0 ? (
+            <p className="text-xs text-slate-500">Aucun repas servi pour le moment.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {mealsByDay.map(([day, count]) => (
+                <span key={day} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700">
+                  {day} <span className="font-bold text-slate-900">{count}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* ===== 1. PAIEMENT D'ABONNEMENT ===== */}
         <section id="payer-abonnement" className="scroll-mt-24" data-testid="section-payer-abonnement">
