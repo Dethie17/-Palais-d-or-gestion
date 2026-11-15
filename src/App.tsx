@@ -275,11 +275,11 @@ function AppContent() {
       case 'entities':
         return <EntitiesPage />;
       case 'dangote-rh':
-        return <DangoteRhPage />;
+        return <DangoteRhPage onNavigate={navigateTo} />;
       case 'dangote-superviseur':
-        return <DangoteSuperviseurPage />;
+        return <DangoteSuperviseurPage onNavigate={navigateTo} />;
       case 'dangote-employe':
-        return <DangoteEmployePage />;
+        return <DangoteEmployePage onNavigate={navigateTo} />;
       case 'dangote-qrgallery':
         return <DangoteQrGalleryPage />;
       case 'establishments':

@@ -122,7 +122,7 @@ function paymentTone(statut: string): 'green' | 'amber' | 'red' | 'slate' {
   return 'slate';
 }
 
-const DangoteRhPage = () => {
+const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) => {
   const { user } = useAuth();
   const entiteId = user?.entiteId ?? '';
   const allowed = Boolean(user && (user.role === 'rh' || user.role === 'admin'));
@@ -467,6 +467,11 @@ const DangoteRhPage = () => {
         icon={<ShieldCheck className="h-5 w-5" />}
         actions={
           <>
+            {onNavigate && (
+              <button className={secondaryButtonClass} onClick={() => onNavigate('entities')}>
+                ← Entités
+              </button>
+            )}
             <button className={secondaryButtonClass} onClick={() => void load(true)} disabled={refreshing}>
               {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Actualiser

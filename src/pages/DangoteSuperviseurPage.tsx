@@ -61,7 +61,7 @@ import {
   StatusBadge,
 } from '@/components/dangote/DangoteUI';
 
-const DangoteSuperviseurPage = () => {
+const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) => {
   const { user } = useAuth();
   const entiteId = user?.entiteId ?? '';
   const allowed = Boolean(user && (user.role === 'superviseur-dangote' || user.role === 'admin'));
@@ -345,10 +345,17 @@ const DangoteSuperviseurPage = () => {
         description="Scannez les QR, validez les repas et suivez le service du jour."
         icon={<UtensilsCrossed className="h-5 w-5" />}
         actions={
-          <button className={secondaryButtonClass} onClick={() => void load(true)} disabled={refreshing}>
-            {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Actualiser
-          </button>
+          <>
+            {onNavigate && (
+              <button className={secondaryButtonClass} onClick={() => onNavigate('entities')}>
+                ← Entités
+              </button>
+            )}
+            <button className={secondaryButtonClass} onClick={() => void load(true)} disabled={refreshing}>
+              {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Actualiser
+            </button>
+          </>
         }
       />
 

@@ -41,7 +41,7 @@ import {
   StatusBadge,
 } from '@/components/dangote/DangoteUI';
 
-const DangoteEmployePage = () => {
+const DangoteEmployePage = ({ onNavigate }: { onNavigate?: (page: string) => void }) => {
   const { user } = useAuth();
   const entiteId = user?.entiteId ?? '';
   const allowed = user?.role === 'employe-dangote';
@@ -144,10 +144,17 @@ const DangoteEmployePage = () => {
         description={employe ? `${employe.matricule} · ${employe.service ?? 'Sans service'} · ${employe.poste ?? 'Employé'}` : 'Votre QR, vos repas et les menus du jour.'}
         icon={<ShieldCheck className="h-5 w-5" />}
         actions={
-          <button className={secondaryButtonClass} onClick={() => void load(true)} disabled={refreshing}>
-            {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Actualiser
-          </button>
+          <>
+            {onNavigate && (
+              <button className={secondaryButtonClass} onClick={() => onNavigate('entities')}>
+                ← Entités
+              </button>
+            )}
+            <button className={secondaryButtonClass} onClick={() => void load(true)} disabled={refreshing}>
+              {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Actualiser
+            </button>
+          </>
         }
       />
 
