@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useRef, useState } from 'react';
 import { CartItem, Product, Order, KioskOrder } from '@/types/menu';
 import { categories } from '@/data/mockData';
 import { formatCurrency } from '@/lib/utils';
@@ -41,7 +41,7 @@ import {
 const READER_ID = 'o-resto-pos-reader';
 const DAY_INDEX = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
-/** Élève identifié par le scan de son QR à la caisse. */
+/** Ã‰lÃ¨ve identifiÃ© par le scan de son QR Ã  la caisse. */
 interface CardChild {
   id: string;
   firstName: string;
@@ -53,7 +53,7 @@ interface CardChild {
 
 interface POSPageProps {
   onProceedToPayment: (items: CartItem[]) => void;
-  /** Vente réglée par carte prépayée : ouvre la page Reçu imprimable. */
+  /** Vente rÃ©glÃ©e par carte prÃ©payÃ©e : ouvre la page ReÃ§u imprimable. */
   onCardSaleComplete: (order: Order) => void;
 }
 
@@ -63,7 +63,7 @@ const categoryIconsMap: Record<string, React.ReactNode> = {
   'Sandwichs': <Sandwich className="w-5 h-5" />,
   'Burgers': <Utensils className="w-5 h-5" />,
   'Fataya': <Cookie className="w-5 h-5" />,
-  'Crépes': <Croissant className="w-5 h-5" />,
+  'CrÃ©pes': <Croissant className="w-5 h-5" />,
   'Pizza': <Pizza className="w-5 h-5" />,
   'Accompagnements': <Salad className="w-5 h-5" />,
   'Boissons': <Coffee className="w-5 h-5" />,
@@ -78,7 +78,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [animatingId, setAnimatingId] = useState<string | null>(null);
   const [showCart, setShowCart] = useState(false);
-  // --- Paiement sur la carte prépayée de l'élève (scan QR au comptoir) ---
+  // --- Paiement sur la carte prÃ©payÃ©e de l'Ã©lÃ¨ve (scan QR au comptoir) ---
   const [cardChild, setCardChild] = useState<CardChild | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
   const [manualToken, setManualToken] = useState('');
@@ -89,7 +89,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
   const [orderToCancel, setOrderToCancel] = useState<KioskOrder | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
 
-  // ---- Commandes de l'élève scanné (à retirer / annuler) ----
+  // ---- Commandes de l'Ã©lÃ¨ve scannÃ© (Ã  retirer / annuler) ----
   const childOrders = cardChild
     ? kioskOrders
         .filter((o) => o.childId === cardChild.id)
@@ -110,7 +110,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
         await scanner.stop();
       }
     } catch {
-      /* déjà arrêté */
+      /* dÃ©jÃ  arrÃªtÃ© */
     }
     try {
       await scanner.clear();
@@ -128,7 +128,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
     void stopScanner();
   }, []);
 
-  // Démarre la caméra dès que le lecteur est affiché.
+  // DÃ©marre la camÃ©ra dÃ¨s que le lecteur est affichÃ©.
   useEffect(() => {
     if (!scanning) return;
     let cancelled = false;
@@ -195,8 +195,8 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
     setReceipt({ ok: true, text: res.message });
   }, [resolveChildQr]);
 
-  // Le lecteur caméra est monté une seule fois : on garde la dernière version
-  // de applyToken dans une ref pour ne pas redémarrer le scan à chaque rendu.
+  // Le lecteur camÃ©ra est montÃ© une seule fois : on garde la derniÃ¨re version
+  // de applyToken dans une ref pour ne pas redÃ©marrer le scan Ã  chaque rendu.
   const applyTokenRef = useRef(applyToken);
   useEffect(() => {
     applyTokenRef.current = applyToken;
@@ -209,8 +209,8 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
     const res = sellToChildCard(cardChild.id, items, user?.username);
     setPayingCard(false);
     if (res.ok) {
-      // Réglée par carte : la commande part « en attente » (retrait au scan
-      // du superviseur) et le caissier atterrit sur la page Reçu.
+      // RÃ©glÃ©e par carte : la commande part Â« en attente Â» (retrait au scan
+      // du superviseur) et le caissier atterrit sur la page ReÃ§u.
       const order: Order = {
         id: res.order?.id ?? `POS-${Date.now()}`,
         number: res.reference ?? 'POS',
@@ -221,7 +221,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
         status: 'completed',
         type: 'takeaway',
         createdAt: new Date(),
-        paymentMethod: 'Carte prépayée',
+        paymentMethod: 'Carte prÃ©payÃ©e',
         customerName: `${cardChild.firstName} ${cardChild.lastName}`,
         qrToken: cardChild.qrToken || undefined,
       };
@@ -282,14 +282,14 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
               <p className="text-sm text-slate-600 mt-0.5">{products.length} produits disponibles</p>
             </div>
             {/* Mobile cart toggle */}
-            <button onClick={() => setShowCart(true)} aria-label={cartCount > 0 ? `Ouvrir le panier, ${cartCount} articles` : 'Ouvrir le panier'} className="lg:hidden relative p-3 rounded-xl bg-green-700 text-white shadow-lg shadow-green-700/30 hover:bg-green-800">
+            <button onClick={() => setShowCart(true)} aria-label={cartCount > 0 ? `Ouvrir le panier, ${cartCount} articles` : 'Ouvrir le panier'} className="lg:hidden relative p-3 rounded-xl bg-slate-900 text-white shadow-lg shadow-slate-900/30 hover:bg-slate-800">
               <ShoppingCart aria-hidden className="w-5 h-5" />
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center">{cartCount}</span>
               )}
             </button>
           </div>
-          <div className="flex gap-2 overflow-x-auto tiny-scrollbar pb-1" role="tablist" aria-label="Catégories de produits">
+          <div className="flex gap-2 overflow-x-auto tiny-scrollbar pb-1" role="tablist" aria-label="CatÃ©gories de produits">
             {categories.map((cat) => (
               <button
                 key={cat}
@@ -297,7 +297,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
                 aria-pressed={activeCategory === cat}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
                   activeCategory === cat
-                    ? 'bg-green-700 text-white shadow-lg shadow-green-700/30'
+                    ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/30'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
@@ -339,7 +339,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
                   </div>
                   <div className="p-3 lg:p-4">
                     <h3 className="text-sm lg:text-base font-bold text-slate-800 truncate mb-1">{product.name}</h3>
-                    <p className="text-base lg:text-lg font-bold text-green-700">
+                    <p className="text-base lg:text-lg font-bold text-slate-900">
                       {formatCurrency(product.price)}
                     </p>
                   </div>
@@ -363,13 +363,13 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setScanOpen(true); setScanError(''); }}
-                  title="Scanner le QR de l'élève pour payer sur sa carte"
+                  title="Scanner le QR de l'Ã©lÃ¨ve pour payer sur sa carte"
                   className={`inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors ${
                     cardChild ? 'bg-emerald-600 text-white' : 'border-2 border-slate-300 text-slate-700 hover:border-emerald-600'
                   }`}
                 >
                   {cardChild ? <BadgeCheck className="w-4 h-4" /> : <ScanLine className="w-4 h-4" />}
-                  {cardChild ? 'Carte élève' : 'Scanner QR'}
+                  {cardChild ? 'Carte Ã©lÃ¨ve' : 'Scanner QR'}
                 </button>
                 <button onClick={() => setShowCart(false)} className="lg:hidden p-2 hover:bg-white rounded-lg transition-colors">
                   <X className="w-5 h-5 text-slate-600" />
@@ -382,10 +382,10 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
                 <UserRound className="w-5 h-5 text-emerald-700 flex-shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-black text-emerald-900 truncate">
-                    {cardChild.firstName} {cardChild.lastName} · {cardChild.className}
+                    {cardChild.firstName} {cardChild.lastName} Â· {cardChild.className}
                   </p>
                   <p className="text-xs text-emerald-700">
-                    Vente débitée sur sa carte prépayée · solde {formatCurrency(cardChild.balance)}
+                    Vente dÃ©bitÃ©e sur sa carte prÃ©payÃ©e Â· solde {formatCurrency(cardChild.balance)}
                   </p>
                 </div>
                 <button onClick={() => setCardChild(null)} className="text-emerald-700 hover:text-red-600" title="Annuler le paiement par carte">
@@ -404,10 +404,10 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
                     <li key={o.id} className="px-3 py-2 flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-slate-800 truncate">
-                          {o.items.map((i) => `${i.name}×${i.qty}`).join(', ') || 'Commande'}
+                          {o.items.map((i) => `${i.name}Ã—${i.qty}`).join(', ') || 'Commande'}
                         </p>
                         <p className="text-[11px] text-slate-500 tabular-nums">
-                          {formatCurrency(o.total)} · {o.reference}
+                          {formatCurrency(o.total)} Â· {o.reference}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -420,7 +420,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
                                 : 'bg-slate-100 text-slate-500'
                           }`}
                         >
-                          {o.status === 'pending' ? 'À retirer' : o.status === 'served' ? 'Servie' : 'Annulée'}
+                          {o.status === 'pending' ? 'Ã€ retirer' : o.status === 'served' ? 'Servie' : 'AnnulÃ©e'}
                         </span>
                         {o.status === 'pending' && (
                           <button
@@ -456,7 +456,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                    <p className="text-xs text-slate-500 mb-2">{formatCurrency(item.price)} / unité</p>
+                    <p className="text-xs text-slate-500 mb-2">{formatCurrency(item.price)} / unitÃ©</p>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <button onClick={() => updateQuantity(item.id, -1)} className="w-8 h-8 rounded-lg bg-white border-2 border-slate-200 flex items-center justify-center text-slate-700 hover:border-slate-400 hover:text-slate-600 transition-colors">
@@ -497,7 +497,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
                     className="flex-[2] py-3.5 rounded-xl bg-emerald-700 text-white font-semibold text-sm hover:bg-emerald-800 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
                   >
                     {payingCard ? <Loader2 className="w-5 h-5 animate-spin" /> : <BadgeCheck className="w-5 h-5" />}
-                    {cardChild.balance < total ? 'Solde insuffisant' : 'Débiter la carte'}
+                    {cardChild.balance < total ? 'Solde insuffisant' : 'DÃ©biter la carte'}
                   </button>
                 ) : (
                   <button
@@ -511,7 +511,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
               </div>
               {cardChild && cardChild.balance < total && (
                 <p className="text-xs font-bold text-red-600 text-center">
-                  Solde carte {formatCurrency(cardChild.balance)} — il manque {formatCurrency(total - cardChild.balance)}.
+                  Solde carte {formatCurrency(cardChild.balance)} â€” il manque {formatCurrency(total - cardChild.balance)}.
                 </p>
               )}
             </div>
@@ -526,16 +526,16 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
           className="lg:hidden fixed bottom-6 right-6 z-30 bg-gradient-to-r from-slate-500 to-red-600 text-white px-6 py-4 rounded-2xl shadow-2xl shadow-slate-500/50 flex items-center gap-3 font-bold text-sm hover:scale-105 transition-transform"
         >
           <ShoppingCart className="w-5 h-5" />
-          <span>{cartCount} · {formatCurrency(total)}</span>
+          <span>{cartCount} Â· {formatCurrency(total)}</span>
         </button>
       )}
-    {/* ---------- Scan du QR élève ---------- */}
+    {/* ---------- Scan du QR Ã©lÃ¨ve ---------- */}
       {scanOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { stopScan(); setScanOpen(false); }} />
-          <div role="dialog" aria-modal="true" aria-label="Scanner le QR de l'élève" className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div role="dialog" aria-modal="true" aria-label="Scanner le QR de l'Ã©lÃ¨ve" className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-              <h2 className="font-black text-slate-900">Payer sur la carte de l'élève</h2>
+              <h2 className="font-black text-slate-900">Payer sur la carte de l'Ã©lÃ¨ve</h2>
               <button onClick={() => { stopScan(); setScanOpen(false); }} className="text-slate-400 hover:text-slate-700" aria-label="Fermer">
                 <X className="w-5 h-5" />
               </button>
@@ -543,7 +543,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
 
             <div className="p-5 space-y-4">
               <p className="text-sm text-slate-600">
-                Scannez le QR de l'élève abonné : la vente est débitée sur sa carte prépayée,
+                Scannez le QR de l'Ã©lÃ¨ve abonnÃ© : la vente est dÃ©bitÃ©e sur sa carte prÃ©payÃ©e,
                 sans paiement Wave par l'enfant.
               </p>
 
@@ -565,7 +565,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
                   onClick={() => { setScanError(''); setScanning(true); }}
                   className="w-full py-3.5 rounded-xl bg-slate-900 text-white text-sm font-bold inline-flex items-center justify-center gap-2"
                 >
-                  <Camera className="w-5 h-5" /> Scanner avec la caméra
+                  <Camera className="w-5 h-5" /> Scanner avec la camÃ©ra
                 </button>
               )}
 
@@ -613,7 +613,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
         </div>
       )}
 
-      {/* ---------- Annulation d'une commande payée par carte ---------- */}
+      {/* ---------- Annulation d'une commande payÃ©e par carte ---------- */}
       <ConfirmDialog
         isOpen={!!orderToCancel}
         onClose={() => setOrderToCancel(null)}
@@ -621,7 +621,7 @@ const POSPage = ({ onProceedToPayment, onCardSaleComplete }: POSPageProps) => {
         title="Annuler la commande ?"
         message={
           orderToCancel
-            ? `Commande ${orderToCancel.reference} · ${formatCurrency(orderToCancel.total)}. Le montant sera recrédité sur la carte prépayée de ${cardChild ? `${cardChild.firstName} ${cardChild.lastName}` : "l'enfant"}.`
+            ? `Commande ${orderToCancel.reference} Â· ${formatCurrency(orderToCancel.total)}. Le montant sera recrÃ©ditÃ© sur la carte prÃ©payÃ©e de ${cardChild ? `${cardChild.firstName} ${cardChild.lastName}` : "l'enfant"}.`
             : ''
         }
         type="danger"
