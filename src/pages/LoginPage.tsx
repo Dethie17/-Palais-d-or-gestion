@@ -74,7 +74,7 @@ const LoginPage = () => {
   const [selectedEntity, setSelectedEntity] = useState<'groupe-ism' | 'dangote' | null>(() => {
     try { return (localStorage.getItem('selectedEntity') as 'groupe-ism' | 'dangote' | null) ?? null; } catch { return null; }
   });
-  useEffect(() => { try { if (selectedEntity) localStorage.setItem('selectedEntity', selectedEntity); } catch {} }, [selectedEntity]);
+  useEffect(() => { try { if (selectedEntity) localStorage.setItem('selectedEntity', selectedEntity); } catch { /* ignore */ } }, [selectedEntity]);
   // Verrouillage anti brute-force : compte à rebours live
   const [lockUntil, setLockUntil] = useState(0);
   const [lockLeft, setLockLeft] = useState('');

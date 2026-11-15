@@ -40,6 +40,15 @@ interface SettleArgs {
   eventType?: string | null;
 }
 
+interface InferredSubscription {
+  id: string;
+  status: string;
+  created_at: string;
+  child_id: string | null;
+  formula_id: string | null;
+  meals_remaining: number | null;
+}
+
 function normalizeTag(tag: unknown): string | null {
   if (typeof tag !== 'string' || !tag.trim()) return null;
   return tag.trim().toUpperCase();
@@ -122,20 +131,20 @@ export async function settle(args: SettleArgs, db: SupabaseClient = adminClient(
     const paymentTime = new Date(payment.created_at).getTime();
     const inferredIds = Array.from(new Set([
       ...(typeof payment.subscription_id === 'string' ? [payment.subscription_id] : []),
-      ...((siblings ?? []).filter((sub: any) => {
+      ...((siblings ?? []).filter((sub: InferredSubscription) => {
         const created = new Date(sub.created_at).getTime();
         return ['pending', 'cancelled', 'active'].includes(sub.status)
           && Number.isFinite(created) && Number.isFinite(paymentTime)
           && Math.abs(created - paymentTime) <= 60 * 1000;
-      }).map((sub: any) => sub.id)),
+      }).map((sub: InferredSubscription) => sub.id)),
     ]));
     // Un groupe multi-enfants couvre au moins deux enfants différents : une
     // fenêtre courte + cette contrainte évitent de fusionner deux paiements
     // distincts créés à quelques minutes d'intervalle.
     const inferredChildIds = Array.from(new Set(
       (siblings ?? [])
-        .filter((sub: any) => inferredIds.includes(sub.id))
-        .map((sub: any) => sub.child_id)
+.filter((sub: InferredSubscription) => inferredIds.includes(sub.id))
+.map((sub: InferredSubscription) => sub.child_id)
         .filter(Boolean),
     ));
     if (inferredIds.length > 1 && inferredChildIds.length > 1) {
@@ -168,7 +177,7 @@ export async function settle(args: SettleArgs, db: SupabaseClient = adminClient(
           paid_at: new Date().toISOString(),
         }).eq('reference', args.reference).eq('status', 'pending');
         for (const subscriptionId of inferredIds) {
-          const sub = (siblings ?? []).find((item: any) => item.id === subscriptionId);
+          const sub = (siblings ?? []).find((item: InferredSubscription) => item.id === subscriptionId);
           if (!sub) continue;
           const { data: formula } = await db.from('formulas').select('meals_included').eq('id', sub.formula_id).maybeSingle();
           await db.from('subscriptions').update({

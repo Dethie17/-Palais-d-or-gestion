@@ -194,7 +194,7 @@ const DangoteSuperviseurPage = () => {
     premium: todayValid.filter((row) => row.type_repas === 'premium').length,
     subventions: todayValid.reduce((sum, row) => sum + num(row.subvention_appliquee), 0),
     retenues: todayValid.reduce((sum, row) => sum + num(row.retenue_salaire), 0),
-    chiffreAffaires: todayValid.reduce((sum, row) => sum + num(row.prix), 0),
+    chiffreAffaires: todayValid.length * 1400,
   }), [todayValid]);
 
   const findEmployee = (value?: string) => {

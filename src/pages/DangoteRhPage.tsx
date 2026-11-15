@@ -930,16 +930,62 @@ const DangoteRhPage = () => {
               </div>
             }
           >
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <StatCard label="Repas" value={stats.repas} hint={`${stats.repas_standard} standard · ${stats.repas_premium} premium`} />
-              <StatCard label="Participants" value={stats.participants} hint={`${stats.employes_actifs} employés actifs`} />
-              <StatCard label="Chiffre d’affaires" value={formatMoney(stats.chiffre_affaires, devise)} tone="blue" />
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
               <StatCard label="Subventions" value={formatMoney(stats.subventions, devise)} tone="green" />
               <StatCard label="Retenues salariés" value={formatMoney(stats.retenues, devise)} tone="amber" />
             </div>
           </Panel>
 
-          <div className="grid gap-4 xl:grid-cols-2">
+            <Panel title="Prélèvements quotidiens (comptable)" description="Montant déduit des employés et subvention entreprise, par jour / semaine / mois.">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2">Période</th>
+                      <th className="px-3 py-2 text-right">Retenues salariés</th>
+                      <th className="px-3 py-2 text-right">Subventions</th>
+                      <th className="px-3 py-2 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const byDay = new Map<string, { retenue: number; subvention: number }>();
+                      const byWeek = new Map<string, { retenue: number; subvention: number }>();
+                      const byMonth = new Map<string, { retenue: number; subvention: number }>();
+                      for (const repas of repasValides) {
+                        const day = repas.date_jour;
+                        const d = new Date(day + 'T00:00:00');
+                        const weekStart = new Date(d);
+                        weekStart.setDate(d.getDate() - d.getDay() + (d.getDay() === 0 ? -6 : 1));
+                        const weekKey = weekStart.toISOString().slice(0, 10);
+                        const monthKey = day.slice(0, 7);
+                        const retenue = num(repas.retenue_salaire);
+                        const subvention = num(repas.subvention_appliquee);
+                        const dayRow = byDay.get(day) ?? { retenue: 0, subvention: 0 };
+                        dayRow.retenue += retenue; dayRow.subvention += subvention; byDay.set(day, dayRow);
+                        const weekRow = byWeek.get(weekKey) ?? { retenue: 0, subvention: 0 };
+                        weekRow.retenue += retenue; weekRow.subvention += subvention; byWeek.set(weekKey, weekRow);
+                        const monthRow = byMonth.get(monthKey) ?? { retenue: 0, subvention: 0 };
+                        monthRow.retenue += retenue; monthRow.subvention += subvention; byMonth.set(monthKey, monthRow);
+                      }
+                      const rows: Array<{ label: string; retenue: number; subvention: number }> = [];
+                      for (const [k, v] of Array.from(byDay.entries()).sort()) rows.push({ label: `Jour ${k}`, retenue: v.retenue, subvention: v.subvention });
+                      for (const [k, v] of Array.from(byWeek.entries()).sort()) rows.push({ label: `Semaine du ${k}`, retenue: v.retenue, subvention: v.subvention });
+                      for (const [k, v] of Array.from(byMonth.entries()).sort()) rows.push({ label: `Mois ${k}`, retenue: v.retenue, subvention: v.subvention });
+                      return rows.map((row, i) => (
+                        <tr key={i} className="border-t border-slate-100">
+                          <td className="px-3 py-2 text-slate-600">{row.label}</td>
+                          <td className="px-3 py-2 text-right">{formatMoney(row.retenue, devise)}</td>
+                          <td className="px-3 py-2 text-right">{formatMoney(row.subvention, devise)}</td>
+                          <td className="px-3 py-2 text-right font-bold">{formatMoney(row.retenue + row.subvention, devise)}</td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+            <div className="grid gap-4 xl:grid-cols-2">
             <Panel title="Par service">
               {stats.par_service.length === 0 ? (
                 <EmptyState title="Aucune donnée sur la période" />
