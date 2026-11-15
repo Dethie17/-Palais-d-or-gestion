@@ -423,7 +423,7 @@ const FinancePage = () => {
                 <button onClick={saveRates} className="w-full py-2 rounded-xl bg-slate-900 text-white text-sm font-bold">Enregistrer</button>
               </div>
             </div>
-            {saved && <p className="text-xs text-green-700 font-bold mt-2">Taux enregistrés.</p>}
+            {saved && <p className="text-xs text-emerald-700 font-bold mt-2">Taux enregistrés.</p>}
           </div>
         ) : (
           <p className="text-xs text-slate-400 mt-3">Lecture seule : seule l'Espace ISM modifie les taux.</p>
