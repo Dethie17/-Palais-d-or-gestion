@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { formatCurrency } from '@/lib/utils';
@@ -28,12 +28,12 @@ import {
 } from 'lucide-react';
 
 const METHOD_LABEL: Record<string, string> = {
-  wave: 'Wave', cash: 'Espèces',
+  wave: 'Wave', cash: 'EspÃ¨ces',
   mobile_money: 'Max it (Orange Money)', card: 'Carte bancaire',
   balance: 'Solde carte',
 };
 
-/** Marqueur local « annonces déjà consultées », hors ligne et par parent. */
+/** Marqueur local Â« annonces dÃ©jÃ  consultÃ©es Â», hors ligne et par parent. */
 const ANNOUNCE_READ_KEY = 'o-resto-annonces-lues-v1';
 
 const STATUS_STYLE: Record<ORestoPaymentStatus, string> = {
@@ -45,7 +45,7 @@ const STATUS_STYLE: Record<ORestoPaymentStatus, string> = {
 };
 
 const STATUS_LABEL: Record<ORestoPaymentStatus, string> = {
-  pending: 'En attente', paid: 'Payé', failed: 'Échoué', cancelled: 'Annulé', refunded: 'Remboursé',
+  pending: 'En attente', paid: 'PayÃ©', failed: 'Ã‰chouÃ©', cancelled: 'AnnulÃ©', refunded: 'RemboursÃ©',
 };
 
 const COMPLAINT_STATUS_STYLE: Record<ComplaintStatus, string> = {
@@ -62,16 +62,16 @@ const shortDate = (iso: string) => {
   const d = new Date(iso);
   return Number.isNaN(+d) ? '' : d.toLocaleDateString('fr-FR');
 };
-/** Jours restants avant la fin de la période (0 = dernier jour, négatif = fini). */
+/** Jours restants avant la fin de la pÃ©riode (0 = dernier jour, nÃ©gatif = fini). */
 const daysUntil = (iso: string, nowMs = Date.now()) => {
   const end = new Date(iso).getTime();
   if (!Number.isFinite(end)) return 0;
   return Math.ceil((end - nowMs) / 86_400_000);
 };
-/** Le réabonnement est proposé dans les 7 derniers jours de la période. */
+/** Le rÃ©abonnement est proposÃ© dans les 7 derniers jours de la pÃ©riode. */
 const renewDueSoon = (endIso: string, nowMs = Date.now()) => daysUntil(endIso, nowMs) <= 7;
 
-/** Titre d'étape premium : pastille numérotée + titre. */
+/** Titre d'Ã©tape premium : pastille numÃ©rotÃ©e + titre. */
 function SectionTitle({ step, title, sub }: { step: string; title: string; sub?: string }) {
   return (
     <div className="flex items-start gap-3">
@@ -86,10 +86,10 @@ function SectionTitle({ step, title, sub }: { step: string; title: string; sub?:
   );
 }
 /**
- * Accès Abonné — parcours fluide du rôle client :
- * QR Codes des enfants → 1 abonnement (paiement Wave / Max it via SycaPay)
- * → 2 menu du jour → 3 kiosque (indisponible) → 4 annonces → 5 réclamations
- * → 6 historique. L'inscription des enfants se fait à l'import (ISM) ;
+ * AccÃ¨s AbonnÃ© â€” parcours fluide du rÃ´le client :
+ * QR Codes des enfants â†’ 1 abonnement (paiement Wave / Max it via SycaPay)
+ * â†’ 2 menu du jour â†’ 3 kiosque (indisponible) â†’ 4 annonces â†’ 5 rÃ©clamations
+ * â†’ 6 historique. L'inscription des enfants se fait Ã  l'import (ISM) ;
  * la recharge de carte n'existe plus : l'abonnement couvre le repas.
  */
 const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => void }) => {
@@ -112,7 +112,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
   const [histChild, setHistChild] = useState('all');
   const [loggingOut, setLoggingOut] = useState(false);
 
-  /** Annonces déjà lues par ce parent (clé par parent) : badge « nouveautés ». */
+  /** Annonces dÃ©jÃ  lues par ce parent (clÃ© par parent) : badge Â« nouveautÃ©s Â». */
   const [readAnnouncements, setReadAnnouncements] = useState<Record<string, string[]>>(() => {
     try {
       const raw = localStorage.getItem(ANNOUNCE_READ_KEY) ?? '';
@@ -136,7 +136,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
 
   const nowTs = Date.now();
 
-  // ===== Annonces de la cantine (publiées par le Superviseur) =====
+  // ===== Annonces de la cantine (publiÃ©es par le Superviseur) =====
   const announcements = useMemo(
     () => complaints
       .filter((c) => c.isAnnouncement)
@@ -153,8 +153,8 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     }));
     document.getElementById('annonces')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-  // Un abonnement n'est « actif » que DANS sa période : un réabonnement déjà
-  // payé pour le mois suivant ne doit pas masquer la carte en cours.
+  // Un abonnement n'est Â« actif Â» que DANS sa pÃ©riode : un rÃ©abonnement dÃ©jÃ 
+  // payÃ© pour le mois suivant ne doit pas masquer la carte en cours.
   const isLiveNow = (s: Subscription) => {
     const start = new Date(s.startDate).getTime();
     const end = new Date(s.endDate).getTime();
@@ -185,10 +185,10 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     return k ? `${k.firstName} ${k.lastName}` : null;
   };
 
-  /** Nom affiché du parent connecté (fiche identité sinon identifiant). */
+  /** Nom affichÃ© du parent connectÃ© (fiche identitÃ© sinon identifiant). */
   const myName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : username;
 
-  /** Période déjà RÉGLÉE qui démarre plus tard (réabonnement de fin de mois). */
+  /** PÃ©riode dÃ©jÃ  RÃ‰GLÃ‰E qui dÃ©marre plus tard (rÃ©abonnement de fin de mois). */
   const nextPeriodOf = (childId: string) =>
     allMine.find(
       (s) => s.childId === childId
@@ -196,7 +196,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
         && new Date(s.startDate).getTime() > nowTs,
     );
 
-  /** Enfants dont la carte arrive à échéance (7 derniers jours). */
+  /** Enfants dont la carte arrive Ã  Ã©chÃ©ance (7 derniers jours). */
   const renewDue = kids.filter((k) => {
     const s = activeByChild(k.id);
     return !!s && renewDueSoon(s.endDate, nowTs);
@@ -206,16 +206,16 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
 
   // ---------- Paiement : Wave / Max it via SycaPay ----------
   // Toutes les sommes partent par openProviderPayment : SycaPay initie la
-  // commande côté serveur, la fenêtre montre le défi et envoie le client
-  // automatiquement dans son application (Wave, Max it). Rien ne se règle
+  // commande cÃ´tÃ© serveur, la fenÃªtre montre le dÃ©fi et envoie le client
+  // automatiquement dans son application (Wave, Max it). Rien ne se rÃ¨gle
   // ici : c'est le webhook qui active.
 
-  /** Numéro mobile du parent, pré-remplissage des panneaux de paiement. */
+  /** NumÃ©ro mobile du parent, prÃ©-remplissage des panneaux de paiement. */
   const defaultPhone = profile?.phone ?? '';
 
   /**
-   * Paiement multi-mois (PayerAbonnementSection) : formule × mois en un seul
-   * paiement SycaPay, débit recalculé ici (jamais une saisie du parent).
+   * Paiement multi-mois (PayerAbonnementSection) : formule Ã— mois en un seul
+   * paiement SycaPay, dÃ©bit recalculÃ© ici (jamais une saisie du parent).
    */
   const startBundlePayment = async (
     childIds: string[],
@@ -226,7 +226,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
   ) => {
     if (childIds.length === 0) throw new Error('Choisissez au moins un enfant.');
     const children = myChildren(username).filter((child) => childIds.includes(child.id));
-    if (children.length !== childIds.length) throw new Error('Un enfant sélectionné est introuvable.');
+    if (children.length !== childIds.length) throw new Error('Un enfant sÃ©lectionnÃ© est introuvable.');
 
     const subscriptionsToPay: Subscription[] = [];
     let montant = 0;
@@ -250,7 +250,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
         parent_username: username,
       });
       if (groupError) {
-        throw new Error(`Impossible de préparer le paiement multi-enfants: ${groupError.message}`);
+        throw new Error(`Impossible de prÃ©parer le paiement multi-enfants: ${groupError.message}`);
       }
     }
 
@@ -262,7 +262,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     setWaveModal({ kind: 'sub', paymentId: payment.id, wave: session });
   };
 
-  /** Reprendre une recharge en attente : nouvelle session chez l'opérateur. */
+  /** Reprendre une recharge en attente : nouvelle session chez l'opÃ©rateur. */
   const handleResumeTopup = async (tx: WalletTx) => {
     const method = tx.method;
     if (!method || !isMobileMethod(method)) return;
@@ -281,7 +281,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
       ?? payments.find((p) => p.id === paymentId);
     const method = payment?.method;
     if (!payment || !method || !isMobileMethod(method)) {
-      flash(false, 'Ce paiement ne peut plus être repris.');
+      flash(false, 'Ce paiement ne peut plus Ãªtre repris.');
       return;
     }
     setConfirmError(null);
@@ -327,7 +327,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     flash(true, text);
   };
 
-  // ---------- Déconnexion ----------
+  // ---------- DÃ©connexion ----------
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
@@ -338,7 +338,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     }
   };
 
-  // ---------- Solde restant après chaque opération ----------
+  // ---------- Solde restant aprÃ¨s chaque opÃ©ration ----------
   const soldeAfterByTx = useMemo(() => {
     const map: Record<string, number> = {};
     kids.forEach((k) => {
@@ -363,7 +363,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
         id: p.id,
         date: p.createdAt,
         child: childNameOf(allMine.find((s) => s.id === p.subscriptionId)) ?? 'Abonnement',
-        label: `Paiement ${p.reference} — ${METHOD_LABEL[p.method] ?? p.method}`,
+        label: `Paiement ${p.reference} â€” ${METHOD_LABEL[p.method] ?? p.method}`,
         amount: -p.amount,
         status: p.status,
         solde: null as number | null,
@@ -393,7 +393,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
         id: v.id,
         date: v.validatedAt,
         child: 'Cantine',
-        label: v.status === 'accepted' ? 'Repas servi' : `Repas refusé${v.reason ? ` — ${v.reason}` : ''}`,
+        label: v.status === 'accepted' ? 'Repas servi' : `Repas refusÃ©${v.reason ? ` â€” ${v.reason}` : ''}`,
         amount: 0,
         status: v.status === 'accepted' ? 'paid' : 'failed',
         solde: null as number | null,
@@ -412,13 +412,13 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     <div className="min-h-screen bg-gradient-to-b from-emerald-50/60 via-slate-100 to-slate-100">
       <div className="max-w-6xl mx-auto px-4 py-6 md:py-8 space-y-10">
 
-        {/* ===== En-tête : identité du parent + déconnexion ===== */}
+        {/* ===== En-tÃªte : identitÃ© du parent + dÃ©connexion ===== */}
         <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/90 backdrop-blur border border-slate-200 px-4 py-3 shadow-sm">
           <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Accès Abonné</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">AccÃ¨s AbonnÃ©</p>
             <p className="font-extrabold text-slate-900 truncate">{myName || 'Mon compte'}</p>
             <p className="text-xs text-slate-500">
-              {profile?.phone ? `Téléphone : ${profile.phone}` : "Identifiant : " + (username || '—')}
+              {profile?.phone ? `TÃ©lÃ©phone : ${profile.phone}` : "Identifiant : " + (username || 'â€”')}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -427,7 +427,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
               onClick={openAnnouncements}
               data-testid="parent-annonces"
               className="relative inline-flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-900 text-white text-sm font-bold hover:bg-emerald-800"
-              title="Annonces publiées par la cantine"
+              title="Annonces publiÃ©es par la cantine"
             >
               <Megaphone className="w-4 h-4" /> Annonces
               {unreadAnnouncements > 0 && (
@@ -443,7 +443,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
               data-testid="parent-logout"
               className="inline-flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
             >
-              <LogOut className="w-4 h-4" /> {loggingOut ? 'Déconnexion…' : 'Déconnexion'}
+              <LogOut className="w-4 h-4" /> {loggingOut ? 'DÃ©connexionâ€¦' : 'DÃ©connexion'}
             </button>
           </div>
         </header>
@@ -459,9 +459,9 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
             </span>
             <div className="min-w-0">
               <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Abonnement</p>
-              <h2 className="text-lg font-black tracking-tight text-slate-900">Payer l’abonnement</h2>
+              <h2 className="text-lg font-black tracking-tight text-slate-900">Payer lâ€™abonnement</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                L’enfant, les mois à régler, le total — un mois déjà payé ne se paie pas deux fois.
+                Lâ€™enfant, les mois Ã  rÃ©gler, le total â€” un mois dÃ©jÃ  payÃ© ne se paie pas deux fois.
               </p>
             </div>
           </div>
@@ -480,13 +480,13 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
 
           {menuDuJour ? (
             <div className="mt-4 max-w-md">
-              <p className="font-bold text-slate-800 mb-2">Menu du jour — {menuDuJour.day}</p>
+              <p className="font-bold text-slate-800 mb-2">Menu du jour â€” {menuDuJour.day}</p>
               <div className="bg-white rounded-2xl border-2 border-green-500 ring-2 ring-green-200 shadow-sm overflow-hidden">
                 <div className="relative h-36 overflow-hidden">
-                  <img src={menuPhoto(menuDuJour)} alt={`Menu du jour — ${menuDuJour.day}`} loading="lazy" className="w-full h-full object-cover" />
+                  <img src={menuPhoto(menuDuJour)} alt={`Menu du jour â€” ${menuDuJour.day}`} loading="lazy" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
                   <span className="absolute bottom-2 left-3 text-sm font-black uppercase tracking-widest text-white drop-shadow">{menuDateLabel(menuDuJour.day)}</span>
-                  <span className="absolute top-2 right-2 text-[11px] font-bold px-2.5 py-1 rounded-full bg-white text-green-700 shadow">MENU DU JOUR</span>
+                  <span className="absolute top-2 right-2 text-[11px] font-bold px-2.5 py-1 rounded-full bg-white text-slate-900 shadow">MENU DU JOUR</span>
                 </div>
                 <div className="p-4">
                   {menuDuJour.description && <p className="text-sm font-semibold text-slate-800"><span className="text-slate-500">Repas :</span> {menuDuJour.description}</p>}
@@ -496,10 +496,10 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
             </div>
           ) : (
             <div className="mt-4 bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
-              <p className="text-lg font-black text-slate-800">Menus en préparation</p>
+              <p className="text-lg font-black text-slate-800">Menus en prÃ©paration</p>
               <p className="mt-1.5 text-sm text-slate-500 max-w-md mx-auto">
-                Le Personnel compose les menus de la semaine — service du midi, du lundi au vendredi.
-                Rien n’est affiché tant que la semaine n’est pas publiée. Revenez bientôt.
+                Le Personnel compose les menus de la semaine â€” service du midi, du lundi au vendredi.
+                Rien nâ€™est affichÃ© tant que la semaine nâ€™est pas publiÃ©e. Revenez bientÃ´t.
               </p>
             </div>
           )}
@@ -507,7 +507,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
 
         {/* ===== 3. KIOSQUE : indisponible pour le moment ===== */}
         <section id="kiosque" className="scroll-mt-24">
-          <SectionTitle step="3" title="Kiosque Récréation & Pause" />
+          <SectionTitle step="3" title="Kiosque RÃ©crÃ©ation & Pause" />
           <div className="mt-4 bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
             <p className="text-lg font-black text-slate-800">Kiosque indisponible pour le moment</p>
             <p className="mt-1.5 text-sm text-slate-500 max-w-md mx-auto">
@@ -516,14 +516,14 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
           </div>
         </section>
 
-        {/* Rappel de fin de mois : les repas non consommés expirent. */}
+        {/* Rappel de fin de mois : les repas non consommÃ©s expirent. */}
         {renewDue.length > 0 && (
           <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-2">
             <CalendarClock className="w-5 h-5 flex-shrink-0 text-amber-600" />
             <span>
-              La période se termine le <strong>{shortDate(activeByChild(renewDue[0].id)!.endDate)}</strong> pour{' '}
-              {renewDue.map((k) => k.firstName).join(', ')}. Les repas non consommés ne sont pas reportés —
-              renouvelez l’abonnement pour le mois suivant.
+              La pÃ©riode se termine le <strong>{shortDate(activeByChild(renewDue[0].id)!.endDate)}</strong> pour{' '}
+              {renewDue.map((k) => k.firstName).join(', ')}. Les repas non consommÃ©s ne sont pas reportÃ©s â€”
+              renouvelez lâ€™abonnement pour le mois suivant.
             </span>
           </div>
         )}
@@ -547,7 +547,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
           </div>
           {announcements.length === 0 ? (
             <p className="mt-3 text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-4">
-              Aucune annonce pour le moment — la cantine publiera ici les informations importantes (menus spéciaux, fermetures, échéances).
+              Aucune annonce pour le moment â€” la cantine publiera ici les informations importantes (menus spÃ©ciaux, fermetures, Ã©chÃ©ances).
             </p>
           ) : (
             <div className="grid md:grid-cols-2 gap-3 mt-3">
@@ -563,7 +563,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
                   >
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">
-                        {isNew ? 'Nouveau · ' : ''}Annonce officielle
+                        {isNew ? 'Nouveau Â· ' : ''}Annonce officielle
                       </p>
                       <time className="text-[11px] text-slate-400">{shortDate(a.createdAt)}</time>
                     </div>
@@ -576,12 +576,12 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
           )}
         </section>
 
-        {/* ===== 5. RÉCLAMATIONS (intégrées à l'espace) ===== */}
+        {/* ===== 5. RÃ‰CLAMATIONS (intÃ©grÃ©es Ã  l'espace) ===== */}
         {/* Reclamations desactivees */}
 
         {/* ===== 6. HISTORIQUE ===== */}
         <section id="historique" className="scroll-mt-24" data-testid="section-historique">
-          <SectionTitle step="6" title="Historique des dépenses" />
+          <SectionTitle step="6" title="Historique des dÃ©penses" />
           <div className="flex flex-wrap items-center gap-2 mt-4 mb-3">
             {[{ id: 'all', label: 'Tous' }, ...kids.map((k) => ({ id: k.id, label: k.firstName }))].map((o) => (
               <button
@@ -597,12 +597,12 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
           </div>
           <div className="bg-white rounded-2xl border overflow-hidden">
             {historyRows.length === 0 ? (
-              <p className="p-10 text-center text-sm text-slate-500">Aucune dépense pour le moment.</p>
+              <p className="p-10 text-center text-sm text-slate-500">Aucune dÃ©pense pour le moment.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[640px]">
                   <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-widest">
-                    <tr><th className="text-left p-4">Date</th><th className="text-left p-4">Enfant</th><th className="text-left p-4">Opération</th><th className="text-right p-4">Montant</th><th className="text-right p-4">Solde</th><th className="text-right p-4">Statut</th></tr>
+                    <tr><th className="text-left p-4">Date</th><th className="text-left p-4">Enfant</th><th className="text-left p-4">OpÃ©ration</th><th className="text-right p-4">Montant</th><th className="text-right p-4">Solde</th><th className="text-right p-4">Statut</th></tr>
                   </thead>
                   <tbody>
                     {historyRows.slice(0, 80).map((r) => (
@@ -611,20 +611,20 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
                         <td className="p-4 font-bold text-[13px]">{r.child}</td>
                         <td className="p-4 text-slate-500 text-[13px]">{r.label}</td>
                         <td className={`p-4 text-right font-bold text-[13px] ${r.amount > 0 ? 'text-emerald-700' : ''}`}>
-                          {r.amount > 0 ? '+' : ''}{r.amount === 0 ? '—' : formatCurrency(r.amount)}
+                          {r.amount > 0 ? '+' : ''}{r.amount === 0 ? 'â€”' : formatCurrency(r.amount)}
                         </td>
                         <td className="p-4 text-right text-[13px] font-bold text-slate-500">
-                          {r.solde != null ? formatCurrency(r.solde) : '—'}
+                          {r.solde != null ? formatCurrency(r.solde) : 'â€”'}
                         </td>
                         <td className="p-4 text-right">
                           {r.kind === 'pay' && r.payment ? (
                             <span className="inline-flex items-center gap-2">
                               <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_STYLE[r.payment.status]}`}>{STATUS_LABEL[r.payment.status]}</span>
                               {r.payment.status === 'paid' && (
-                                <button onClick={() => setReceipt(r.payment)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-bold">Reçu</button>
+                                <button onClick={() => setReceipt(r.payment)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-bold">ReÃ§u</button>
                               )}
                               {r.payment.status === 'pending' && r.payment.method && isMobileMethod(r.payment.method) && (
-                                <button onClick={() => handleResumePayment(r.payment!.id)} className="px-3 py-1.5 rounded-lg bg-green-700 text-white text-xs font-bold inline-flex items-center gap-1">
+                                <button onClick={() => handleResumePayment(r.payment!.id)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-bold inline-flex items-center gap-1">
                                   <Smartphone className="w-3.5 h-3.5" /> Confirmer
                                 </button>
                               )}
@@ -632,7 +632,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
                           ) : r.kind === 'wallet' && r.status === 'pending' && r.tx && isMobileMethod(r.tx.method) ? (
                             <span className="inline-flex items-center gap-2">
                               <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_STYLE[r.status as ORestoPaymentStatus]}`}>{STATUS_LABEL[r.status as ORestoPaymentStatus]}</span>
-                              <button onClick={() => handleResumeTopup(r.tx)} className="px-3 py-1.5 rounded-lg bg-green-700 text-white text-xs font-bold inline-flex items-center gap-1">
+                              <button onClick={() => handleResumeTopup(r.tx)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-bold inline-flex items-center gap-1">
                                 <Smartphone className="w-3.5 h-3.5" /> Confirmer
                               </button>
                             </span>
@@ -647,7 +647,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
               </div>
             )}
           </div>
-          <p className="mt-3 text-xs text-slate-400">{paidCount} paiement{paidCount > 1 ? 's' : ''}{pendingPaymentsCount > 0 ? ` · ${pendingPaymentsCount} en attente` : ''}</p>
+          <p className="mt-3 text-xs text-slate-400">{paidCount} paiement{paidCount > 1 ? 's' : ''}{pendingPaymentsCount > 0 ? ` Â· ${pendingPaymentsCount} en attente` : ''}</p>
         </section>
       </div>
 
@@ -664,20 +664,20 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
             setWaveModal(null);
             setConfirmError(null);
             if (kind === 'topup') {
-              flash(true, 'Recharge confirmée : le solde de la carte a été crédité.');
+              flash(true, 'Recharge confirmÃ©e : le solde de la carte a Ã©tÃ© crÃ©ditÃ©.');
               return;
             }
             const paid = pid
               ? (myPayments(username).find((p) => p.id === pid) ?? payments.find((p) => p.id === pid) ?? null)
               : null;
             if (paid) setReceipt({ ...paid, status: 'paid' });
-            flash(true, 'Paiement confirmé — la carte est ACTIVE.');
+            flash(true, 'Paiement confirmÃ© â€” la carte est ACTIVE.');
           }}
           onSync={syncPaymentFromProvider}
           onClose={() => {
             setWaveModal(null);
             setConfirmError(null);
-            flash(true, 'Paiement en attente : reprenez-le depuis l’historique (bouton Confirmer).');
+            flash(true, 'Paiement en attente : reprenez-le depuis lâ€™historique (bouton Confirmer).');
           }}
         />
       )}
@@ -694,7 +694,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
   );
 };
 
-/** Début du mois en cours (0 h). */
+/** DÃ©but du mois en cours (0 h). */
 function monthStartOf(): Date {
   const d = new Date();
   d.setDate(1);
@@ -703,9 +703,9 @@ function monthStartOf(): Date {
 }
 
 /**
- * Réclamations EMBARQUÉES dans l'Accès Abonné : le parent écrit au
- * Superviseur sans quitter son espace (texte seul — pas de jointure de
- * fichier). Chaque fil reste privé parent ↔ superviseur.
+ * RÃ©clamations EMBARQUÃ‰ES dans l'AccÃ¨s AbonnÃ© : le parent Ã©crit au
+ * Superviseur sans quitter son espace (texte seul â€” pas de jointure de
+ * fichier). Chaque fil reste privÃ© parent â†” superviseur.
  */
 function ReclamationsSection({ username }: { username: string }) {
   const { myComplaints, messagesOf, addComplaint, replyComplaint } = useResto();
@@ -728,7 +728,7 @@ function ReclamationsSection({ username }: { username: string }) {
     e.preventDefault();
     setError(null);
     if (!body.trim()) {
-      setError('Écrivez votre message avant d’envoyer.');
+      setError('Ã‰crivez votre message avant dâ€™envoyer.');
       return;
     }
     try {
@@ -740,7 +740,7 @@ function ReclamationsSection({ username }: { username: string }) {
       });
       setSubject('');
       setBody('');
-      setOk(`Réclamation ${created.reference ?? ''} envoyée — le Superviseur la voit dès maintenant.`);
+      setOk(`RÃ©clamation ${created.reference ?? ''} envoyÃ©e â€” le Superviseur la voit dÃ¨s maintenant.`);
       window.setTimeout(() => setOk(null), 8000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Envoi impossible pour le moment.');
@@ -762,13 +762,13 @@ function ReclamationsSection({ username }: { username: string }) {
         </span>
         <div className="min-w-0">
           <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
-            <MessageSquareWarning className="w-5 h-5 text-emerald-700" /> Réclamations
+            <MessageSquareWarning className="w-5 h-5 text-emerald-700" /> RÃ©clamations
           </h2>
 
         </div>
       </div>
 
-      {/* ---- Nouvelle réclamation : texte seul ---- */}
+      {/* ---- Nouvelle rÃ©clamation : texte seul ---- */}
       <form onSubmit={submit} className="mt-4 rounded-2xl bg-white border p-5 space-y-3" data-testid="parent-reclamations-form">
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
@@ -804,7 +804,7 @@ function ReclamationsSection({ username }: { username: string }) {
             onChange={(e) => setBody(e.target.value)}
             maxLength={1200}
             rows={4}
-            placeholder="Décrivez le problème — date, classe, détail du repas…"
+            placeholder="DÃ©crivez le problÃ¨me â€” date, classe, dÃ©tail du repasâ€¦"
             className="mt-1 w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-emerald-600 resize-y"
           />
         </div>
@@ -826,7 +826,7 @@ function ReclamationsSection({ username }: { username: string }) {
       <div className="mt-4 space-y-3" data-testid="reclamations-list">
         {threads.length === 0 ? (
           <p className="text-sm text-slate-400 bg-white rounded-xl border border-dashed px-4 py-4">
-            Aucune réclamation pour l’instant — vos messages apparaîtront ici avec la réponse de la cantine.
+            Aucune rÃ©clamation pour lâ€™instant â€” vos messages apparaÃ®tront ici avec la rÃ©ponse de la cantine.
           </p>
         ) : threads.map((c) => {
           const thread = messagesOf(c.id);
@@ -850,7 +850,7 @@ function ReclamationsSection({ username }: { username: string }) {
                     className={`rounded-xl px-3 py-2 text-sm ${m.authorRole === 'staff' ? 'bg-emerald-50 border border-emerald-100 text-emerald-900' : 'bg-slate-50 border border-slate-100 text-slate-700'}`}
                   >
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">
-                      {m.authorRole === 'staff' ? 'Cantine' : 'Vous'} · {shortDate(m.createdAt)}
+                      {m.authorRole === 'staff' ? 'Cantine' : 'Vous'} Â· {shortDate(m.createdAt)}
                     </p>
                     <p className="whitespace-pre-wrap">{m.body}</p>
                   </li>
@@ -864,7 +864,7 @@ function ReclamationsSection({ username }: { username: string }) {
                       onChange={(e) => setReplyText(e.target.value)}
                       rows={2}
                       maxLength={1200}
-                      placeholder="Répondre…"
+                      placeholder="RÃ©pondreâ€¦"
                       className="w-full px-3 py-2 rounded-xl border-2 border-slate-200 text-sm outline-none focus:border-emerald-600"
                     />
                     <div className="flex gap-2">
@@ -888,7 +888,7 @@ function ReclamationsSection({ username }: { username: string }) {
                     className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-2 min-h-[40px] rounded-xl border-2 border-slate-200 text-xs font-bold text-slate-700 hover:border-emerald-500 hover:text-emerald-700"
                     data-testid={`reclamation-reply-${c.id}`}
                   >
-                    <MessagesSquare className="w-3.5 h-3.5" /> Répondre
+                    <MessagesSquare className="w-3.5 h-3.5" /> RÃ©pondre
                   </button>
                 )
               )}
