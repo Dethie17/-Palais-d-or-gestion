@@ -57,7 +57,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   if (req.method !== 'POST') return methodNotAllowed(req, res, ['POST']);
 
   // Ancienne route /api/auth/set-password : conservée pour les clients déjà
-  // chargés et pour le serveur Render qui mappe encore cette URL ici.
+  // chargés et le rewrite Vercel qui mappe encore cette URL ici.
   const requestUrl = req.url ?? '';
   const pathname = requestUrl.split('?')[0];
   const query = new URLSearchParams(requestUrl.split('?')[1] ?? '');

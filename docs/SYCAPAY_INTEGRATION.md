@@ -138,9 +138,11 @@ SYCAPAY_CA_CRT=<base64>
 SYCAPAY_CLIENT_CERT_B64=<base64>
 SYCAPAY_CLIENT_KEY_B64=<base64>
 VITE_APP_URL=https://orestosn.com
+# Optionnel — sortie à IP fixe si l'hébergeur partage la sienne (Vercel).
+# SYCAPAY_PROXY_URL=http://user:pass@proxy.example.com:3128
 ```
 
-Sur Vercel, ondeclare ces mêmes variables dans les variables d'environnement
+Sur Vercel, on déclare ces mêmes variables dans les variables d'environnement
 du projet `orestos`. **`SUPABASE_SERVICE_ROLE_KEY`** doit y être présente :
 sans elle, le webhook ne peut écrire aucun règlement.
 
@@ -281,3 +283,47 @@ le message de l'opérateur ne parvient plus. Un code inconnu se traite comme
 | 409 à l'initiation | `idPartenaire` déjà utilisé ; vérifier que la référence est bien unique |
 | Le client paie, la carte ne s'active pas | le webhook n'atteint pas l'URL déclarée ; le rattrapage `/api/sycapay/status` prend le relais |
 | `1120` / `1121` | `VITE_APP_URL` n'est pas en https |
+| `socket hang up` / `ECONNRESET` après le TLS | l'IP sortante n'est pas dans l'allowlist SycaPay — voir §8 |
+| `1117` | l'API a répondu : l'IP est refusée côté SycaPay, à corriger dans son back-office |
+
+---
+
+## 8. « socket hang up » : l'IP de sortie n'est pas autorisée
+
+Un `socket hang up` (`ECONNRESET`) **après** un handshake TLS réussi n'est
+pas un problème de certificat : le certificat client est accepté, puis le
+pare-feu de SycaPay coupe la connexion HTTP avant de la router. La cause est
+l'adresse IP source, pas le code.
+
+Diagnostic :
+
+```bash
+curl -s "https://orestosn.com/api/sycapay/status?probe=1"
+```
+
+La sonde rend `egress.primary`, `egress.ptr`, `egress.provider`,
+`egress.region` et `egress.stable`. `phase.tls: "ok"` + `phase.http: "reset"`
+confirme le filtrage IP. Elle
+distingue aussi l'IP publique (`egress.primary`) de l'adresse privée du
+conteneur (`outbound.localAddress`, type `10.x` ou `192.168.x`, qui ne doit
+**jamais** être déclarée).
+
+Sur Vercel (offre gratuite), l'IP de sortie est **dynamique** : elle appartient
+à un pool AWS et peut changer entre deux appels. Autoriser une seule IP ne
+suffit donc pas durablement. Deux options :
+
+1. **Débloquer immédiatement** : ajoutez l'IP affichée par la sonde
+   (`egress.primary`) dans l'allowlist SycaPay, puis relancez le paiement.
+   Si SycaPay refuse encore `1117`, demandez-lui de vérifier que l'allowlist
+   s'applique bien à `/initiationTransactionV1` et au service `SN_PM_WAVE`.
+2. **Solution durable et gratuite** : un proxy à IP fixe (par exemple une VM
+   Oracle Cloud Always Free) et `SYCAPAY_PROXY_URL`. Le proxy doit laisser
+   passer `CONNECT ops.sycapay.com:443` ; le mTLS reste de bout en bout (le
+   certificat client est présenté à SycaPay, pas au proxy).
+
+```bash
+SYCAPAY_PROXY_URL=http://user:pass@proxy.example.com:3128
+```
+
+Les IP fixes Vercel (Static IPs) existent mais sont payantes ; elles ne sont
+pas nécessaires si le proxy est utilisé.

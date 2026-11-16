@@ -197,7 +197,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       profile = (allUsers ?? []).find((row: { username?: unknown; role?: unknown }) => {
         const role = typeof row.role === 'string' ? row.role.trim().toLowerCase() : '';
         return ['client', 'parent'].includes(role) && rowContainsPhone(row, phone);
-      }) as typeof profile;
+      }) as unknown as typeof profile;
     }
   }
 

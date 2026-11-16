@@ -13,6 +13,7 @@
 
 import https from 'node:https';
 import type { ClientRequest, IncomingHttpHeaders } from 'node:http';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 const DEFAULT_BASE_URL = 'https://ops.sycapay.com/coresystem/part/api';
 
@@ -26,6 +27,33 @@ export interface SycaPayConfig {
   cert: string;
   /** Clé privée client (PEM). */
   key: string;
+  /**
+   * Proxy HTTP(S) à IP fixe (SYCAPAY_PROXY_URL), facultatif.
+   *
+   * Sur Vercel, l'IP de sortie est dynamique : l'IP vue par SycaPay peut
+   * changer d'une connexion à l'autre ; une entrée unique dans son allowlist
+   * ne suffit alors pas. Passer par un proxy à IP fixe donne
+   * une adresse stable à déclarer, sans changer le reste du code.
+   */
+  proxyUrl?: string;
+}
+
+/**
+ * Lit une variable d'environnement en retirant les guillemets englobants.
+ *
+ * Le back-office Vercel conserve littéralement
+ * les guillemets collés dans le champ valeur. Un mot de passe saisi
+ * `"#P@ss"` partait alors avec les guillemets et SycaPay répondait 1110
+ * (mot de passe incorrect) sans que rien ne désigne la variable en cause.
+ */
+export function readEnvValue(value: string | undefined): string {
+  const raw = (value ?? '').trim();
+  if (raw.length >= 2) {
+    const first = raw[0];
+    const last = raw[raw.length - 1];
+    if ((first === '"' || first === "'") && last === first) return raw.slice(1, -1).trim();
+  }
+  return raw;
 }
 
 export class SycaPayConfigError extends Error {
@@ -72,20 +100,21 @@ export function readPem(envValue: string | undefined): string | undefined {
  * déploiement existant continue donc de fonctionner sans changement.
  */
 export function readConfig(env: NodeJS.ProcessEnv = process.env): SycaPayConfig {
-  const ca = readPem(env.SYCAPAY_CA_CRT);
-  const useB64Credentials = Boolean(
-    (env.SYCAPAY_CLIENT_CERT_B64 ?? '').trim() || (env.SYCAPAY_CLIENT_KEY_B64 ?? '').trim(),
-  );
+  const ca = readPem(readEnvValue(env.SYCAPAY_CA_CRT));
+  const certB64 = readEnvValue(env.SYCAPAY_CLIENT_CERT_B64);
+  const keyB64 = readEnvValue(env.SYCAPAY_CLIENT_KEY_B64);
+  const useB64Credentials = Boolean(certB64 || keyB64);
   const cert = useB64Credentials
-    ? readPem(Buffer.from((env.SYCAPAY_CLIENT_CERT_B64 ?? '').trim(), 'base64').toString('utf8'))
-    : readPem(env.SYCAPAY_CLIENT_CRT);
+    ? readPem(Buffer.from(certB64, 'base64').toString('utf8'))
+    : readPem(readEnvValue(env.SYCAPAY_CLIENT_CRT));
   const key = useB64Credentials
-    ? readPem(Buffer.from((env.SYCAPAY_CLIENT_KEY_B64 ?? '').trim(), 'base64').toString('utf8'))
-    : readPem(env.SYCAPAY_CLIENT_KEY);
+    ? readPem(Buffer.from(keyB64, 'base64').toString('utf8'))
+    : readPem(readEnvValue(env.SYCAPAY_CLIENT_KEY));
   const certVar = useB64Credentials ? 'SYCAPAY_CLIENT_CERT_B64' : 'SYCAPAY_CLIENT_CRT';
   const keyVar = useB64Credentials ? 'SYCAPAY_CLIENT_KEY_B64' : 'SYCAPAY_CLIENT_KEY';
-  const loginApi = (env.SYCAPAY_LOGIN_API ?? '').trim();
-  const mdpApi = (env.SYCAPAY_MDP_API ?? '').trim();
+  const loginApi = readEnvValue(env.SYCAPAY_LOGIN_API);
+  const mdpApi = readEnvValue(env.SYCAPAY_MDP_API);
+  const proxyUrl = readEnvValue(env.SYCAPAY_PROXY_URL);
 
   const missing: string[] = [];
   if (!ca) missing.push('SYCAPAY_CA_CRT');
@@ -96,12 +125,13 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): SycaPayConfig 
   if (missing.length > 0) throw new SycaPayConfigError(missing);
 
   return {
-    baseUrl: (env.SYCAPAY_BASE_URL ?? DEFAULT_BASE_URL).trim().replace(/\/+$/, ''),
+    baseUrl: (readEnvValue(env.SYCAPAY_BASE_URL) || DEFAULT_BASE_URL).replace(/\/+$/, ''),
     loginApi,
     mdpApi,
     ca: ca as string,
     cert: cert as string,
     key: key as string,
+    ...(proxyUrl ? { proxyUrl } : {}),
   };
 }
 
@@ -146,12 +176,51 @@ export function isCertificateError(err: unknown): boolean {
   return TLS_CERTIFICATE_ERROR.test(`${code} ${message}`);
 }
 
+/**
+ * Message d'une connexion coupée avant réponse.
+ *
+ * Cas réel : le handshake TLS réussit (certificat client accepté), puis le
+ * pair renvoie un RST dès la requête HTTP, avec ECONNRESET / "socket hang
+ * up". C'est le comportement d'un pare-feu applicatif qui filtre l'adresse
+ * source : la requête n'atteint jamais le routeur SycaPay. Sans ce message,
+ * l'opérateur ne voit qu'un « socket hang up » et cherche au mauvais endroit.
+ */
+function resetMessage(): string {
+  return (
+    'La connexion à SycaPay a été coupée avant toute réponse (socket hang up). ' +
+    "Le handshake TLS a réussi, donc le certificat n'est pas en cause : " +
+    "l'adresse IP publique sortante du serveur n'est probablement pas autorisée. " +
+    "Sur Vercel, l'IP de sortie est dynamique (pool AWS) : une IP seule ne suffit pas durablement. " +
+    "Ajoutez l'IP courante pour un test immédiat, ou configurez SYCAPAY_PROXY_URL avec un proxy à IP fixe."
+  );
+}
+
+/** Vrai pour une connexion fermée par le pair avant la moindre réponse HTTP. */
+export function isConnectionReset(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const code = String((err as NodeJS.ErrnoException).code ?? '');
+  const message = String((err as Error).message ?? '');
+  return code === 'ECONNRESET' || code === 'EPIPE' || /socket hang up/i.test(message);
+}
+
+/** Recopie les champs de diagnostic (code, syscall, adresse) sans le message. */
+function withDetails(target: SycaPayTransportError, source: unknown): SycaPayTransportError {
+  const from = source as NodeJS.ErrnoException & { address?: string; port?: number };
+  const to = target as unknown as Record<string, unknown>;
+  if (from?.code) to.code = from.code;
+  if (from?.syscall) to.syscall = from.syscall;
+  if (from?.address) to.address = from.address;
+  if (from?.port) to.port = from.port;
+  return target;
+}
+
 /** Ne laisse jamais remonter le détail brut d'une erreur de certificat. */
 function asTransportError(err: unknown): SycaPayTransportError {
   if (err instanceof SycaPayTransportError) return err;
   if (isCertificateError(err)) return new SycaPayCertificateError();
+  if (isConnectionReset(err)) return withDetails(new SycaPayTransportError(resetMessage()), err);
   const message = err instanceof Error ? err.message : String(err);
-  return new SycaPayTransportError(`Appel SycaPay impossible : ${message}`);
+  return withDetails(new SycaPayTransportError(`Appel SycaPay impossible : ${message}`), err);
 }
 
 /** Agent HTTPS portant le certificat client, la clé privée et la CA serveur. */
@@ -161,6 +230,16 @@ export function createMtlsAgent(config: Pick<SycaPayConfig, 'ca' | 'cert' | 'key
     cert: config.cert,
     key: config.key,
   });
+}
+
+/**
+ * Agent de sortie : tunnel via SYCAPAY_PROXY_URL si configuré, sinon mTLS direct.
+ * L'agent proxy reçoit les options TLS de la requête (cert/clé/CA) et les
+ * applique à la connexion vers la cible, pas vers le proxy.
+ */
+export function createAgent(config: SycaPayConfig): https.Agent {
+  if (config.proxyUrl) return new HttpsProxyAgent<string>(config.proxyUrl) as unknown as https.Agent;
+  return createMtlsAgent(config);
 }
 
 /** Réponse brute d'un appel SycaPay, telle que rendue par l'API. */
@@ -207,7 +286,13 @@ export function call<T extends SycaPayEnvelope = SycaPayEnvelope>(
           port: url.port || 443,
           path: `${url.pathname}${url.search}`.replace(/^\/+/, '/'),
           method: 'POST',
-          agent: createMtlsAgent(config),
+          agent: createAgent(config),
+          // HttpsProxyAgent construit la TLS vers la cible à partir des
+          // options de la requête : sans elles, le tunnel n'enverrait pas le
+          // certificat client à SycaPay.
+          ...(config.proxyUrl
+            ? { ca: config.ca, cert: config.cert, key: config.key, servername: url.hostname }
+            : {}),
           headers: {
             'Content-Type': 'application/json',
             'Content-Length': Buffer.byteLength(payload),

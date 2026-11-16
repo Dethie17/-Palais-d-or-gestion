@@ -5,7 +5,7 @@
 O RESTO est une plateforme web de gestion de restauration scolaire/entreprise (menus, QR Code, paiements SycaPay — Wave / Max, caisse POS, abonnements, tableau de bord).
 
 - Application React + Vite + TypeScript, interface responsive (desktop / mobilité / kiosque)
-- Base de données Supabase (temps réel), déployée sur Netlify/Vercel
+- Base de données Supabase (temps réel), déployée sur Vercel
 - 4 espaces utilisateur distincts selon le profil connecté
 - Connexion par identifiant/mot de passe, accès parent protégé par un code personnel (ParentGate)
 

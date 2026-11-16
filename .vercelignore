@@ -1,0 +1,8 @@
+dist
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.csr
+*.pfx

@@ -23,6 +23,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import https from 'node:https';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ENV_PATH = resolve(ROOT, '.env.local');
@@ -92,6 +93,8 @@ function postMtls(baseUrl, path, body, tls, timeoutMs = 30000) {
         ca: tls.ca,
         cert: tls.cert,
         key: tls.key,
+        servername: url.hostname,
+        ...(tls.proxyUrl ? { agent: new HttpsProxyAgent(tls.proxyUrl) } : {}),
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(payload),
@@ -135,8 +138,10 @@ async function main() {
   }
 
   const baseUrl = (env.SYCAPAY_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+  const proxyUrl = (env.SYCAPAY_PROXY_URL ?? '').trim() || undefined;
   console.log(`Passerelle : ${baseUrl}`);
   console.log(`Partenaire : ${env.SYCAPAY_LOGIN_API}`);
+  if (proxyUrl) console.log(`Proxy sortant : ${proxyUrl}`);
   console.log('Appel POST /balance (lecture seule)…\n');
 
   let payload;
@@ -149,11 +154,16 @@ async function main() {
 
   let res;
   try {
-    res = await postMtls(baseUrl, '/balance', payload, { cert, key, ca });
+    res = await postMtls(baseUrl, '/balance', payload, { cert, key, ca, proxyUrl });
   } catch (err) {
     const message = err?.message ?? String(err);
     console.error(`\n❌ ÉCHEC DE CONNEXION : ${message}`);
-    if (/mismatch|PEM|key values|bad decrypt|private key|KEY_VALUES/i.test(message)) {
+    if (/socket hang up|ECONNRESET/i.test(message)) {
+      console.error('\n   → Le handshake TLS a réussi, puis SycaPay a coupé la requête HTTP.');
+      console.error('   → Ce n’est ni le certificat ni le mot de passe : l’IP source n’est pas autorisée.');
+      console.error('   → Déclarez dans l’allowlist SycaPay l’IP publique de cette machine,');
+      console.error('     ou configurez SYCAPAY_PROXY_URL avec une IP fixe (Vercel : voir /api/sycapay/status?probe=1).');
+    } else if (/mismatch|PEM|key values|bad decrypt|private key|KEY_VALUES/i.test(message)) {
       console.error('\n   → client.key ne correspond pas à client.crt.');
       console.error('   → Ou ca.crt ne correspond pas à la CA qui a signé le certificat.');
       console.error('   → Le couple fourni par SycaPay est probablement incohérent.');

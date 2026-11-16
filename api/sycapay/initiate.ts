@@ -22,6 +22,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { isIP } from 'node:net';
 import {
   call,
   describeError,
@@ -35,6 +36,7 @@ import {
   SycaPayTransportError,
   type InitiateResponse,
   type SycaPayCodeService,
+  type SycaPayEnvelope,
 } from '../_lib/sycapay.js';
 import { adminClient } from '../_lib/supabaseAdmin.js';
 import { requireRole, expectedAmountFor, STAFF_OR_ADMIN } from '../_lib/session.js';
@@ -68,6 +70,36 @@ interface InitiateBody {
 /** Les adresses de retour doivent être en https : SycaPay refuse sinon (1120/1121). */
 function validReturnUrl(value: unknown): value is string {
   return typeof value === 'string' && value.startsWith('https://');
+}
+
+async function publicEgressIp(): Promise<string | null> {
+  const endpoints = [
+    'https://api.ipify.org?format=json',
+    'https://checkip.amazonaws.com',
+    'https://api64.ipify.org?format=json',
+  ];
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(endpoint, {
+        signal: AbortSignal.timeout(3500),
+        headers: { accept: 'text/plain, application/json' },
+      });
+      if (!res.ok) continue;
+      const raw = (await res.text()).trim();
+      let value = raw;
+      if (value.startsWith('{')) {
+        try {
+          value = String((JSON.parse(value) as { ip?: unknown }).ip ?? '').trim();
+        } catch {
+          continue;
+        }
+      }
+      if (isIP(value)) return value;
+    } catch {
+      // Un service indisponible ne doit pas masquer le refus SycaPay.
+    }
+  }
+  return null;
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
@@ -197,17 +229,41 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     // pas un échec du client, et rejouer l'appel ne ferait que risquer un
     // second débit : on répond en conflit sans réessayer.
     const alreadyUsed = String(response.errorCode) === '1101';
+    let diagnostics: {
+      outboundIp: string | null;
+      balanceErrorCode: string | null;
+      proxyConfigured: boolean;
+    } | null = null;
+    let displayMessage = message;
+    if (String(response.errorCode) === '1117') {
+      const outboundIp = await publicEgressIp();
+      let balanceErrorCode: string | null = null;
+      try {
+        const balance = await call<SycaPayEnvelope>(sycaPayConfig, {
+          path: '/balance',
+          body: { loginApi: sycaPayConfig.loginApi, mdpApi: sycaPayConfig.mdpApi },
+          timeoutMs: 10000,
+        });
+        balanceErrorCode = balance.errorCode == null ? null : String(balance.errorCode);
+      } catch {
+        balanceErrorCode = 'transport';
+      }
+      diagnostics = { outboundIp, balanceErrorCode, proxyConfigured: Boolean(sycaPayConfig.proxyUrl) };
+      console.warn('[sycapay/initiate] refus 1117', JSON.stringify(diagnostics));
+      if (outboundIp) displayMessage = `${message} — IP de sortie : ${outboundIp}`;
+    }
     // 1101 : une transaction porte déjà cette référence. Elle peut être en
     // vol ou déjà réglée — on ne referme donc rien, on laisse le statut décider.
     if (!alreadyUsed) await markFailed(reference, String(response.errorCode ?? ''), message);
     return sendJson(res, alreadyUsed ? 409 : 400, {
       ok: false,
-      error: message,
+      error: displayMessage,
       errorCode: response.errorCode ?? null,
       // L'appel peut être rejoué tel quel : c'est la seule garantie que la
       // passerelle donne sur un refus d'appel.
       retryable: isRetryableCallError(response.errorCode),
       alreadyUsed,
+      diagnostics,
     });
   }
 

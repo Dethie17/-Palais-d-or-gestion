@@ -1,237 +1,94 @@
-# 🚀 Guide de déploiement Netlify
+# Guide de déploiement Vercel
 
-Ce guide explique comment déployer **Palais d'Or** sur Netlify.
+Ce guide explique comment déployer **Palais d'Or** sur Vercel.
 
-## 📋 Prérequis
+## Prérequis
 
 - Code source du projet
-- Compte Netlify (gratuit) : https://app.netlify.com/signup
+- Compte Vercel (offre Hobby gratuite) : https://vercel.com/signup
 - **Compte Supabase** (gratuit) : https://supabase.com/
-- **Base de données Supabase configurée** (voir section ci-dessous)
+- Base de données Supabase configurée (voir ci-dessous)
 
-## 🗄️ Configuration Supabase (REQUIS)
+## Configuration Supabase
 
-**⚠️ IMPORTANT** : L'application nécessite Supabase pour fonctionner.
+1. Créez un projet sur https://supabase.com/.
+2. Dans le **SQL Editor**, exécutez les scripts SQL du dépôt dans l'ordre indiqué
+   dans `.env.example`.
+3. Notez dans **Settings > API** :
+   - `VITE_SUPABASE_URL` (Project URL)
+   - `VITE_SUPABASE_PUBLISHABLE_KEY` (publishable/anon key)
+   - `SUPABASE_SERVICE_ROLE_KEY` (service role, **serveur uniquement**)
 
-### 1. Créer un projet Supabase
+## Déploiement sur Vercel
 
-1. Allez sur https://supabase.com/ et créez un compte
-2. Créez un nouveau projet
-3. Notez votre **Project URL** et **anon public key**
+1. Ouvrez https://vercel.com/new et importez le dépôt GitHub.
+2. Vercel détecte automatiquement :
+   - Framework : **Vite**
+   - Build command : `npm run build`
+   - Output directory : `dist`
+3. Dans **Settings > Environment Variables**, ajoutez les variables en
+   **Production** :
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `VITE_APP_URL=https://orestosn.com`
+   - `SYCAPAY_BASE_URL`
+   - `SYCAPAY_LOGIN_API`
+   - `SYCAPAY_MDP_API`
+   - `SYCAPAY_CA_CRT`
+   - `SYCAPAY_CLIENT_CERT_B64`
+   - `SYCAPAY_CLIENT_KEY_B64`
+   - `SYCAPAY_WEBHOOK_SECRET`
+   - `SYCAPAY_WEBHOOK_REQUIRE_SIGNATURE=true`
+4. Cliquez sur **Deploy**.
 
-### 2. Initialiser la base de données
+Les variables `SYCAPAY_*` et `SUPABASE_SERVICE_ROLE_KEY` ne doivent jamais
+être préfixées par `VITE_` : elles seraient exposées dans le navigateur.
 
-1. Dans votre dashboard Supabase, ouvrez le **SQL Editor**
-2. Copiez le contenu du fichier `supabase-setup.sql` du dépôt
-3. Exécutez le script pour créer :
-   - Table `users` (comptes utilisateurs)
-   - Table `orders` (commandes)
-   - Table `products` (produits)
-   - Politiques RLS et index
+Le projet doit rester sous la limite de **12 fonctions** de l'offre Hobby :
+chaque fichier de `api/` compte. N'ajoutez pas de route sans en supprimer une.
 
-### 3. Noter les identifiants
-
-Vous aurez besoin de ces 2 valeurs pour Netlify :
-
-- **VITE_SUPABASE_URL** : L'URL de votre projet (ex: `https://xxxxx.supabase.co`)
-- **VITE_SUPABASE_ANON_KEY** : La clé publique anon
-
-Trouvez-les dans **Settings** > **API** de votre dashboard Supabase.
-
-## 🌐 Déploiement automatique (recommandé)
-
-### 1. Connexion à Netlify
-
-1. Allez sur https://app.netlify.com/
-2. Cliquez sur **"Add new site"** → **"Import an existing project"**
-3. Sélectionnez **"Deploy with GitHub"**
-4. Autorisez Netlify à accéder à votre compte GitHub
-
-### 2. Configuration du site
-
-1. Sélectionnez votre dépôt
-2. Netlify détecte automatiquement les paramètres :
-   - **Branch to deploy** : `main`
-   - **Build command** : `npm run build`
-   - **Publish directory** : `dist`
-3. Cliquez sur **"Deploy site"**
-
-### 3. Configuration des variables d'environnement (OBLIGATOIRE)
-
-**⚠️ L'application fonctionne sans ces variables (mode démo local), mais la persistance partagée nécessite Supabase.**
-
-1. Allez dans **Site settings** → **Environment variables**
-2. Cliquez sur **"Add a variable"**
-3. Ajoutez ces 2 variables (facultatives mais recommandées) :
-
-| Clé                      | Valeur                        | Exemple                                   |
-| ------------------------ | ----------------------------- | ----------------------------------------- |
-| `VITE_SUPABASE_URL`      | URL de votre projet Supabase  | `https://xxxxx.supabase.co`               |
-| `VITE_SUPABASE_ANON_KEY` | Clé anon publique de Supabase | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
-
-4. Cliquez sur **"Save"**
-5. **Redéployez le site** pour appliquer les variables
-
-### 4. Déploiement final
-
-1. Cliquez sur **"Deploy site"**
-2. Attendez la fin du build (2-3 minutes)
-3. Le site est en ligne ! 🎉
-
-### 5. Vérification
-
-1. Ouvrez votre site déployé
-2. Essayez de vous connecter avec (comptes démo, mot de passe = nom + 123) :
-   - Client : `client` / `client123`
-   - Gérant : `gestionnaire` / `gestionnaire123`
-   - Directeur : `admin` / `admin123`
-3. Si la connexion fonctionne, tout est bon !
-
-> Sans variables Supabase, l'app démarre en **mode démo local** (données dans le navigateur).
-> Avec Supabase configuré + tables créées (`supabase-setup.sql` puis `supabase-oresto-migration.sql`),
-> les données persistent en base et sont partagées entre appareils.
-
-### 6. Configuration personnalisée (optionnel)
-
-#### Nom de domaine personnalisé
-
-1. Allez dans **Site settings** → **Domain management**
-2. Cliquez sur **"Add custom domain"**
-3. Suivez les instructions pour configurer votre DNS
-
-## 🔧 Déploiement manuel
-
-**⚠️ IMPORTANT** : N'oubliez pas de configurer les variables d'environnement Supabase dans Netlify avant le déploiement manuel !
-
-### Via Netlify CLI
+## Déploiement en ligne de commande
 
 ```bash
-# Installer Netlify CLI
-npm install -g netlify-cli
-
-# Se connecter
-netlify login
-
-# Créer un fichier .env.local avec vos clés Supabase
-echo "VITE_SUPABASE_URL=votre_url" > .env.local
-echo "VITE_SUPABASE_ANON_KEY=votre_cle" >> .env.local
-
-# Build du projet
-npm run build
-
-# Déployer
-netlify deploy --prod
+npm.cmd install -g vercel
+vercel login
+vercel --prod
 ```
 
-**Note** : Les variables d'environnement doivent être configurées dans les paramètres Netlify (voir section précédente).
+Le projet Vercel est déjà lié dans `.vercel/project.json`.
 
-### Via glisser-déposer
+## Domaine personnalisé
 
-1. Build en local : `npm run build`
-2. Allez sur https://app.netlify.com/drop
-3. Glissez-déposez le dossier `dist`
+Dans **Settings > Domains**, ajoutez `orestosn.com` et `www.orestosn.com`.
+Chez le registrar (Amenworld) :
 
-## ⚙️ Configuration automatique
+```
+A      @      76.76.21.21
+CNAME  www    cname.vercel-dns.com
+```
 
-Le fichier `netlify.toml` configure automatiquement :
+Vercel fournit le certificat SSL automatiquement.
 
-- ✅ Commande de build : `npm run build`
-- ✅ Répertoire de publication : `dist`
-- ✅ Redirections SPA (pour React Router)
-- ✅ Headers de sécurité (XSS, CORS, etc.)
-- ✅ Cache optimisé pour les assets
-- ✅ Support Node.js 18
-
-## 🔄 Déploiements automatiques
-
-Netlify redéploie automatiquement à chaque push sur `main` :
-
-1. Vous faites un commit et push sur GitHub
-2. Netlify détecte le changement
-3. Build et déploiement automatiques (2-3 minutes)
-4. Site mis à jour !
-
-## 🌍 URL du site
-
-Après déploiement, votre site sera disponible à :
-
-- **URL Netlify** : `https://[nom-aleatoire].netlify.app`
-
-Pour personnaliser le nom :
-
-1. **Site settings** → **General** → **Site details**
-2. Cliquez sur **"Change site name"**
-3. Entrez le nom de votre choix
-
-## 📊 Fonctionnalités Netlify gratuites
-
-- ✅ 100 GB de bande passante/mois
-- ✅ Builds illimités
-- ✅ HTTPS automatique
-- ✅ Déploiement continu (CI/CD)
-- ✅ Preview deployments (branches)
-- ✅ Rollback instantané
-- ✅ Formulaires et fonctions serverless (si besoin)
-
-## 🐛 Dépannage
-
-### Build échoue
+## Vérification après déploiement
 
 ```bash
-# Vérifier que le build fonctionne en local
-npm run build
-
-# Vérifier les logs dans Netlify
+curl -s "https://orestosn.com/api/sycapay/status"
+curl -s "https://orestosn.com/api/sycapay/status?probe=1"
 ```
 
-### Page blanche après déploiement
+Le webhook SycaPay doit être déclaré sur :
 
-- Vérifiez que `netlify.toml` est bien présent
-- Assurez-vous que les redirections SPA sont configurées
+```
+https://orestosn.com/api/sycapay/webhook
+```
 
-### Erreur 404 sur les routes
+## Paiements SycaPay
 
-- Le fichier `netlify.toml` gère automatiquement les redirections SPA
-- Vérifiez que la règle `/* → /index.html` est active
+Vercel (offre gratuite) utilise une IP de sortie dynamique. Si SycaPay répond
+`1117` (IP non autorisée), consultez `egress.primary` dans la sonde, ajoutez
+cette IP dans l'allowlist SycaPay pour un test immédiat, ou configurez
+`SYCAPAY_PROXY_URL` avec un proxy à IP fixe pour une solution durable.
 
-## 📝 Checklist de déploiement
-
-- [ ] Code pushé sur GitHub
-- [ ] `npm run build` fonctionne en local
-- [ ] `netlify.toml` présent à la racine
-- [ ] Variables Supabase ajoutées (ou mode démo local assumé)
-- [ ] Compte Netlify créé
-- [ ] Site connecté au dépôt GitHub
-- [ ] Nom de site personnalisé configuré
-- [ ] Build réussi sur Netlify
-- [ ] Site accessible via l'URL
-- [ ] Toutes les pages fonctionnent (navigation)
-
-## 🚀 Optimisations post-déploiement
-
-### Performance
-
-- [ ] Activer la compression Brotli (automatique)
-- [ ] Vérifier les scores Lighthouse
-- [ ] Optimiser les images si nécessaire
-
-### Analytics
-
-- [ ] Activer Netlify Analytics (payant)
-- [ ] Ou intégrer Google Analytics
-
-### Sécurité
-
-- [ ] Vérifier les headers de sécurité
-- [ ] Activer les notifications de déploiement
-- [ ] Configurer les notifications d'erreur
-
-## 📞 Support
-
-- Documentation Netlify : https://docs.netlify.com/
-- Community forum : https://answers.netlify.com/
-- Status page : https://www.netlifystatus.com/
-
----
-
-**Bon déploiement ! 🎉**
+Voir `docs/SYCAPAY_INTEGRATION.md` section 8 pour le diagnostic complet.

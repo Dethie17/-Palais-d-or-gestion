@@ -27,11 +27,11 @@
 Frontend:     React 18 + TypeScript + Vite
 Styling:      Tailwind CSS + shadcn/ui (Design System)
 Backend:      Supabase (PostgreSQL + Auth + Realtime)
-Hosting:      Netlify (CDN global, SSL auto)
+Hosting:      Vercel (CDN global, SSL auto)
 ```
 
 ### Pourquoi ce choix ?
-- **Coût maîtrisé** : Supabase gratuit jusqu'à 500MB DB + Netlify gratuit
+- **Coût maîtrisé** : Supabase gratuit jusqu'à 500MB DB + Vercel Hobby gratuit
 - **Scalabilité** : PostgreSQL gère des millions de commandes
 - **Sécurité** : Row Level Security (RLS) natif Supabase
 - **Maintenance** : Zéro serveur à gérer (Serverless)
@@ -193,7 +193,7 @@ Tables principales :
 
 ## 🚀 Déploiement & Production
 
-### Netlify (Recommandé)
+### Vercel (Recommandé)
 ```bash
 # Build command
 npm run build
@@ -201,7 +201,7 @@ npm run build
 # Publish directory
 dist
 
-# Variables d'environnement Netlify
+# Variables d'environnement Vercel
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=xxx
 SUPABASE_URL_PUBLIC=xxx
@@ -238,7 +238,7 @@ oresto-sn.com → alias (anciens liens + webhook)
 | Service | Coût | Note |
 |---------|------|------|
 | Supabase | 0€ / 25€ | Gratuit < 500MB / Pro 25€/mois |
-| Netlify | 0€ / 19$ | Gratuit / Pro 19$/mois |
+| Vercel | 0€ / 20$ | Hobby gratuit / Pro 20$/mois |
 | Domaine | ~10€/an | ovh/gandi/cloudflare |
 | **Total** | **~1€/mois** | Quasi gratuit au démarrage |
 
@@ -260,9 +260,9 @@ oresto-sn.com → alias (anciens liens + webhook)
 | **Authentification** | Supabase Auth (email/password + sessionStorage) |
 | **Mots de passe** | Hachés par Supabase (bcrypt) |
 | **API** | RLS Supabase + Service Role Key côté serveur |
-| **HTTPS** | Netlify SSL auto (Let's Encrypt) |
-| **CORS** | Configuré Netlify + Supabase |
-| **CSP** | Headers Netlify configurés |
+| **HTTPS** | Vercel SSL auto (Let's Encrypt) |
+| **CORS** | Configuré Vercel + Supabase |
+| **CSP** | Headers Vercel configurés |
 | **Audit** | Table `payment_callbacks` pour traçabilité paiements |
 
 ---
@@ -290,8 +290,8 @@ oresto-sn.com → alias (anciens liens + webhook)
 ### Monitoring Recommandé
 - **Uptime** : UptimeRobot (gratuit)
 - **Erreurs** : Sentry (gratuit 5k erreurs/mois)
-- **Perf** : Netlify Analytics (9$/mois)
-- **Logs** : Netlify Functions logs + Supabase logs
+- **Perf** : Vercel Analytics (offre gratuite disponible)
+- **Logs** : Vercel Functions logs + Supabase logs
 
 ---
 
@@ -314,9 +314,9 @@ Client test: client / client123
 - Projet: `rzdgpdskfhidbcczbvqe`
 - Dashboard: https://supabase.com/dashboard/project/rzdgpdskfhidbcczbvqe
 
-### Netlify
-- Site: `oresto-sn.com` / `www.oresto-sn.com`
-- Dashboard: https://app.netlify.com/sites/-Palais-d-or-gestion
+### Vercel
+- Site: `orestosn.com` / `www.orestosn.com`
+- Dashboard: https://vercel.com/dethie12/orestos
 
 ---
 
@@ -325,11 +325,11 @@ Client test: client / client123
 - [x] Code source complet sur GitHub
 - [x] Base de données initialisée (script SQL fourni)
 - [x] Build production validé (`npm run build` ✅)
-- [x] Déploiement Netlify configuré
+- [x] Déploiement Vercel configuré
 - [x] Variables d'environnement documentées
 - [x] Comptes de test créés
 - [x] Documentation technique complète
-- [x] Guide déploiement Netlify
+- [x] Guide déploiement Vercel
 - [x] Scripts SQL Supabase fournis
 - [x] Variables d'environnement documentées
 

@@ -15,10 +15,14 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { promises as dns } from 'node:dns';
+import { isIP } from 'node:net';
 import {
   call,
   describeError,
   failureMessage,
+  isAccepted,
+  isConnectionReset,
   isExpiredFailure,
   isRetryableFailure,
   isRetryableCallError,
@@ -28,6 +32,7 @@ import {
   SycaPayConfigError,
   SycaPayTransportError,
   type StatusResponse,
+  type SycaPayEnvelope,
 } from '../_lib/sycapay.js';
 import { settle, type SettleOutcome } from '../_lib/settle.js';
 import { requireRole, referenceBelongsTo } from '../_lib/session.js';
@@ -142,6 +147,48 @@ async function handleHealth(res: ServerResponse) {
   });
 }
 
+/** Lit une réponse texte d'un service « quelle est mon IP ». */
+async function fetchEgressSource(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(4000),
+      headers: { accept: 'text/plain, application/json' },
+    });
+    if (!res.ok) return null;
+    return (await res.text()).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Interroge plusieurs services indépendants : une seule réponse peut être
+ * filtrée par le réseau, trois concordantes donnent l'IP réellement vue
+ * depuis Internet.
+ */
+async function discoverEgressIps(): Promise<string[]> {
+  const answers = await Promise.all([
+    fetchEgressSource('https://api.ipify.org?format=json'),
+    fetchEgressSource('https://checkip.amazonaws.com'),
+    fetchEgressSource('https://ifconfig.me/ip'),
+    fetchEgressSource('https://api64.ipify.org?format=json'),
+  ]);
+  const ips = new Set<string>();
+  for (const answer of answers) {
+    if (!answer) continue;
+    let value = answer;
+    if (value.startsWith('{')) {
+      try {
+        value = String((JSON.parse(value) as { ip?: unknown }).ip ?? '').trim();
+      } catch {
+        continue;
+      }
+    }
+    if (isIP(value)) ips.add(value);
+  }
+  return [...ips];
+}
+
 async function handleProbe(_req: IncomingMessage, res: ServerResponse) {
   if (!isSycaPayConfigured()) {
     return sendError(res, 503, 'Passerelle SycaPay non configurée sur ce déploiement.');
@@ -155,20 +202,48 @@ async function handleProbe(_req: IncomingMessage, res: ServerResponse) {
     throw err;
   }
 
-  // Découverte de l'IP sortante réelle du conteneur Render, pour savoir
-  // quelle adresse envoyer à SycaPay pour l'allowlist.
-  let outboundIp: string | null = null;
-  try {
-    const ipRes = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(5000) });
-    if (ipRes.ok) {
-      const ipData = (await ipRes.json()) as { ip?: string };
-      outboundIp = ipData.ip ?? null;
-    }
-  } catch {
-    outboundIp = null;
-  }
+  // IP publique vue depuis Internet : c'est elle, et seulement elle, que
+  // SycaPay peut autoriser. `localAddress` (10.x) est privée au conteneur et
+  // ne sert qu'au diagnostic.
+  const observedIps = await discoverEgressIps();
+  const ipv4 = observedIps.filter((ip) => isIP(ip) === 4);
+  const ipv6 = observedIps.filter((ip) => isIP(ip) === 6);
+  const outboundIp = ipv4[0] ?? ipv6[0] ?? null;
 
-  // Test HTTPS simple (sans mTLS) vers SycaPay : vérifie si le TCP+TLS passe.
+  let ptr: string | null = null;
+  if (outboundIp) {
+    try {
+      ptr = (await dns.reverse(outboundIp))[0] ?? null;
+    } catch {
+      ptr = null;
+    }
+  }
+  const isVercel = Boolean(process.env.VERCEL);
+  const vercelRegion = (process.env.VERCEL_REGION ?? '').trim() || null;
+
+  const egress = {
+    ipv4,
+    ipv6,
+    primary: outboundIp,
+    ptr,
+    provider: isVercel ? 'vercel' : null,
+    region: isVercel ? vercelRegion : null,
+    // false = pool partagé connu ; null = hébergeur non identifié, donc
+    // stabilité inconnue (ne pas promettre une IP fixe à tort).
+    stable: isVercel ? false : null,
+    suggestedAllowlist: [],
+    dashboard: null,
+  };
+
+  const allowlistHint = isVercel
+    ? "IP de sortie Vercel dynamique (pool AWS) : elle peut changer entre deux appels. " +
+      "Ajoutez l'IP affichée chez SycaPay pour débloquer immédiatement, ou configurez " +
+      'SYCAPAY_PROXY_URL avec un proxy à IP fixe pour une solution durable. ' +
+      'Les IP fixes Vercel (Static IPs) sont payantes.'
+    : 'Déclarez cette IP chez SycaPay. Si elle change entre deux appels, configurez ' +
+      'SYCAPAY_PROXY_URL avec un proxy à IP fixe.';
+
+  // Test HTTPS simple (sans mTLS) : isole TCP+TLS de la couche HTTP.
   let plainHttps: { ok: boolean; status?: number; error?: string } = { ok: false };
   try {
     const r = await fetch(sycaPayConfig.baseUrl + '/', { signal: AbortSignal.timeout(10000) });
@@ -178,25 +253,57 @@ async function handleProbe(_req: IncomingMessage, res: ServerResponse) {
   }
 
   try {
-    await call(sycaPayConfig, {
+    const envelope = await call<SycaPayEnvelope>(sycaPayConfig, {
       path: '/balance',
       body: { loginApi: sycaPayConfig.loginApi, mdpApi: sycaPayConfig.mdpApi },
       timeoutMs: 15000,
     });
-    return sendJson(res, 200, { ok: true, probe: 'success', outboundIp, plainHttps });
+    // Un HTTP 200 ne vaut pas succès : l'API rend ses refus dans errorCode
+    // (1110 mot de passe, 1117 IP non autorisée…). La sonde doit le dire.
+    if (!isAccepted(envelope.errorCode)) {
+      return sendJson(res, 502, {
+        ok: false,
+        probe: 'refused',
+        error: describeError(envelope),
+        errorCode: envelope.errorCode ?? null,
+        outboundIp,
+        egress,
+        hint: allowlistHint,
+        plainHttps,
+      });
+    }
+    return sendJson(res, 200, {
+      ok: true,
+      probe: 'success',
+      outboundIp,
+      egress,
+      plainHttps,
+    });
   } catch (err) {
     const isTransport = err instanceof SycaPayTransportError;
     const e = err as NodeJS.ErrnoException;
+    const outbound = (err as { outbound?: Record<string, unknown> }).outbound ?? null;
+    const tlsOk = Boolean(outbound && outbound.tlsProtocol);
+    const reset = isConnectionReset(e) || (isTransport && /socket hang up/i.test(err.message));
     return sendJson(res, 502, {
       ok: false,
       probe: 'failed',
       error: isTransport ? err.message : (err as Error).message,
+      // TCP et TLS ont abouti si le socket a négocié TLS : la coupure est
+      // alors au niveau HTTP, signature d'un filtrage par IP source.
+      phase: {
+        tcp: outbound?.remoteAddress ? 'ok' : 'failed',
+        tls: tlsOk ? 'ok' : 'failed',
+        http: reset ? 'reset' : 'error',
+      },
       code: e.code ?? null,
       syscall: e.syscall ?? null,
       address: (e as { address?: string }).address ?? null,
       port: (e as { port?: number }).port ?? null,
-      outbound: (err as { outbound?: unknown }).outbound ?? null,
+      outbound,
       outboundIp,
+      egress,
+      hint: allowlistHint,
       plainHttps,
     });
   }

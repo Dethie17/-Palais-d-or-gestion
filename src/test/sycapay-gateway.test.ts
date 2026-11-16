@@ -1,7 +1,7 @@
 ﻿import { describe, it, expect } from 'vitest';
 import { signBody, verifySignature } from '../../api/_lib/webhookHmac';
 import { parseAmount, normalizeLocalPhone, sanitizeMetadata } from '../../api/_lib/http';
-import { describeError, failureMessage, isAccepted, isCertificateError, isExpiredFailure, isRetryableCallError, readConfig, readPem, requiresReturnUrls, SycaPayCertificateError } from '../../api/_lib/sycapay';
+import { describeError, failureMessage, isAccepted, isCertificateError, isConnectionReset, isExpiredFailure, isRetryableCallError, readConfig, readEnvValue, readPem, requiresReturnUrls, SycaPayCertificateError } from '../../api/_lib/sycapay';
 import { isPaymentEvent, readWebhookV1, readWebhookV2 } from '../../api/_lib/settle';
 
 /**
@@ -252,6 +252,41 @@ describe('Nettoyage de la configuration', () => {
     const config = readConfig(env as never);
     expect(config.loginApi).toBe('MIAMS');
     expect(config.mdpApi).toBe('secret');
+  });
+
+  it('retire les guillemets colés dans le dashboard de déploiement', () => {
+    // Vercel conserve les guillemets saisis : un mot de passe
+    // `"secret"` partait avec eux et l'API répondait 1110 sans nommer la
+    // variable. La lecture doit les retirer.
+    const config = readConfig({
+      ...env,
+      SYCAPAY_LOGIN_API: "'MIAMS'",
+      SYCAPAY_MDP_API: '"secret"',
+      SYCAPAY_BASE_URL: '"https://ops.sycapay.com/coresystem/part/api/"',
+    } as never);
+    expect(config.loginApi).toBe('MIAMS');
+    expect(config.mdpApi).toBe('secret');
+    expect(config.baseUrl).toBe('https://ops.sycapay.com/coresystem/part/api');
+    expect(readEnvValue(' "valeur" ')).toBe('valeur');
+  });
+
+  it('lit un proxy à IP fixe et le laisse optionnel', () => {
+    expect(readConfig(env as never).proxyUrl).toBeUndefined();
+    const config = readConfig({
+      ...env,
+      SYCAPAY_PROXY_URL: '"http://user:pass@10.0.0.5:3128"',
+    } as never);
+    expect(config.proxyUrl).toBe('http://user:pass@10.0.0.5:3128');
+  });
+});
+
+describe('Coupure de connexion avant réponse', () => {
+  it('reconnaît un RST / socket hang up comme un filtrage en amont', () => {
+    // Cas réel : TLS négocié, puis RST au premier octet HTTP. Ce n'est ni un
+    // certificat ni une panne SycaPay, mais une IP source non autorisée.
+    expect(isConnectionReset({ code: 'ECONNRESET' })).toBe(true);
+    expect(isConnectionReset(new Error('socket hang up'))).toBe(true);
+    expect(isConnectionReset({ code: 'ECONNREFUSED', message: 'connect ECONNREFUSED' })).toBe(false);
   });
 });
 
