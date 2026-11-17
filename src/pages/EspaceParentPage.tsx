@@ -3,7 +3,8 @@ import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { formatCurrency } from '@/lib/utils';
 import { isMobileMethod, isValidSnPhone, type WavePaymentRequest } from '@/lib/wave';
-import { supabase } from '@/lib/supabase';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { persistenceErrorMessage, type PersistOutcome } from '@/lib/payments/persistence';
 import { officialPrice } from '@/lib/aboTariffs';
 import { cycleOfClass } from '@/lib/schoolCycles';
 import { officialAboForCycle } from '@/lib/aboTariffs';
@@ -100,7 +101,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     myChildren, weeklyMenus, confirmWalletTopUpMobile,
     parentProfileOf, walletOf, childTxs,
     complaints, messagesOf,
-    subscribeBundle,
+    subscribeBundle, cancelSubscription,
     openProviderPayment, syncPaymentFromProvider,
   } = useResto();
 
@@ -226,21 +227,47 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
   ) => {
     if (childIds.length === 0) throw new Error('Choisissez au moins un enfant.');
     const children = myChildren(username).filter((child) => childIds.includes(child.id));
-    if (children.length !== childIds.length) throw new Error('Un enfant sÃ©lectionnÃ© est introuvable.');
+    if (children.length !== childIds.length) throw new Error('Un enfant sélectionné est introuvable.');
+
+    if (isSupabaseConfigured) {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
+        throw new Error('Votre session a expiré. Reconnectez-vous, puis relancez le paiement.');
+      }
+    }
 
     const subscriptionsToPay: Subscription[] = [];
+    const subscriptionWrites: Promise<PersistOutcome>[] = [];
     let montant = 0;
     for (const child of children) {
       const formulaId = officialAboForCycle(cycleOfClass(child.className));
       if (!formulaId) throw new Error(`Classe de ${child.firstName} ${child.lastName} non couverte par une formule.`);
-      const sub = subscribeBundle(username, formulaId, child.id, count, firstMonthIso);
-      subscriptionsToPay.push(sub);
+      const { subscription, persisted } = subscribeBundle(username, formulaId, child.id, count, firstMonthIso);
+      subscriptionsToPay.push(subscription);
+      subscriptionWrites.push(persisted);
       montant += officialPrice(formulaId, formulas) * count;
     }
 
+    const cancelAll = () => {
+      for (const sub of subscriptionsToPay) cancelSubscription(sub.id);
+    };
+
+    const writtenSubs = await Promise.all(subscriptionWrites);
+    const subFailure = writtenSubs.find((outcome) => !outcome.ok);
+    if (subFailure && !subFailure.ok) {
+      cancelAll();
+      throw new Error(persistenceErrorMessage(subFailure as Extract<PersistOutcome, { ok: false }>));
+    }
+
     const firstSub = subscriptionsToPay[0];
-    const { payment } = paySubscription(firstSub.id, method, firstSub, montant);
+    const { payment, persisted: paymentWrite } = paySubscription(firstSub.id, method, firstSub, montant);
     payment.groupSubscriptionIds = subscriptionsToPay.map((sub) => sub.id);
+
+    const paymentOutcome = await paymentWrite;
+    if (!paymentOutcome.ok) {
+      cancelAll();
+      throw new Error(persistenceErrorMessage(paymentOutcome as Extract<PersistOutcome, { ok: false }>));
+    }
 
     if (subscriptionsToPay.length > 1) {
       const { error: groupError } = await supabase.from('oresto_payment_groups').upsert({
@@ -250,7 +277,8 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
         parent_username: username,
       });
       if (groupError) {
-        throw new Error(`Impossible de prÃ©parer le paiement multi-enfants: ${groupError.message}`);
+        cancelAll();
+        throw new Error(`Impossible de préparer le paiement multi-enfants: ${groupError.message}`);
       }
     }
 
@@ -259,6 +287,10 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
       'sub',
       payment.id,
     );
+    if (!session.challenge) {
+      cancelAll();
+      throw new Error(session.error ?? 'Paiement refusé.');
+    }
     setWaveModal({ kind: 'sub', paymentId: payment.id, wave: session });
   };
 

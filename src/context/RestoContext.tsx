@@ -43,6 +43,7 @@ import {
 } from '@/lib/payments';
 import { recallPayerPhone, rememberPayerPhone } from '@/lib/payments/payerPhone';
 import { startPaymentWhenVisible } from '@/lib/payments/startPaymentWhenVisible';
+import { persistenceErrorMessage, type PersistOutcome } from '@/lib/payments/persistence';
 import type { PaymentStatus, ProviderMethod, StartPaymentInput } from '@/lib/payments/types';
 import { getClientQrToken, isPersonalQrToken, getChildQrToken } from '@/lib/clientQr';
 import { generateSecureQrToken } from '@/lib/secureQr';
@@ -74,12 +75,25 @@ const writeStats = { ok: 0, failed: 0 };
  * et la ligne était perdue — le parent ne recevait jamais son lien Wave.
  * On garde la promesse de l'écriture « parente » pour pouvoir l'attendre.
  */
-const parentWrites = new Map<string, Promise<void>>();
+const parentWrites = new Map<string, Promise<PersistOutcome>>();
 
-function persist(label: string, query: PromiseLike<unknown>): Promise<void> {
+/** Écritures de commande encore en cours, indexées par référence SycaPay. */
+const orderWrites = new Map<string, Promise<PersistOutcome>>();
+
+function persist(label: string, query: PromiseLike<unknown>): Promise<PersistOutcome> {
   const done = Promise.resolve(query).then(
-    () => {
-      writeStats.ok += 1;
+    (result) => {
+      const error = (result as { error?: { code?: string | null; message?: string } | null } | null)?.error;
+      if (!error) {
+        writeStats.ok += 1;
+        return { ok: true } as const;
+      }
+      writeStats.failed += 1;
+      console.warn(
+        `[O RESTO] écriture Supabase refusée — ${label} (la donnée reste en local)`,
+        error,
+      );
+      return { ok: false, code: error.code ?? null, message: error.message ?? null } as const;
     },
     (error: unknown) => {
       writeStats.failed += 1;
@@ -87,6 +101,8 @@ function persist(label: string, query: PromiseLike<unknown>): Promise<void> {
         `[O RESTO] écriture Supabase refusée — ${label} (la donnée reste en local)`,
         error,
       );
+      const e = error as { code?: string | null; message?: string | null } | null;
+      return { ok: false, code: e?.code ?? null, message: e?.message ?? String(error) } as const;
     },
   );
   return done;
@@ -103,17 +119,20 @@ async function persistAfterParent(
   label: string,
   parentId: string | undefined,
   makeQuery: () => PromiseLike<unknown>,
-): Promise<void> {
+): Promise<PersistOutcome> {
   if (parentId) {
     const pending = parentWrites.get(parentId);
-    if (pending) await pending.catch(() => undefined);
+    if (pending) {
+      const parentOutcome = await pending;
+      if (!parentOutcome.ok) return parentOutcome;
+    }
   }
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const result = (await makeQuery()) as { error?: { code?: string | null; message?: string } | null };
     const error = result?.error ?? null;
     if (!error) {
       writeStats.ok += 1;
-      return;
+      return { ok: true };
     }
     if (error.code !== '23503') {
       writeStats.failed += 1;
@@ -121,7 +140,7 @@ async function persistAfterParent(
         `[O RESTO] écriture Supabase refusée — ${label} (la donnée reste en local)`,
         error,
       );
-      return;
+      return { ok: false, code: error.code ?? null, message: error.message ?? null };
     }
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
@@ -129,6 +148,11 @@ async function persistAfterParent(
   console.warn(
     `[O RESTO] écriture Supabase refusée — ${label} : ligne liée introuvable après plusieurs essais.`,
   );
+  return {
+    ok: false,
+    code: '23503',
+    message: 'ligne liée introuvable après plusieurs essais',
+  };
 }
 
 // Compteur consultable depuis la console : __orestoWrites.failed doit rester
@@ -363,7 +387,7 @@ interface RestoContextType {
     childId: string | undefined,
     monthsCount: number,
     firstMonthISO: string,
-  ) => Subscription;
+  ) => { subscription: Subscription; persisted: Promise<PersistOutcome> };
   // Paie un abonnement en attente.
   // - Espèces : reste en attente jusqu'à encaissement au comptoir (Caissier).
   // - Wave : crée une demande de paiement mobile (pending) ;
@@ -374,7 +398,12 @@ interface RestoContextType {
     method: ORestoPaymentMethod,
     subOverride?: Subscription,
     amountOverride?: number,
-  ) => { payment: ORestoPayment; activated: boolean; wave?: WavePaymentRequest };
+  ) => {
+    payment: ORestoPayment;
+    activated: boolean;
+    wave?: WavePaymentRequest;
+    persisted: Promise<PersistOutcome>;
+  };
   // Client : confirme son paiement mobile avec le code à 6 chiffres →
   // paiement soldé + abonnement activé (ou repas ticket crédités).
   confirmMobilePayment: (paymentId: string, code: string) => { ok: boolean; message: string };
@@ -1224,7 +1253,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       void written.finally(() => {
         parentWrites.delete(subscription.id);
       });
-      return subscription;
+      return { subscription, persisted: written };
     },
     [formulas, childrenList],
   );
@@ -1456,6 +1485,21 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const phone = input.phone?.trim() || recallPayerPhone(input.reference);
       if (phone) rememberPayerPhone(input.reference, phone);
 
+      if (isSupabaseConfigured) {
+        const written = orderWrites.get(input.reference);
+        if (written) {
+          const outcome = await written;
+          if (!outcome.ok) {
+            return {
+              ...base,
+              provider: activeProvider.id,
+              steps: [],
+              error: persistenceErrorMessage(outcome as Extract<PersistOutcome, { ok: false }>),
+            };
+          }
+        }
+      }
+
       try {
         // La ligne de commande vient d'être créée localement : elle peut
         // n'être pas encore visible côté base, et la passerelle répond alors
@@ -1509,7 +1553,9 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         return { status: 'pending', reference };
       }
       const status = await checkPaymentStatus(reference);
-      if (status.status === 'paid') await refreshRemote();
+      if (status.status === 'paid' || status.status === 'failed' || status.status === 'cancelled') {
+        await refreshRemote();
+      }
       return status;
     },
     [activeProvider.id, refreshRemote],
@@ -1546,11 +1592,13 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           && p.amount === price,
       );
       if (existingPending) {
+        const persisted = orderWrites.get(existingPending.reference)
+          ?? Promise.resolve({ ok: true } as PersistOutcome);
         if (isMobileMethod(method)) {
           const wave = initiateWavePayment(price, method, existingPending.reference);
-          return { payment: existingPending, activated: false, wave };
+          return { payment: existingPending, activated: false, wave, persisted };
         }
-        return { payment: existingPending, activated: false };
+        return { payment: existingPending, activated: false, persisted };
       }
       const now = new Date();
       const reference = `PAY-${Date.now().toString(36).toUpperCase()}`;
@@ -1566,7 +1614,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       setPayments((prev) => [...prev, payment]);
       // Le paiement référence l'abonnement : il attend son écriture pour ne
       // jamais violer la clé étrangère (voir persistAfterParent).
-      void persistAfterParent('oresto_payments', payment.subscriptionId, () =>
+      const persisted = persistAfterParent('oresto_payments', payment.subscriptionId, () =>
         supabase.from('oresto_payments').insert({
           id: payment.id,
           subscription_id: payment.subscriptionId,
@@ -1580,12 +1628,13 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           // n'a pas d'autre moyen de savoir à qui il appartient.
           child_id: sub.childId ?? null,
         }));
-      if (!needsExternalConfirm(method)) return { payment, activated: false };
+      orderWrites.set(payment.reference, persisted);
+      if (!needsExternalConfirm(method)) return { payment, activated: false, persisted };
       if (isMobileMethod(method)) {
         const wave = initiateWavePayment(price, method, reference);
-        return { payment, activated: false, wave };
+        return { payment, activated: false, wave, persisted };
       }
-      return { payment, activated: false };
+      return { payment, activated: false, persisted };
     },
     [formulas, subscriptions, payments, dayTicket],
   );
@@ -3114,12 +3163,13 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         createdAt: now.toISOString(),
       };
       setWalletTxs((prev) => [...prev, tx]);
-      persist('wallet_transactions', supabase.from('wallet_transactions').insert({
+      const written = persist('wallet_transactions', supabase.from('wallet_transactions').insert({
         id: tx.id, child_id: tx.childId, kind: tx.kind, amount: tx.amount,
         method: tx.method, status: 'pending', reference: tx.reference, label: tx.label,
         // Le webhook SycaPay crédite cette recharge par sa référence.
         provider: isProviderMethod(method) ? paymentProviderId : null,
       }));
+      orderWrites.set(reference, written);
       if (isMobileMethod(method)) {
         const wave = initiateWavePayment(amount, method, reference);
         return { tx, wave };
@@ -3149,7 +3199,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         createdAt: now.toISOString(),
       };
       setPayments((prev) => [...prev, payment]);
-      persist('oresto_payments', supabase.from('oresto_payments').insert({
+      const written = persist('oresto_payments', supabase.from('oresto_payments').insert({
         id: payment.id,
         subscription_id: null,
         client_username: clientUsername,
@@ -3159,6 +3209,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         status: 'pending',
         reference,
       }));
+      orderWrites.set(reference, written);
       const wave = isMobileMethod(method) ? initiateWavePayment(total, method, reference) : undefined;
       const txs: WalletTx[] = items.map((item, index) => {
         const child = childrenList.find((c) => c.id === item.childId);

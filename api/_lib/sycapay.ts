@@ -36,6 +36,14 @@ export interface SycaPayConfig {
    * une adresse stable à déclarer, sans changer le reste du code.
    */
   proxyUrl?: string;
+  /**
+   * Proxy HTTP(S) à IP fixe (WAVE_PROXY_URL), facultatif.
+   *
+   * Spécialisé pour les appels vers l'API Wave. Lorsque configuré, tous les
+   * appels SycaPay de service SN_PM_WAVE (Wave) passeront par cette adresse IP
+   * fixe, contournant la whitelist dynamique de Vercel.
+   */
+  waveProxyUrl?: string;
 }
 
 /**
@@ -115,6 +123,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): SycaPayConfig 
   const loginApi = readEnvValue(env.SYCAPAY_LOGIN_API);
   const mdpApi = readEnvValue(env.SYCAPAY_MDP_API);
   const proxyUrl = readEnvValue(env.SYCAPAY_PROXY_URL);
+  const waveProxyUrl = readEnvValue(env.WAVE_PROXY_URL);
 
   const missing: string[] = [];
   if (!ca) missing.push('SYCAPAY_CA_CRT');
@@ -132,6 +141,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): SycaPayConfig 
     cert: cert as string,
     key: key as string,
     ...(proxyUrl ? { proxyUrl } : {}),
+    ...(waveProxyUrl ? { waveProxyUrl } : {}),
   };
 }
 
@@ -238,7 +248,8 @@ export function createMtlsAgent(config: Pick<SycaPayConfig, 'ca' | 'cert' | 'key
  * applique à la connexion vers la cible, pas vers le proxy.
  */
 export function createAgent(config: SycaPayConfig): https.Agent {
-  if (config.proxyUrl) return new HttpsProxyAgent<string>(config.proxyUrl) as unknown as https.Agent;
+  const proxyUrl = config.waveProxyUrl || config.proxyUrl;
+  if (proxyUrl) return new HttpsProxyAgent<string>(proxyUrl) as unknown as https.Agent;
   return createMtlsAgent(config);
 }
 
@@ -290,7 +301,7 @@ export function call<T extends SycaPayEnvelope = SycaPayEnvelope>(
           // HttpsProxyAgent construit la TLS vers la cible à partir des
           // options de la requête : sans elles, le tunnel n'enverrait pas le
           // certificat client à SycaPay.
-          ...(config.proxyUrl
+          ...(config.waveProxyUrl || config.proxyUrl
             ? { ca: config.ca, cert: config.cert, key: config.key, servername: url.hostname }
             : {}),
           headers: {

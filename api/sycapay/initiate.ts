@@ -318,12 +318,26 @@ async function registerTransaction(reference: string, response: InitiateResponse
 async function markFailed(reference: string, errorCode: string, message: string): Promise<void> {
   if (!errorCode) return;
   try {
-    const { error } = await adminClient().rpc('oresto_fail_payment', {
+    const db = adminClient();
+    const { error } = await db.rpc('oresto_fail_payment', {
       p_reference: reference,
       p_error_code: errorCode,
       p_error_message: message,
     });
     if (error) console.warn('[sycapay/initiate] clôture impossible :', error.message);
+    const { data: payment } = await db.from('oresto_payments')
+      .select('subscription_id')
+      .eq('reference', reference)
+      .maybeSingle();
+    if (payment?.subscription_id) {
+      const { error: releaseError } = await db.from('subscriptions')
+        .update({ status: 'cancelled' })
+        .eq('id', payment.subscription_id)
+        .eq('status', 'pending');
+      if (releaseError) {
+        console.warn('[sycapay/initiate] libération du mois impossible :', releaseError.message);
+      }
+    }
   } catch (err) {
     console.warn('[sycapay/initiate] clôture impossible :', (err as Error).message);
   }

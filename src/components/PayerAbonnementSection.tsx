@@ -116,6 +116,7 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
 
   const lancerPaiement = async () => {
     setError('');
+    setNotice('');
     if (selectedChildren.length === 0) {
       setError('Choisissez au moins un enfant.');
       return;
@@ -146,6 +147,7 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
       const t = e instanceof Error ? e.message : 'Paiement impossible pour le moment.';
       setError(t);
       onError(t);
+    } finally {
       setBusy(false);
     }
   };

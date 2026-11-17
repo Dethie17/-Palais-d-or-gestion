@@ -78,6 +78,34 @@ async function settleWithRpc(db: SupabaseClient, fn: string, args: Record<string
  * changent rien.
  */
 export async function settle(args: SettleArgs, db: SupabaseClient = adminClient()): Promise<SettleOutcome> {
+  const outcome = await settleInternal(args, db);
+  await releasePendingSubscription(db, args.reference, outcome);
+  return outcome;
+}
+
+/** Un paiement refusé ne doit pas laisser le mois verrouillé « en attente ». */
+async function releasePendingSubscription(
+  db: SupabaseClient,
+  reference: string,
+  outcome: SettleOutcome,
+): Promise<void> {
+  if (outcome.status !== 'failed' && outcome.status !== 'cancelled') return;
+  try {
+    const { data: payment } = await db.from('oresto_payments')
+      .select('subscription_id')
+      .eq('reference', reference)
+      .maybeSingle();
+    if (!payment?.subscription_id) return;
+    await db.from('subscriptions')
+      .update({ status: 'cancelled' })
+      .eq('id', payment.subscription_id)
+      .eq('status', 'pending');
+  } catch {
+    // Best-effort : le webhook reste acquitté même si le nettoyage échoue.
+  }
+}
+
+async function settleInternal(args: SettleArgs, db: SupabaseClient = adminClient()): Promise<SettleOutcome> {
   const tag = normalizeTag(args.tag);
   const common = {
     p_reference: args.reference,
