@@ -270,7 +270,7 @@ function AppContent() {
       case 'paiements':
         return <HistoriquePaiementsPage />;
       case 'entities':
-        return <EntitiesPage />;
+        return <EntitiesPage onNavigate={navigateTo} />;
       case 'dangote-rh':
         return <DangoteRhPage onNavigate={navigateTo} />;
       case 'dangote-superviseur':

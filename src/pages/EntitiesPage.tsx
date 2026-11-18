@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Building2, Plus, Power } from 'lucide-react';
+import type { PageName } from '@/types/menu';
+import { ArrowLeft, Building2, Plus, Power } from 'lucide-react';
 
 interface Entite {
   id: string;
@@ -11,7 +12,7 @@ interface Entite {
   created_at: string;
 }
 
-const EntitiesPage = () => {
+const EntitiesPage = ({ onNavigate }: { onNavigate: (page: PageName) => void }) => {
   const { user } = useAuth();
   const canManage = user?.role === 'admin' || user?.role === 'personnel';
   const [entities, setEntities] = useState<Entite[]>([]);
@@ -53,6 +54,10 @@ const EntitiesPage = () => {
 
   return (
     <div className="p-4 lg:p-8 space-y-6">
+      <button onClick={() => onNavigate('home')} className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors group">
+        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+        Retour
+      </button>
       <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
         <Building2 className="w-6 h-6" /> Gestion des entités
       </h1>
