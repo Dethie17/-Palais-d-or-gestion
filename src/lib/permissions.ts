@@ -33,9 +33,9 @@ export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // Espace ISM : pilotage + suivi uniquement (sans menus/paramètres/établissements)
   admin: [...ISM_PAGES, 'dangote-rh', 'paymentsuccess', 'paymentfailure'],
   // DCH Dangote : gestion employés, achats de talons, crédit repas.
-  rh: ['dangote-rh', 'dangote-qrgallery', 'profile', 'paymentsuccess', 'paymentfailure'],
-  'superviseur-dangote': ['dangote-superviseur', 'dangote-qrgallery', 'profile', 'paymentsuccess', 'paymentfailure'],
-  'employe-dangote': ['dangote-employe', 'profile', 'paymentsuccess', 'paymentfailure'],
+  rh: ['dangote-rh', 'dangote-qrgallery', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
+  'superviseur-dangote': ['dangote-superviseur', 'dangote-qrgallery', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
+  'employe-dangote': ['dangote-employe', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
 };
 
 export function canAccess(role: UserRole | undefined, page: PageName): boolean {
