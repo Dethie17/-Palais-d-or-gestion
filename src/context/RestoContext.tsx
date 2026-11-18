@@ -1489,6 +1489,14 @@ export function RestoProvider({ children }: { children: ReactNode }) {
         const written = orderWrites.get(input.reference);
         if (written) {
           const outcome = await written;
+          if (!outcome) {
+            return {
+              ...base,
+              provider: activeProvider.id,
+              steps: [],
+              error: "La commande n'a pas pu être enregistrée. Vérifiez votre connexion puis réessayez.",
+            };
+          }
           if (!outcome.ok) {
             return {
               ...base,

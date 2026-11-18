@@ -147,4 +147,30 @@ describe('Ordre des écritures abonnement → paiement', () => {
     // Premier essai refusé (ligne liée invisible), second essai réussi.
     expect(paymentAttempts).toBe(2);
   });
+
+  it('subscribe renvoie toujours une écriture persistée observable', async () => {
+    const api = captureApi();
+    let created: ReturnType<typeof api.subscribe> | null = null;
+    act(() => { created = api.subscribe('client', 'F2'); });
+    expect(created).not.toBeNull();
+    expect(created!.subscription.id).toBeTruthy();
+    expect(typeof created!.persisted.then).toBe('function');
+    await act(async () => { await Promise.resolve(); });
+    act(() => { releaseSubscription?.(); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    await expect(created!.persisted).resolves.toEqual({ ok: true });
+  });
+
+  it('subscribeBundle renvoie toujours une écriture persistée observable', async () => {
+    const api = captureApi();
+    let created: ReturnType<typeof api.subscribeBundle> | null = null;
+    act(() => { created = api.subscribeBundle('client', 'F2', undefined, 2, '2026-12-01T00:00:00.000Z'); });
+    expect(created).not.toBeNull();
+    expect(created!.subscription.id).toBeTruthy();
+    expect(typeof created!.persisted.then).toBe('function');
+    await act(async () => { await Promise.resolve(); });
+    act(() => { releaseSubscription?.(); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    await expect(created!.persisted).resolves.toEqual({ ok: true });
+  });
 });

@@ -253,6 +253,10 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     };
 
     const writtenSubs = await Promise.all(subscriptionWrites);
+    if (writtenSubs.some((outcome) => !outcome)) {
+      cancelAll();
+      throw new Error("La commande n'a pas pu être enregistrée. Vérifiez votre connexion puis réessayez.");
+    }
     const subFailure = writtenSubs.find((outcome) => !outcome.ok);
     if (subFailure && !subFailure.ok) {
       cancelAll();
@@ -264,6 +268,10 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     payment.groupSubscriptionIds = subscriptionsToPay.map((sub) => sub.id);
 
     const paymentOutcome = await paymentWrite;
+    if (!paymentOutcome) {
+      cancelAll();
+      throw new Error("La commande n'a pas pu être enregistrée. Vérifiez votre connexion puis réessayez.");
+    }
     if (!paymentOutcome.ok) {
       cancelAll();
       throw new Error(persistenceErrorMessage(paymentOutcome as Extract<PersistOutcome, { ok: false }>));

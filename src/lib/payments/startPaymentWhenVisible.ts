@@ -22,6 +22,7 @@ export async function startPaymentWhenVisible(
       continue;
     }
 
+    if (!result) throw new Error('Le fournisseur de paiement n’a pas répondu.');
     if (result.ok || !TRANSACTION_INCONNUE.test(result.error ?? '')) return result;
     if (attempt >= 4) return result;
     await new Promise((resolve) => setTimeout(resolve, 400));
