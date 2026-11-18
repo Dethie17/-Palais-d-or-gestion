@@ -167,7 +167,8 @@ const ChildrenPage = () => {
       return;
     }
     try {
-      const sub = subscribe(username, formulaId, childId);
+      const created = subscribe(username, formulaId, childId);
+      const sub = created.subscription;
       // Objet frais passé en 3e arg : évite le lookup en state stale (même handler).
       const { payment } = paySubscription(sub.id, method, sub);
       if (isOnlineMobileMethod(method)) {

@@ -377,7 +377,7 @@ interface RestoContextType {
   myPayments: (username: string) => ORestoPayment[];
   myValidations: (username: string) => MealValidation[];
   // Réserve une formule : crée un abonnement "en attente de paiement" (sans paiement)
-  subscribe: (clientUsername: string, formulaId: string, childId?: string) => Subscription;
+  subscribe: (clientUsername: string, formulaId: string, childId?: string) => { subscription: Subscription; persisted: Promise<PersistOutcome> };
   // Réserve PLUSIEURS MOIS consécutifs d'une même formule pour un enfant :
   // un seul abonnement (start = 1er du premier mois, end = 1er du mois
   // suivant le dernier mois), quota multiplié par le nombre de mois.
@@ -1296,7 +1296,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       void written.finally(() => {
         parentWrites.delete(subscription.id);
       });
-      return subscription;
+      return { subscription, persisted: written };
     },
     [formulas, childrenList],
   );
@@ -2525,8 +2525,9 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const pending = subscriptions.find(
         (s) => s.clientUsername === name && s.formulaId === formulaId && s.status === 'pending',
       );
-      const sub = pending ?? subscribe(name, formulaId);
-      const { payment, wave } = paySubscription(sub.id, method);
+      const created = subscribe(name, formulaId);
+      const sub = pending ?? created.subscription;
+      const { payment, wave } = paySubscription(sub.id, method, sub);
       return { payment, wave, addedMeals: 0, activated: false };
     },
     [formulas, subscriptions, subscribe, paySubscription, buyTicket, activateSubscription],

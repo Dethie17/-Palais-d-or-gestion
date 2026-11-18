@@ -139,7 +139,8 @@ describe('Intégration au contexte', () => {
     let subId = '';
     let paymentId = '';
     act(() => {
-      const sub = api.subscribe('parent-syca', 'F2');
+      const created = api.subscribe('parent-syca', 'F2');
+      const sub = created.subscription;
       subId = sub.id;
     });
 

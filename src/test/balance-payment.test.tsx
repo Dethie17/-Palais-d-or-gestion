@@ -68,7 +68,8 @@ describe('Règle carte : tickets uniquement, jamais les abonnements', () => {
 
     let subId = '';
     act(() => {
-      const sub = latest().subscribe(phone, 'F2', childId);
+      const created = latest().subscribe(phone, 'F2', childId);
+      const sub = created.subscription;
       subId = sub.id;
     });
     expect(() => {
@@ -102,7 +103,8 @@ describe('Règle carte : tickets uniquement, jamais les abonnements', () => {
 
     let paymentId = '';
     act(() => {
-      const sub = latest().subscribe(phone, 'F2', childId);
+      const created = latest().subscribe(phone, 'F2', childId);
+      const sub = created.subscription;
       const { payment } = latest().paySubscription(sub.id, 'cash', sub);
       paymentId = payment.id;
     });

@@ -133,7 +133,7 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
   const pricePerMeal = (price: number, meals: number) => (meals > 0 ? Math.round(price / meals) : price);
 
   const handleChoose = (formulaId: string, name: string) => {
-    const s = subscribe(username, formulaId);
+    const s = subscribe(username, formulaId).subscription;
     setPayMethods((prev) => ({ ...prev, [s.id]: 'wave' }));
       setMessage({ ok: true, text: `Formule « ${name} » réservée. Choisissez Wave ou Orange Money ci-dessous pour l’activer.` });
     setTimeout(() => document.getElementById('pending-block')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);

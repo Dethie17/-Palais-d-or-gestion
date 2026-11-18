@@ -58,7 +58,8 @@ describe('Menu du jour payé par la carte', () => {
     // Abonnement payé en espèces au comptoir (jamais avec la carte).
     let subId = '';
     act(() => {
-      const sub = latest().subscribe('parent-menu-actif', 'F2', childId);
+      const created = latest().subscribe('parent-menu-actif', 'F2', childId);
+      const sub = created.subscription;
       subId = sub.id;
     });
     act(() => { latest().collectCashPayment(subId); });

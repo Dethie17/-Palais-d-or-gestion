@@ -37,7 +37,8 @@ describe('Validation repas (repro espace Personnel)', () => {
 
     let subId = '';
     act(() => {
-      const sub = latest().subscribe('parent-val', 'F2', childId);
+      const created = latest().subscribe('parent-val', 'F2', childId);
+      const sub = created.subscription;
       subId = sub.id;
     });
     act(() => { latest().collectCashPayment(subId); });

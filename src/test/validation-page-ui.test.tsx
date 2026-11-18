@@ -42,7 +42,7 @@ function addSubscriber(api: () => Api, username: string) {
     childId = c.id;
   });
   let subId = '';
-  act(() => { subId = api().subscribe(username, 'F2', childId).id; });
+  act(() => { subId = api().subscribe(username, 'F2', childId).subscription.id; });
   act(() => { api().collectCashPayment(subId); });
   act(() => { api().topUpChild(childId, 5000, 'cash'); });
   return childId;
