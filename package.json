@@ -3,7 +3,7 @@
   "private": true,
   "version": "2.1.0",
   "engines": {
-    "node": "20.x"
+    "node": "26.x"
   },
   "description": "O RESTO — Gestion des repas et abonnements pour écoles et entreprises (Menus, QR Code, Wave, Dashboard)",
   "type": "module",
