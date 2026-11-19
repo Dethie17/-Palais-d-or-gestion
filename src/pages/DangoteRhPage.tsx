@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle,
-  ArrowDownLeft,
-  ArrowUpRight,
   Banknote,
   BarChart3,
   CalendarDays,
@@ -95,7 +92,6 @@ interface SettingsForm {
   ticketsParTalon: string;
   quotaRepasJour: string;
   quotaRepasMois: string;
-  budgetAlerteSeuil: string;
   autoSubvention: boolean;
 }
 
@@ -111,7 +107,6 @@ const emptySettings: SettingsForm = {
   ticketsParTalon: '10',
   quotaRepasJour: '1',
   quotaRepasMois: '22',
-  budgetAlerteSeuil: '50000',
   autoSubvention: true,
 };
 
@@ -194,16 +189,12 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
       ticketsParTalon: String(params.tickets_par_talon ?? ''),
       quotaRepasJour: String(params.quota_repas_jour ?? ''),
       quotaRepasMois: String(params.quota_repas_mois ?? ''),
-      budgetAlerteSeuil: String(params.budget_alerte_seuil ?? ''),
       autoSubvention: params.auto_subvention !== false,
     });
   }, [dashboard?.parametres]);
 
   const parametres = dashboard?.parametres ?? null;
   const devise = parametres?.devise ?? 'FCFA';
-  const budgetSolde = num(dashboard?.budget?.solde ?? dashboard?.stats?.solde ?? 0);
-  const seuilAlerte = num(parametres?.budget_alerte_seuil ?? 0);
-  const budgetBas = seuilAlerte > 0 && budgetSolde <= seuilAlerte;
 
   const employes = dashboard?.employes ?? [];
   const activeEmployees = useMemo(() => employes.filter((employe) => employe.actif), [employes]);
@@ -249,7 +240,7 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
       ok: true,
       debut,
       fin,
-      solde: budgetSolde,
+      solde: num(dashboard?.budget?.solde ?? 0),
       employes_actifs: activeEmployees.length,
       repas: repasValides.length,
       repas_standard: repasValides.filter((repas) => repas.type_repas === 'standard').length,
@@ -263,7 +254,7 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
         .map(([date_jour, row]) => ({ date_jour, ...row }))
         .sort((a, b) => a.date_jour.localeCompare(b.date_jour)),
     };
-  }, [dashboard?.stats, repasValides, employes, activeEmployees.length, budgetSolde, debut, fin]);
+  }, [dashboard?.stats, dashboard?.budget?.solde, repasValides, employes, activeEmployees.length, debut, fin]);
 
   const filteredEmployees = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -363,7 +354,6 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
         ticketsParTalon: settingsForm.ticketsParTalon,
         quotaRepasJour: settingsForm.quotaRepasJour,
         quotaRepasMois: settingsForm.quotaRepasMois,
-        budgetAlerteSeuil: settingsForm.budgetAlerteSeuil,
         autoSubvention: settingsForm.autoSubvention,
       });
       toast.success('Paramètres enregistrés.');
@@ -463,7 +453,7 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
       <DangotePageHeader
         eyebrow="Direction du Capital Humain"
         title={parametres?.nom_restaurant ?? "MIAM'S Dangote"}
-        description="Pilotez les employés, les menus, le budget et les rapports de restauration."
+        description="Pilotez les employés, les menus, les repas et les rapports de restauration."
         icon={<ShieldCheck className="h-5 w-5" />}
         actions={
           <>
@@ -477,7 +467,7 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
               Actualiser
             </button>
             <button className={secondaryButtonClass} onClick={() => setDepositOpen(true)}>
-              <Wallet className="h-4 w-4" /> Recharger le budget
+              <Wallet className="h-4 w-4" /> Créditer par SycaPay
             </button>
             <button className={primaryButtonClass} onClick={() => setEmployeeEditor({ open: true, employe: null })}>
               <Plus className="h-4 w-4" /> Ajouter un employé
@@ -492,25 +482,12 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
         <SchemaBanner message="Exécutez supabase-dangote-pro.sql dans Supabase pour activer toutes les fonctions Pro." />
       ) : null}
 
-      {budgetBas ? (
-        <div className="flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-          <div>
-            <p className="font-bold">Budget bas</p>
-            <p className="mt-0.5 text-xs">
-              Solde actuel : {formatMoney(budgetSolde, devise)}. Seuil d’alerte : {formatMoney(seuilAlerte, devise)}.
-              Rechargez le budget avant la prochaine validation.
-            </p>
-          </div>
-        </div>
-      ) : null}
-
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-slate-100 p-1">
           <TabsTrigger value="apercu" className="gap-1.5"><LayoutDashboard className="h-4 w-4" /> Vue d’ensemble</TabsTrigger>
           <TabsTrigger value="employes" className="gap-1.5"><Users className="h-4 w-4" /> Employés</TabsTrigger>
 
-          <TabsTrigger value="budget" className="gap-1.5"><Wallet className="h-4 w-4" /> Budget</TabsTrigger>
+          <TabsTrigger value="paiements" className="gap-1.5"><Wallet className="h-4 w-4" /> Paiements SycaPay</TabsTrigger>
           <TabsTrigger value="rapports" className="gap-1.5"><BarChart3 className="h-4 w-4" /> Rapports</TabsTrigger>
           <TabsTrigger value="parametres" className="gap-1.5"><Settings className="h-4 w-4" /> Paramètres</TabsTrigger>
         </TabsList>
@@ -518,11 +495,11 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
         <TabsContent value="apercu" className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
-              label="Budget disponible"
-              value={formatMoney(budgetSolde, devise)}
-              hint={budgetBas ? 'Sous le seuil d’alerte' : `Seuil d’alerte ${formatMoney(seuilAlerte, devise)}`}
-              tone={budgetBas ? 'amber' : 'green'}
-              icon={<Wallet className="h-5 w-5" />}
+              label="Subventions du mois"
+              value={formatMoney(stats.subventions, devise)}
+              hint="Part prise en charge par l’entreprise"
+              tone="green"
+              icon={<Banknote className="h-5 w-5" />}
             />
             <StatCard
               label="Repas servis aujourd’hui"
@@ -603,31 +580,20 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
               )}
             </Panel>
 
-            <Panel title="Derniers mouvements budget">
-              {(dashboard?.ledger ?? []).length === 0 ? (
-                <EmptyState title="Aucun mouvement" />
+            <Panel title="Menus du jour" description="Menus publiés et prix appliqués au comptoir.">
+              {menusAujourdhui.length === 0 ? (
+                <EmptyState title="Aucun menu publié aujourd’hui" description="Les prix des paramètres sont utilisés par défaut." />
               ) : (
                 <div className="space-y-2">
-                  {(dashboard?.ledger ?? []).slice(0, 6).map((row) => {
-                    const positive = num(row.montant) >= 0;
-                    return (
-                      <div key={row.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          {positive ? <ArrowDownLeft className="h-4 w-4 text-emerald-600" /> : <ArrowUpRight className="h-4 w-4 text-red-500" />}
-                          <div>
-                            <p className="text-sm font-bold capitalize text-slate-800">{row.type}</p>
-                            <p className="text-xs text-slate-500">{formatTimeFr(row.created_at)} · {row.created_by_username ?? 'système'}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className={`text-sm font-black ${positive ? 'text-emerald-700' : 'text-red-600'}`}>
-                            {positive ? '+' : ''}{formatMoney(row.montant, devise)}
-                          </p>
-                          <p className="text-xs text-slate-500">solde {formatMoney(row.solde_apres, devise)}</p>
-                        </div>
+                  {menusAujourdhui.map((menu) => (
+                    <div key={menu.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2">
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">{menu.titre}</p>
+                        <p className="text-xs text-slate-500">{menu.type_repas} · {menu.actif ? 'actif' : 'inactif'}</p>
                       </div>
-                    );
-                  })}
+                      <p className="text-sm font-black text-green-800">{formatMoney(menu.prix, devise)}</p>
+                    </div>
+                  ))}
                 </div>
               )}
             </Panel>
@@ -719,20 +685,14 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
           </Panel>
         </TabsContent>
 
-        <TabsContent value="budget" className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <StatCard label="Solde budget" value={formatMoney(budgetSolde, devise)} tone={budgetBas ? 'amber' : 'green'} icon={<Wallet className="h-5 w-5" />} />
-            <StatCard label="Dépôts (période)" value={formatMoney((dashboard?.ledger ?? []).filter((row) => row.type === 'depot' || row.type === 'achat').reduce((sum, row) => sum + num(row.montant), 0), devise)} tone="blue" icon={<ArrowDownLeft className="h-5 w-5" />} />
-            <StatCard label="Consommations (période)" value={formatMoney(stats.retenues, devise)} tone="amber" icon={<ArrowUpRight className="h-5 w-5" />} />
-          </div>
-
+        <TabsContent value="paiements" className="space-y-4">
           <Panel
-            title="Paiements et recharges"
-            description="Les paiements SycaPay restent en attente jusqu’à confirmation. Vérifiez manuellement si besoin."
-            actions={<button className={primaryButtonClass} onClick={() => setDepositOpen(true)}><Plus className="h-4 w-4" /> Nouveau dépôt</button>}
+            title="Recharges SycaPay"
+            description="Les dépôts passent exclusivement par SycaPay et sont crédités après confirmation."
+            actions={<button className={primaryButtonClass} onClick={() => setDepositOpen(true)}><Plus className="h-4 w-4" /> Nouvelle recharge</button>}
           >
             {(dashboard?.paiements ?? []).length === 0 ? (
-              <EmptyState title="Aucun paiement enregistré" description="Rechargez le budget par Wave, Orange Money, carte ou dépôt manuel." />
+              <EmptyState title="Aucun paiement enregistré" description="Rechargez par Wave, Orange Money ou carte bancaire via SycaPay." />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -775,38 +735,6 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
             )}
           </Panel>
 
-          <Panel title="Journal du budget" description="Tous les mouvements : dépôts, consommations, annulations, factures.">
-            {(dashboard?.ledger ?? []).length === 0 ? (
-              <EmptyState title="Aucun mouvement" />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-3 py-2">Date</th>
-                      <th className="px-3 py-2">Type</th>
-                      <th className="px-3 py-2">Montant</th>
-                      <th className="px-3 py-2">Solde après</th>
-                      <th className="px-3 py-2">Référence</th>
-                      <th className="px-3 py-2">Acteur</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(dashboard?.ledger ?? []).map((row) => (
-                      <tr key={row.id} className="border-t border-slate-100">
-                        <td className="px-3 py-2 text-slate-600">{formatDateFr(row.created_at)}<span className="block text-xs text-slate-400">{formatTimeFr(row.created_at)}</span></td>
-                        <td className="px-3 py-2"><StatusBadge tone={num(row.montant) >= 0 ? 'green' : 'amber'}>{row.type}</StatusBadge></td>
-                        <td className={`px-3 py-2 font-bold ${num(row.montant) >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{formatMoney(row.montant, devise)}</td>
-                        <td className="px-3 py-2">{formatMoney(row.solde_apres, devise)}</td>
-                        <td className="px-3 py-2 font-mono text-xs text-slate-500">{row.reference ?? '—'}</td>
-                        <td className="px-3 py-2 text-slate-600">{row.created_by_username ?? 'système'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Panel>
         </TabsContent>
 
         <TabsContent value="rapports" className="space-y-4">
@@ -1004,7 +932,7 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
         </TabsContent>
 
         <TabsContent value="parametres" className="space-y-4">
-          <Panel title="Paramètres du restaurant" description="Prix, quotas, horaires et seuil d’alerte budget.">
+          <Panel title="Paramètres du restaurant" description="Prix, quotas et horaires du service.">
             <form onSubmit={saveSettings} className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <Field label="Nom du restaurant">
@@ -1012,9 +940,6 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
                 </Field>
                 <Field label="Devise">
                   <input className={inputClass} value={settingsForm.devise} onChange={(event) => setSettingsForm((current) => ({ ...current, devise: event.target.value }))} required />
-                </Field>
-                <Field label="Seuil d’alerte budget (FCFA)">
-                  <input type="number" min={0} className={inputClass} value={settingsForm.budgetAlerteSeuil} onChange={(event) => setSettingsForm((current) => ({ ...current, budgetAlerteSeuil: event.target.value }))} />
                 </Field>
                 <Field label="Heure d’ouverture">
                   <input type="time" className={inputClass} value={settingsForm.heureOuverture} onChange={(event) => setSettingsForm((current) => ({ ...current, heureOuverture: event.target.value }))} />
@@ -1075,10 +1000,6 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
               <div className="flex items-center gap-2 rounded-xl border border-slate-100 px-3 py-2 text-sm">
                 <CheckCircle2 className={`h-4 w-4 ${employes.length > 0 ? 'text-emerald-600' : 'text-slate-400'}`} />
                 Employés : {employes.length}
-              </div>
-              <div className="flex items-center gap-2 rounded-xl border border-slate-100 px-3 py-2 text-sm">
-                <CheckCircle2 className={`h-4 w-4 ${budgetSolde > 0 ? 'text-emerald-600' : 'text-amber-600'}`} />
-                Budget : {formatMoney(budgetSolde, devise)}
               </div>
             </div>
           </Panel>

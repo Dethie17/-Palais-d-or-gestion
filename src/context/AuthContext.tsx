@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getClientQrToken } from '@/lib/clientQr';
 import { authEmailFor, usernameFromAuthEmail } from '@/lib/authEmail';
+import { postAdminJson } from '@/lib/adminApi';
 import { useSessionExpiry, type SessionExpiryReason } from '@/lib/sessionExpiry';
 import { toast } from 'sonner';
 export { authEmailFor };
@@ -10,6 +11,7 @@ import {
   registerFailure,
   lockRemainingMs,
   isValidUsername,
+  normalizeUsername,
   type AttemptRec,
 } from '@/lib/authSecurity';
 
@@ -113,14 +115,19 @@ export interface User {
   entiteId?: string;
 }
 
+export interface AccountUpdateResult {
+  ok: boolean;
+  error?: string;
+}
+
 interface AuthContextType {
   user: User | null;
   login: (username: string, password: string) => Promise<boolean>;
   /** Connexion parent : numéro de téléphone seul, sans mot de passe. */
   loginParent: (phone: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
-  changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
-  changeUsername: (newUsername: string) => Promise<boolean>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<AccountUpdateResult>;
+  changeUsername: (newUsername: string, currentPassword: string) => Promise<AccountUpdateResult>;
   isAuthenticated: boolean;
   loading: boolean;
 }
@@ -793,15 +800,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   });
 
-  const changePassword = async (currentPassword: string, newPassword: string): Promise<boolean> => {
-    if (!user) return false;
+  const changePassword = async (
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<AccountUpdateResult> => {
+    if (!user) return { ok: false, error: 'Session expirée. Reconnectez-vous.' };
     // Personnel / gestionnaire : mot de passe géré UNIQUEMENT par la DAF
     // (Paramètres → Comptes → réinitialiser). Eux ne peuvent pas le changer seuls.
     if (user.role === 'personnel' || user.role === 'gestionnaire') {
-      return false;
+      return {
+        ok: false,
+        error: 'Mot de passe géré uniquement par la Direction (Paramètres → Comptes).',
+      };
     }
-    if (!newPassword || newPassword.length < 6) return false;
+    if (!currentPassword) {
+      return { ok: false, error: 'Saisissez votre mot de passe actuel.' };
+    }
+    const minLength = user.role === 'admin' ? 8 : 6;
+    if (!newPassword || newPassword.length < minLength) {
+      return {
+        ok: false,
+        error: `Le nouveau mot de passe doit contenir au moins ${minLength} caractères.`,
+      };
+    }
     const key = user.username.trim().toLowerCase();
+
+    // Espace ISM : passage par le serveur — il vérifie l'ancien mot de passe,
+    // met à jour l'identité Auth et garde l'empreinte historique alignée.
+    if (user.role === 'admin' && isSupabaseConfigured) {
+      const result = await postAdminJson('/api/auth/create-user?action=update-account', {
+        currentPassword,
+        newPassword,
+      });
+      return result.ok
+        ? { ok: true }
+        : { ok: false, error: result.error ?? 'Modification du mot de passe impossible.' };
+    }
 
     if (isSupabaseConfigured) {
       // Supabase exige le mot de passe actuel : c'est lui qui refuse la
@@ -810,55 +844,98 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: authEmailFor(key),
         password: currentPassword,
       });
-      if (currentError) return false;
+      if (currentError) return { ok: false, error: 'Mot de passe actuel incorrect.' };
 
       const { error } = await supabase.auth.updateUser({ password: newPassword });
-      return !error;
+      return error
+        ? { ok: false, error: 'Modification impossible. Réessayez.' }
+        : { ok: true };
     }
 
     // Hors ligne : le compte démo ou local est mis à jour en mémoire.
     const demo = DEMO_ACCOUNTS[key];
     if (demo) {
-      if (demo.password !== currentPassword) return false;
+      if (demo.password !== currentPassword) {
+        return { ok: false, error: 'Mot de passe actuel incorrect.' };
+      }
       DEMO_ACCOUNTS[key] = { ...demo, password: newPassword };
-      return true;
+      return { ok: true };
     }
 
     const local = getLocalUsers().find((u) => u.username === key);
     if (local && local.password === currentPassword) {
-      return setLocalPassword(key, newPassword);
+      return setLocalPassword(key, newPassword)
+        ? { ok: true }
+        : { ok: false, error: 'Modification impossible.' };
     }
-    return false;
+    return { ok: false, error: 'Mot de passe actuel incorrect.' };
   };
 
-  const changeUsername = async (newUsername: string): Promise<boolean> => {
-    if (!user || user.role !== 'admin') return false;
-    const trimmed = newUsername.trim().toLowerCase();
-    if (!trimmed || trimmed.length < 3) return false;
-    if (trimmed === user.username.trim().toLowerCase()) return true;
+  const changeUsername = async (
+    newUsername: string,
+    currentPassword: string,
+  ): Promise<AccountUpdateResult> => {
+    if (!user || user.role !== 'admin') {
+      return { ok: false, error: 'Action réservée à l’Espace ISM.' };
+    }
+    const trimmed = normalizeUsername(newUsername);
+    if (!isValidUsername(trimmed)) {
+      return {
+        ok: false,
+        error: 'Nom d’utilisateur : 3 à 24 caractères (lettres, chiffres, . _ -).',
+      };
+    }
+    if (!currentPassword) {
+      return { ok: false, error: 'Saisissez votre mot de passe actuel.' };
+    }
+    const key = user.username.trim().toLowerCase();
+    if (trimmed === key) {
+      return { ok: false, error: 'Choisissez un identifiant différent de l’actuel.' };
+    }
 
     if (isSupabaseConfigured) {
-      const { error } = await supabase.auth.updateUser({ email: authEmailFor(trimmed) });
-      if (error) return false;
+      // Le serveur met à jour l'adresse Auth ET la fiche `users` : changer
+      // seulement l'adresse laisserait la connexion suivante sur l'ancien nom.
+      const result = await postAdminJson<{ ok: boolean; username?: string; error?: string }>(
+        '/api/auth/create-user?action=update-account',
+        { currentPassword, newUsername: trimmed },
+      );
+      if (!result.ok) {
+        return { ok: false, error: result.error ?? 'Modification de l’identifiant impossible.' };
+      }
+      const next = result.data?.username ?? trimmed;
+      setUser((prev) =>
+        prev ? { ...prev, username: next, qrToken: getClientQrToken(next) } : prev,
+      );
+      return { ok: true };
     }
 
-    // Mise à jour locale / démo
-    const key = user.username.trim().toLowerCase();
+    // Hors ligne : registre démo ou local, avec vérification du mot de passe.
     const demo = DEMO_ACCOUNTS[key];
     if (demo) {
+      if (demo.password !== currentPassword) {
+        return { ok: false, error: 'Mot de passe actuel incorrect.' };
+      }
       DEMO_ACCOUNTS[trimmed] = { ...demo, username: trimmed };
       delete DEMO_ACCOUNTS[key];
-    }
-    const locals = getLocalUsers();
-    const idx = locals.findIndex((u) => u.username === key);
-    if (idx >= 0) {
-      locals[idx] = { ...locals[idx], username: trimmed };
-      localStorage.setItem('o-resto-local-users', JSON.stringify(locals));
+      setUser((prev) =>
+        prev ? { ...prev, username: trimmed, qrToken: getClientQrToken(trimmed) } : prev,
+      );
+      return { ok: true };
     }
 
-    // Mettre à jour l'état utilisateur
-    setUser((prev) => (prev ? { ...prev, username: trimmed } : prev));
-    return true;
+    const locals = getLocalUsers();
+    const local = locals.find((u) => u.username === key);
+    if (!local || local.password !== currentPassword) {
+      return { ok: false, error: 'Mot de passe actuel incorrect.' };
+    }
+    saveLocalUsers(
+      locals.map((u) => (u.username === key ? { ...u, username: trimmed } : u)),
+    );
+    setUser((prev) =>
+      prev ? { ...prev, username: trimmed, qrToken: getClientQrToken(trimmed) } : prev,
+    );
+    return { ok: true };
   };
 
   return (

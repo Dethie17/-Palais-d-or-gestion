@@ -15,6 +15,8 @@
  * — l'identifiant conseillé est le numéro de téléphone du parent.
  * Réinitialisation : POST /api/auth/create-user?action=set-password
  * avec { "username": "awa", "password": "…" }
+ * Auto-gestion du compte ISM : POST /api/auth/create-user?action=update-account
+ * avec { currentPassword, newUsername?, newPassword? } — réservé à l'Espace ISM.
  *
  * Création réservée à la Direction (admin) et au back-office MIAM'S Dangote
  * (superviseur-dangote, limité aux rôles et à l'entité de son périmètre).
@@ -22,15 +24,18 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { adminClient } from '../_lib/supabaseAdmin.js';
+import { adminClient, passwordAuthClient } from '../_lib/supabaseAdmin.js';
 import { normalizeUsername, isValidUsername, STAFF_SIGNUP_FLAG } from '../_lib/username.js';
 import { personalQrToken } from '../_lib/qrToken.js';
-import { insertUserProfile } from '../_lib/profile.js';
-import { requireRole, CREATE_USER_ROLES, DELETE_USER_ROLES } from '../_lib/session.js';
+import { insertUserProfile, legacyPasswordHash } from '../_lib/profile.js';
+import { authEmailForUser, findAuthUserByEmail } from '../_lib/parentAuth.js';
+import { requireRole, CREATE_USER_ROLES, DELETE_USER_ROLES, type Caller } from '../_lib/session.js';
+import { enforceKeyRateLimit } from '../_lib/rateLimit.js';
 import {
   handlePreflight,
   methodNotAllowed,
   readJson,
+  rejectForeignOrigin,
   sendError,
   sendJson,
 } from '../_lib/http.js';
@@ -50,6 +55,157 @@ interface CreateBody {
   nom?: unknown;
   prenom?: unknown;
   service?: unknown;
+  currentPassword?: unknown;
+  newUsername?: unknown;
+  newPassword?: unknown;
+}
+
+const MIN_ACCOUNT_PASSWORD = 8;
+
+/**
+ * Auto-gestion du compte de l'Espace ISM : identifiant de connexion et mot de
+ * passe. Le mot de passe actuel est vérifié chez Supabase Auth avant toute
+ * écriture — sans lui, un jeton volé suffirait à verrouiller le compte.
+ *
+ * L'identifiant est l'adresse Auth interne (`<nom>@domaine`) ET la ligne
+ * `users.username` : les deux sont mises à jour, sinon la prochaine connexion
+ * retrouverait un profil dont le nom ne correspond plus à l'adresse.
+ */
+async function updateOwnAccount(
+  req: IncomingMessage,
+  res: ServerResponse,
+  body: CreateBody,
+  caller: Caller,
+): Promise<void> {
+  if (rejectForeignOrigin(req, res)) return;
+  if (!enforceKeyRateLimit(res, 'auth:update-account', caller.username, 8, 15 * 60_000)) return;
+
+  const currentPassword = typeof body.currentPassword === 'string' ? body.currentPassword : '';
+  const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
+  const rawNewUsername = typeof body.newUsername === 'string' ? body.newUsername.trim() : '';
+  const wantsPassword = newPassword.length > 0;
+  const wantsUsername = rawNewUsername.length > 0;
+
+  if (!currentPassword) {
+    return sendError(res, 400, 'Saisissez votre mot de passe actuel.');
+  }
+  if (!wantsPassword && !wantsUsername) {
+    return sendError(res, 400, 'Aucune modification demandée.');
+  }
+
+  let nextUsername = caller.username;
+  if (wantsUsername) {
+    nextUsername = normalizeUsername(rawNewUsername);
+    if (!isValidUsername(nextUsername)) {
+      return sendError(res, 400, 'Nom d’utilisateur : 3 à 24 caractères (lettres, chiffres, . _ -).');
+    }
+  }
+
+  if (wantsPassword && newPassword.length < MIN_ACCOUNT_PASSWORD) {
+    return sendError(res, 400, 'Mot de passe de 8 caractères minimum.');
+  }
+
+  let db;
+  let verifier;
+  try {
+    db = adminClient();
+    verifier = passwordAuthClient();
+  } catch {
+    return sendError(res, 503, 'Service indisponible. Réessayez.');
+  }
+
+  const { data: authData, error: authLookupError } = await db.auth.admin.getUserById(caller.userId);
+  const account = authData?.user as { email?: string | null } | undefined;
+  if (authLookupError || !account?.email) {
+    return sendError(res, 500, 'Compte introuvable.');
+  }
+
+  // Vérification du mot de passe actuel auprès du serveur Auth. Le client est
+  // éphémère : la session ouverte ici ne doit jamais remplacer la clé de
+  // service sur le client admin partagé.
+  const check = await verifier.auth.signInWithPassword({
+    email: account.email,
+    password: currentPassword,
+  });
+  if (check.error || !check.data?.session) {
+    // Comptes historiques : l'empreinte `users.password` fait encore foi tant
+    // que la migration n'a pas aligné le mot de passe Auth. On l'accepte, puis
+    // les écritures ci-dessous posent le nouveau mot de passe dans Auth.
+    let legacyHash: string | null = null;
+    const { data: profileRow, error: profileLookupError } = await db
+      .from('users')
+      .select('password')
+      .eq('username', caller.username)
+      .maybeSingle();
+    if (!profileLookupError && profileRow) {
+      legacyHash = String((profileRow as { password?: string | null }).password ?? '') || null;
+    }
+    if (!legacyHash || legacyHash !== legacyPasswordHash(currentPassword)) {
+      return sendError(res, 401, 'Mot de passe actuel incorrect.');
+    }
+  }
+
+  if (wantsUsername && nextUsername !== caller.username) {
+    const { data: existing, error: nameError } = await db
+      .from('users')
+      .select('username')
+      .eq('username', nextUsername)
+      .maybeSingle();
+    if (nameError) return sendError(res, 500, 'Vérification de l’identifiant impossible.');
+    if (existing) return sendError(res, 409, 'Ce nom d’utilisateur est déjà utilisé.');
+
+    const alreadyInAuth = await findAuthUserByEmail(db, authEmailForUser(nextUsername));
+    if (alreadyInAuth && alreadyInAuth.id !== caller.userId) {
+      return sendError(res, 409, 'Ce nom d’utilisateur est déjà utilisé.');
+    }
+
+    const previousEmail = account.email;
+    const { error: emailError } = await db.auth.admin.updateUserById(caller.userId, {
+      email: authEmailForUser(nextUsername),
+      email_confirm: true,
+    });
+    if (emailError) {
+      console.error('[update-account] échec adresse Auth', emailError.message);
+      return sendError(res, 409, 'Ce nom d’utilisateur est déjà utilisé.');
+    }
+
+    const { error: profileError } = await db
+      .from('users')
+      .update({ username: nextUsername, qr_token: personalQrToken(nextUsername) })
+      .eq('username', caller.username);
+    if (profileError) {
+      // Pas de compte à moitié renommé : on rétablit l'adresse Auth.
+      await db.auth.admin
+        .updateUserById(caller.userId, { email: previousEmail, email_confirm: true })
+        .catch(() => undefined);
+      console.error('[update-account] échec fiche métier', profileError.message);
+      return sendError(res, 500, 'Identifiant non enregistré. Réessayez.');
+    }
+  }
+
+  if (wantsPassword) {
+    const { error: passwordError } = await db.auth.admin.updateUserById(caller.userId, {
+      password: newPassword,
+    });
+    if (passwordError) {
+      return sendError(res, 500, 'Modification du mot de passe impossible.');
+    }
+    // Schéma historique : la connexion de transition lit encore `users.password`.
+    // Sur le schéma cible la colonne n'existe plus — on ignore alors l'erreur.
+    const { error: legacyError } = await db
+      .from('users')
+      .update({ password: legacyPasswordHash(newPassword) })
+      .eq('username', nextUsername);
+    if (
+      legacyError &&
+      legacyError.code !== '42703' &&
+      legacyError.code !== 'PGRST204'
+    ) {
+      console.warn('[update-account] empreinte historique non mise à jour', legacyError.code);
+    }
+  }
+
+  return sendJson(res, 200, { ok: true, username: nextUsername });
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
@@ -61,9 +217,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   const requestUrl = req.url ?? '';
   const pathname = requestUrl.split('?')[0];
   const query = new URLSearchParams(requestUrl.split('?')[1] ?? '');
-  const isPasswordReset = query.get('action') === 'set-password' || pathname === '/api/auth/set-password';
+  const action = query.get('action');
+  const isPasswordReset = action === 'set-password' || pathname === '/api/auth/set-password';
+  const isAccountUpdate = action === 'update-account';
 
-  const caller = await requireRole(req, res, isPasswordReset ? DELETE_USER_ROLES : CREATE_USER_ROLES);
+  const caller = await requireRole(
+    req,
+    res,
+    isAccountUpdate ? ['admin'] : isPasswordReset ? DELETE_USER_ROLES : CREATE_USER_ROLES,
+  );
   if (!caller) return;
 
   let body: CreateBody;
@@ -71,6 +233,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     body = await readJson<CreateBody>(req);
   } catch {
     return sendError(res, 400, 'Corps JSON invalide.');
+  }
+
+  if (isAccountUpdate) {
+    return updateOwnAccount(req, res, body, caller);
   }
 
   if (isPasswordReset) {

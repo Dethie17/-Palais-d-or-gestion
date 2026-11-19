@@ -20,7 +20,6 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -76,6 +75,7 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
   const [manualSearch, setManualSearch] = useState('');
   const [selected, setSelected] = useState<DangoteEmploye | null>(null);
   const [typeRepas, setTypeRepas] = useState<'standard' | 'premium'>('standard');
+  const [selectionSource, setSelectionSource] = useState<'qr' | 'manuel'>('manuel');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<DangoteApiResponse | null>(null);
   const [validating, setValidating] = useState(false);
@@ -87,7 +87,6 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
   const [orderSearch, setOrderSearch] = useState('');
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [historyEmployee, setHistoryEmployee] = useState<DangoteEmploye | null>(null);
-  const [qrEmployee, setQrEmployee] = useState<DangoteEmploye | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!entiteId) {
@@ -132,7 +131,6 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
     () => todayRepas.filter((repasRow) => repasRow.statut === 'valide'),
     [todayRepas],
   );
-  const budgetSolde = num(dashboard?.budget?.solde ?? dashboard?.stats?.solde ?? 0);
   const todayMenus = useMemo(
     () => (dashboard?.menus ?? []).filter((menu) => menu.date_jour === today && menu.actif),
     [dashboard?.menus, today],
@@ -194,14 +192,15 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
     premium: todayValid.filter((row) => row.type_repas === 'premium').length,
     subventions: todayValid.reduce((sum, row) => sum + num(row.subvention_appliquee), 0),
     retenues: todayValid.reduce((sum, row) => sum + num(row.retenue_salaire), 0),
-    chiffreAffaires: todayValid.length * 1400,
+    chiffreAffaires: todayValid.reduce((sum, row) => sum + num(row.prix), 0),
   }), [todayValid]);
 
-  const findEmployee = (value?: string) => {
+  const findEmployee = (value?: string, source: 'qr' | 'manuel' = 'manuel') => {
     const token = (value ?? qrInput).trim();
     if (!token) return;
     const found = employes.find((employe) => employe.qr_token === token)
       ?? employes.find((employe) => employe.matricule.toLowerCase() === token.toLowerCase());
+    setSelectionSource(source);
     setValidationResult(null);
     if (!found) {
       setSelected(null);
@@ -230,7 +229,7 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
         { fps: 10, qrbox: 240 },
         (text) => {
           setQrInput(text);
-          findEmployee(text);
+          findEmployee(text, 'qr');
           void stopScan();
         },
         () => undefined,
@@ -259,6 +258,12 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
       setValidationError('Employé désactivé.');
       return;
     }
+    if (employeeToday.repas > 0) {
+      const confirmed = window.confirm(
+        `${employeeName(selected)} a déjà ${employeeToday.repas} repas validé(s) aujourd’hui. Valider un repas supplémentaire ?`,
+      );
+      if (!confirmed) return;
+    }
     setValidating(true);
     setValidationError(null);
     setValidationResult(null);
@@ -270,14 +275,19 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
         typeRepas,
         menuId: menu?.id ?? undefined,
         quantite: 1,
-        source: 'qr',
+        source: selectionSource,
       });
       setValidationResult(result);
       toast.success(`Repas validé pour ${employeeName(selected)}.`);
       await load(true);
     } catch (err) {
       const apiError = err as Error & { payload?: DangoteApiResponse };
-      setValidationError(apiError.payload?.message ?? apiError.message);
+      const message = apiError.payload?.message ?? apiError.message;
+      setValidationError(
+        /budget insuffisant/i.test(message)
+          ? 'Compte repas non crédité. La RH doit effectuer une recharge SycaPay.'
+          : message,
+      );
     } finally {
       setValidating(false);
     }
@@ -290,6 +300,7 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
     setValidationError(null);
     setValidationResult(null);
     setTypeRepas('standard');
+    setSelectionSource('manuel');
   };
 
   const cancelMeal = async (repasRow: DangoteRepas) => {
@@ -298,7 +309,7 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
     setCancelling(repasRow.id);
     try {
       await dangoteApi('meal.cancel', { entiteId, repasId: repasRow.id, motif });
-      toast.success('Repas annulé et budget recrédité.');
+      toast.success('Repas annulé.');
       await load(true);
     } catch (err) {
       toast.error((err as Error).message);
@@ -362,10 +373,10 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
       <SchemaBanner message={error} />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Repas aujourd’hui" value={todayStats.repas} hint={`${todayStats.participants} participant(s)`} tone="green" icon={<UtensilsCrossed className="h-5 w-5" />} />
-        <StatCard label="Subventions du jour" value={formatMoney(todayStats.subventions, devise)} tone="blue" icon={<Banknote className="h-5 w-5" />} />
+        <StatCard label="Repas aujourd’hui" value={todayStats.repas} hint={`${todayStats.standard} standard · ${todayStats.premium} premium`} tone="green" icon={<UtensilsCrossed className="h-5 w-5" />} />
+        <StatCard label="Participants" value={todayStats.participants} hint={`${employes.filter((employe) => employe.actif).length} employé(s) actif(s)`} tone="blue" icon={<Users className="h-5 w-5" />} />
+        <StatCard label="Subventions du jour" value={formatMoney(todayStats.subventions, devise)} tone="green" icon={<Banknote className="h-5 w-5" />} />
         <StatCard label="Retenues du jour" value={formatMoney(todayStats.retenues, devise)} tone="amber" icon={<Wallet className="h-5 w-5" />} />
-        <StatCard label="Budget disponible" value={formatMoney(budgetSolde, devise)} tone={budgetSolde > 0 ? 'default' : 'red'} icon={<Wallet className="h-5 w-5" />} />
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
@@ -422,6 +433,7 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
                           onClick={() => {
                             setSelected(employe);
                             setQrInput(employe.qr_token);
+                            setSelectionSource('manuel');
                             setValidationError(null);
                             setValidationResult(null);
                           }}
@@ -441,7 +453,7 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
               </div>
             </Panel>
 
-            <Panel title="Valider le repas" description="Le serveur applique les quotas, plafonds et le budget.">
+            <Panel title="Valider le repas" description="Le serveur applique les quotas, plafonds et la subvention.">
               {!selected ? (
                 <EmptyState title="Aucun employé sélectionné" description="Scannez un QR ou choisissez un employé pour afficher sa situation." icon={<QrCode className="h-8 w-8" />} />
               ) : (
@@ -529,9 +541,7 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
                       <p className="mt-1 text-sm text-emerald-800">
                         {validationResult.prenom} {validationResult.nom} — {validationResult.type_repas}. Retenue : {formatMoney(num(validationResult.retenue), devise)}.
                       </p>
-                      <p className="text-xs text-emerald-700">
-                        Solde budget après opération : {formatMoney(num(validationResult.solde_apres), devise)}.
-                      </p>
+                      <p className="text-xs text-emerald-700">Le repas est enregistré et la retenue sera reportée sur le salaire.</p>
                       <button className={`${secondaryButtonClass} mt-3`} onClick={resetValidation}>
                         <QrCode className="h-4 w-4" /> Nouveau scan
                       </button>
@@ -680,9 +690,6 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
                                 <button className={secondaryButtonClass} onClick={() => setHistoryEmployee(employe)}>
                                   <History className="h-4 w-4" /> Historique
                                 </button>
-                                <button className={secondaryButtonClass} onClick={() => setQrEmployee(employe)}>
-                                  <QrCode className="h-4 w-4" /> QR
-                                </button>
                               </div>
                             </td>
                           </tr>
@@ -817,20 +824,6 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(qrEmployee)} onOpenChange={(open) => { if (!open) setQrEmployee(null); }}>
-        <DialogContent className="max-w-sm text-center">
-          <DialogHeader>
-            <DialogTitle>QR de {employeeName(qrEmployee)}</DialogTitle>
-            <DialogDescription>{qrEmployee?.matricule}</DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-center py-2">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              {qrEmployee ? <QRCodeSVG value={qrEmployee.qr_token} size={220} /> : null}
-            </div>
-          </div>
-          <p className="break-all font-mono text-xs text-slate-500">{qrEmployee?.qr_token}</p>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

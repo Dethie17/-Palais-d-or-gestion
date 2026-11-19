@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import type { PageName } from '@/types/menu';
-import { ArrowLeft, Building2, Plus, Power } from 'lucide-react';
+import { ArrowLeft, ArrowLeftRight, Building2, Plus, Power } from 'lucide-react';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 interface Entite {
   id: string;
@@ -13,7 +14,7 @@ interface Entite {
 }
 
 const EntitiesPage = ({ onNavigate }: { onNavigate: (page: PageName) => void }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const canManage = user?.role === 'admin' || user?.role === 'personnel';
   const [entities, setEntities] = useState<Entite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +22,12 @@ const EntitiesPage = ({ onNavigate }: { onNavigate: (page: PageName) => void }) 
   const [slug, setSlug] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [confirmSwitch, setConfirmSwitch] = useState(false);
+
+  const switchEntity = () => {
+    try { localStorage.removeItem('selectedEntity'); } catch { /* ignore */ }
+    logout();
+  };
 
   const spacesBySlug: Record<string, string[]> = {
     'groupe-ism': ['Espace Caissier', 'Espace Parent', 'Espace Superviseur', 'Espace ISM'],
@@ -54,13 +61,26 @@ const EntitiesPage = ({ onNavigate }: { onNavigate: (page: PageName) => void }) 
 
   return (
     <div className="p-4 lg:p-8 space-y-6">
-      <button onClick={() => onNavigate('home')} className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors group">
-        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-        Retour
-      </button>
-      <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-        <Building2 className="w-6 h-6" /> Gestion des entités
-      </h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
+          <button onClick={() => onNavigate('home')} className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors group">
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            Retour
+          </button>
+          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <Building2 className="w-6 h-6" /> Gestion des entités
+          </h1>
+        </div>
+        {user && user.role !== 'client' ? (
+          <button
+            onClick={() => setConfirmSwitch(true)}
+            data-testid="entities-switch-entity"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-sm font-black text-slate-700 hover:border-green-300 hover:text-green-700 hover:bg-green-50 transition-colors"
+          >
+            <ArrowLeftRight className="w-4 h-4" /> Changer d’entité
+          </button>
+        ) : null}
+      </div>
 
       {canManage && (
         <form onSubmit={create} className="bg-white rounded-2xl border p-4 flex flex-wrap gap-3 items-end">
@@ -113,6 +133,16 @@ const EntitiesPage = ({ onNavigate }: { onNavigate: (page: PageName) => void }) 
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={confirmSwitch}
+        onClose={() => setConfirmSwitch(false)}
+        onConfirm={switchEntity}
+        title="Changer d’entité ?"
+        message="Vous allez quitter cet espace et revenir au choix de l’entité. Une reconnexion sera nécessaire."
+        type="warning"
+        confirmText="Changer d’entité"
+      />
     </div>
   );
 };

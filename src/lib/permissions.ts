@@ -16,6 +16,8 @@ const ISM_PAGES: PageName[] = [
   'dashboard', 'finance', 'subscriptions',
   'users', 'history', 'profile',
   'import-eleves',
+  // Accueil des entités : c'est là que se trouve le changement d'entité.
+  'entities',
   // Historique des paiements (parents ↔ école), paginé depuis la base.
   'paiements',
   // Les QR Cartes Student ne sont pas exposés à l'Espace ISM :
@@ -34,7 +36,7 @@ export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   admin: [...ISM_PAGES, 'dangote-rh', 'paymentsuccess', 'paymentfailure'],
   // DCH Dangote : gestion employés, achats de talons, crédit repas.
   rh: ['dangote-rh', 'dangote-qrgallery', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
-  'superviseur-dangote': ['dangote-superviseur', 'dangote-qrgallery', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
+  'superviseur-dangote': ['dangote-superviseur', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
   'employe-dangote': ['dangote-employe', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
 };
 

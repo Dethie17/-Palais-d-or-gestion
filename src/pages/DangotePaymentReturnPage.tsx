@@ -87,13 +87,10 @@ export default function DangotePaymentReturnPage({ outcome }: Props) {
         {state === 'paid' ? (
           <>
             <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-600" />
-            <h1 className="mt-4 text-xl font-extrabold text-slate-800">Dépôt confirmé</h1>
+            <h1 className="mt-4 text-xl font-extrabold text-slate-800">Recharge confirmée</h1>
             <p className="mt-2 text-sm text-slate-600">
-              {amount ? `${amount} ` : 'Le montant '}a bien été crédité sur le budget Dangote.
+              {amount ? `${amount} ` : 'Le montant '}a bien été crédité sur le compte repas Dangote.
             </p>
-            {payment?.solde != null ? (
-              <p className="mt-1 text-xs text-slate-500">Nouveau solde : {formatMoney(payment.solde)}</p>
-            ) : null}
             <button onClick={goBack} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-green-700 px-4 py-3 text-sm font-bold text-white hover:bg-green-800">
               <Wallet className="h-4 w-4" /> Retour à l’espace
             </button>
@@ -105,7 +102,7 @@ export default function DangotePaymentReturnPage({ outcome }: Props) {
             <XCircle className="mx-auto h-14 w-14 text-red-500" />
             <h1 className="mt-4 text-xl font-extrabold text-slate-800">Paiement non abouti</h1>
             <p className="mt-2 text-sm text-slate-600">{message}</p>
-            <p className="mt-2 text-xs text-slate-500">Le budget n’a pas été crédité. Vous pouvez relancer un dépôt depuis l’espace RH.</p>
+            <p className="mt-2 text-xs text-slate-500">Le compte repas n’a pas été crédité. Vous pouvez relancer une recharge depuis l’espace RH.</p>
             <button onClick={goBack} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-green-700 px-4 py-3 text-sm font-bold text-white hover:bg-green-800">
               <Wallet className="h-4 w-4" /> Retour à l’espace
             </button>
@@ -131,7 +128,7 @@ export default function DangotePaymentReturnPage({ outcome }: Props) {
             </h1>
             <p className="mt-2 text-sm text-slate-600">
               {outcome === 'echec'
-                ? 'Vous avez quitté la page de paiement. Si le débit a eu lieu, le budget sera crédité dès la confirmation SycaPay.'
+                ? 'Vous avez quitté la page de paiement. Si le débit a eu lieu, le compte repas sera crédité dès la confirmation SycaPay.'
                 : 'Nous confirmons le paiement auprès de SycaPay. Ne fermez pas cette page.'}
             </p>
             <div className="mt-5 flex items-center justify-center gap-2 text-sm text-slate-500">

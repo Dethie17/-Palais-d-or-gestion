@@ -1,9 +1,7 @@
-import { useState } from 'react';
 import { PageName } from '@/types/menu';
 import { useAuth, UserRole } from '@/context/AuthContext';
 import { canAccess } from '@/lib/permissions';
 import OrestoLogo from '@/components/brand/OrestoLogo';
-import ConfirmDialog from '@/components/ConfirmDialog';
 import {
   LayoutDashboard,
   UtensilsCrossed,
@@ -21,7 +19,6 @@ import {
   QrCode,
   LogOut,
   UserRound,
-  ArrowLeft,
 } from 'lucide-react';
 
 /**
@@ -39,9 +36,10 @@ const NAV: { page: PageName; label: string; icon: React.ReactNode; roles: UserRo
   { page: 'qrgallery', label: 'QR Code', icon: <QrCode aria-hidden className="w-4 h-4" />, roles: ['personnel', 'gestionnaire'] },
   { page: 'users', label: 'Utilisateurs', icon: <Users aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'import-eleves', label: 'Import', icon: <FileSpreadsheet aria-hidden className="w-4 h-4" />, roles: ['admin'] },
-  { page: 'entities', label: 'Entités', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
+  { page: 'entities', label: 'Entités', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'dangote-rh', label: 'Espace RH', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['rh'] },
-  { page: 'dangote-qrgallery', label: 'QR Employés', icon: <QrCode aria-hidden className="w-4 h-4" />, roles: ['rh', 'superviseur-dangote'] },
+  { page: 'dangote-qrgallery', label: 'QR Employés', icon: <QrCode aria-hidden className="w-4 h-4" />, roles: ['rh'] },
+  { page: 'profile', label: 'Mon compte', icon: <UserRound aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin', 'gestionnaire', 'rh', 'superviseur-dangote', 'employe-dangote'] },
   { page: 'dangote-superviseur', label: 'Espace Superviseur', icon: <UtensilsCrossed aria-hidden className="w-4 h-4" />, roles: ['superviseur-dangote'] },
   { page: 'dangote-employe', label: 'Espace Employé', icon: <UserRound aria-hidden className="w-4 h-4" />, roles: ['employe-dangote'] },
   { page: 'establishments', label: 'Établissements', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: [] },
@@ -54,17 +52,11 @@ const NAV: { page: PageName; label: string; icon: React.ReactNode; roles: UserRo
 
 const SpaceTopNav = ({ currentPage, onNavigate }: { currentPage: PageName; onNavigate: (page: PageName) => void }) => {
   const { user, logout } = useAuth();
-  const [confirmSwitch, setConfirmSwitch] = useState(false);
   const items = user
     ? NAV.filter((item) => item.roles.includes(user.role) && canAccess(user.role, item.page))
     : [];
   const isClient = user?.role === 'client';
   if (isClient || !user) return null;
-
-  const switchEntity = () => {
-    try { localStorage.removeItem('selectedEntity'); } catch { /* ignore */ }
-    void logout();
-  };
 
   return (
     <>
@@ -77,15 +69,6 @@ const SpaceTopNav = ({ currentPage, onNavigate }: { currentPage: PageName; onNav
           <p className="font-black tracking-tight text-slate-900 text-sm hidden md:block">
           </p>
         </div>
-
-        <button
-          onClick={() => setConfirmSwitch(true)}
-          data-testid="space-switch-entity"
-          className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-xl border-2 border-slate-200 text-xs font-black text-slate-700 hover:border-green-300 hover:text-green-700 hover:bg-green-50 transition-colors"
-        >
-          <ArrowLeft aria-hidden className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Changer d’entité</span>
-        </button>
 
         <nav aria-label="Navigation de l'espace" className="flex items-center gap-1 overflow-x-auto min-w-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {items.map((item) => {
@@ -133,14 +116,6 @@ const SpaceTopNav = ({ currentPage, onNavigate }: { currentPage: PageName; onNav
           </button>
         ))}
         <button
-          onClick={() => setConfirmSwitch(true)}
-          data-testid="space-switch-entity-mobile"
-          className="flex flex-col items-center justify-center min-w-[72px] px-2 py-1.5 rounded-xl text-[10px] font-bold text-slate-700 hover:bg-slate-100 transition-colors"
-        >
-          <ArrowLeft aria-hidden className="w-4 h-4 mb-0.5" />
-          <span>Entités</span>
-        </button>
-        <button
           onClick={logout}
           className="flex flex-col items-center justify-center min-w-[72px] px-2 py-1.5 rounded-xl text-[10px] font-bold text-red-600 hover:bg-red-50 transition-colors"
         >
@@ -149,15 +124,6 @@ const SpaceTopNav = ({ currentPage, onNavigate }: { currentPage: PageName; onNav
         </button>
       </div>
     </nav>
-    <ConfirmDialog
-      isOpen={confirmSwitch}
-      onClose={() => setConfirmSwitch(false)}
-      onConfirm={switchEntity}
-      title="Changer d’entité ?"
-      message="Vous allez quitter l’espace actuel et revenir au choix de l’entité. Une reconnexion sera nécessaire."
-      type="warning"
-      confirmText="Changer d’entité"
-    />
     </>
   );
 };

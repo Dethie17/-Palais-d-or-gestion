@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Banknote, CheckCircle2, CreditCard, ExternalLink, Loader2, QrCode, Smartphone, Wallet } from 'lucide-react';
-import { toast } from 'sonner';
+import { CreditCard, ExternalLink, Loader2, QrCode, Smartphone, Wallet } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -9,9 +8,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { dangoteApi, formatMoney } from '@/lib/dangote';
+import { dangoteApi } from '@/lib/dangote';
 import type { DangoteApiResponse } from '@/types/dangote';
-import { Field, inputClass, primaryButtonClass, secondaryButtonClass, StatusBadge } from './DangoteUI';
+import { Field, inputClass, primaryButtonClass, secondaryButtonClass } from './DangoteUI';
 
 interface Props {
   open: boolean;
@@ -20,17 +19,12 @@ interface Props {
   onDone: () => void;
 }
 
-type Mode = 'sycapay' | 'manuel';
 type SycaMethod = 'wave' | 'mobile_money' | 'card';
-type ManualMethod = 'cash' | 'virement';
 
 export default function DangoteDepositDialog({ open, onOpenChange, entiteId, onDone }: Props) {
-  const [mode, setMode] = useState<Mode>('sycapay');
   const [methode, setMethode] = useState<SycaMethod>('wave');
-  const [manualMethode, setManualMethode] = useState<ManualMethod>('cash');
   const [montant, setMontant] = useState('');
   const [telephone, setTelephone] = useState('');
-  const [reference, setReference] = useState('');
   const [payerName, setPayerName] = useState('MIAM\'S Dangote');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,10 +42,7 @@ export default function DangoteDepositDialog({ open, onOpenChange, entiteId, onD
     setValidUntil(null);
     setMontant('');
     setTelephone('');
-    setReference('');
-    setMode('sycapay');
     setMethode('wave');
-    setManualMethode('cash');
   }, [open]);
 
   const submit = async (event: React.FormEvent) => {
@@ -64,19 +55,6 @@ export default function DangoteDepositDialog({ open, onOpenChange, entiteId, onD
       const amount = Number(montant);
       if (!Number.isFinite(amount) || amount < 100) {
         throw new Error('Montant invalide : au moins 100 FCFA.');
-      }
-
-      if (mode === 'manuel') {
-        const result = await dangoteApi<DangoteApiResponse>('deposit.manual', {
-          entiteId,
-          montant: amount,
-          methode: manualMethode,
-          reference,
-        });
-        toast.success(`Dépôt enregistré. Nouveau solde : ${formatMoney(Number(result.solde_apres ?? 0))}.`);
-        onDone();
-        onOpenChange(false);
-        return;
       }
 
       const result = await dangoteApi<DangoteApiResponse>('deposit.initiate', {
@@ -117,31 +95,14 @@ export default function DangoteDepositDialog({ open, onOpenChange, entiteId, onD
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wallet className="h-5 w-5 text-green-700" />
-            Recharger le budget Dangote
+            Créditer le compte repas SycaPay
           </DialogTitle>
           <DialogDescription>
-            Le budget est crédité uniquement après confirmation SycaPay. Un dépôt manuel (espèces/virement) est disponible pour la RH.
+            Le compte repas est crédité uniquement après confirmation SycaPay. Aucun dépôt manuel n’est accepté.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={submit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
-            <button
-              type="button"
-              onClick={() => setMode('sycapay')}
-              className={`rounded-xl px-3 py-2 text-sm font-bold transition ${mode === 'sycapay' ? 'bg-white text-green-800 shadow-sm' : 'text-slate-500'}`}
-            >
-              Paiement en ligne
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('manuel')}
-              className={`rounded-xl px-3 py-2 text-sm font-bold transition ${mode === 'manuel' ? 'bg-white text-green-800 shadow-sm' : 'text-slate-500'}`}
-            >
-              Dépôt manuel
-            </button>
-          </div>
-
           {error ? <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
 
           <Field label="Montant (FCFA)">
@@ -157,61 +118,45 @@ export default function DangoteDepositDialog({ open, onOpenChange, entiteId, onD
             />
           </Field>
 
-          {mode === 'sycapay' ? (
-            <>
-              <Field label="Moyen de paiement">
-                <div className="grid grid-cols-3 gap-2">
-                  {([
-                    ['wave', 'Wave', <Smartphone key="wave" className="h-4 w-4" />],
-                    ['mobile_money', 'Orange Money', <Smartphone key="om" className="h-4 w-4" />],
-                    ['card', 'Carte', <CreditCard key="card" className="h-4 w-4" />],
-                  ] as const).map(([value, label, icon]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setMethode(value)}
-                      className={`flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-xs font-bold transition ${
-                        methode === value
-                          ? 'border-green-700 bg-green-50 text-green-800'
-                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      {icon}
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </Field>
+          <Field label="Moyen de paiement">
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                ['wave', 'Wave', <Smartphone key="wave" className="h-4 w-4" />],
+                ['mobile_money', 'Orange Money', <Smartphone key="om" className="h-4 w-4" />],
+                ['card', 'Carte', <CreditCard key="card" className="h-4 w-4" />],
+              ] as const).map(([value, label, icon]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setMethode(value)}
+                  className={`flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-xs font-bold transition ${
+                    methode === value
+                      ? 'border-green-700 bg-green-50 text-green-800'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {icon}
+                  {label}
+                </button>
+              ))}
+            </div>
+          </Field>
 
-              {methode !== 'card' ? (
-                <Field label="Numéro mobile du payeur" hint="Format Sénégal : 77 123 45 67.">
-                  <input
-                    className={inputClass}
-                    value={telephone}
-                    onChange={(e) => setTelephone(e.target.value)}
-                    placeholder="77 123 45 67"
-                    required
-                  />
-                </Field>
-              ) : null}
+          {methode !== 'card' ? (
+            <Field label="Numéro mobile du payeur" hint="Format Sénégal : 77 123 45 67.">
+              <input
+                className={inputClass}
+                value={telephone}
+                onChange={(e) => setTelephone(e.target.value)}
+                placeholder="77 123 45 67"
+                required
+              />
+            </Field>
+          ) : null}
 
-              <Field label="Nom affiché sur la page de paiement">
-                <input className={inputClass} value={payerName} onChange={(e) => setPayerName(e.target.value)} />
-              </Field>
-            </>
-          ) : (
-            <>
-              <Field label="Type de dépôt">
-                <select className={inputClass} value={manualMethode} onChange={(e) => setManualMethode(e.target.value as ManualMethod)}>
-                  <option value="cash">Espèces</option>
-                  <option value="virement">Virement bancaire</option>
-                </select>
-              </Field>
-              <Field label="Référence (optionnel)" hint="Ex. numéro de bordereau ou reçu.">
-                <input className={inputClass} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="VIR-2026-001" />
-              </Field>
-            </>
-          )}
+          <Field label="Nom affiché sur la page de paiement">
+            <input className={inputClass} value={payerName} onChange={(e) => setPayerName(e.target.value)} />
+          </Field>
 
           {qrCode ? (
             <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-center">
@@ -243,7 +188,7 @@ export default function DangoteDepositDialog({ open, onOpenChange, entiteId, onD
                 </div>
               ) : null}
               <p className="mt-3 text-xs text-green-800">
-                Le budget sera crédité dès que SycaPay confirmera le paiement. Vous pouvez fermer cette fenêtre.
+                Le compte repas sera crédité dès que SycaPay confirmera le paiement. Vous pouvez fermer cette fenêtre.
               </p>
             </div>
           ) : null}
@@ -262,8 +207,8 @@ export default function DangoteDepositDialog({ open, onOpenChange, entiteId, onD
               Fermer
             </button>
             <button type="submit" className={primaryButtonClass} disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === 'manuel' ? <Banknote className="h-4 w-4" /> : <QrCode className="h-4 w-4" />}
-              {loading ? 'Traitement…' : mode === 'manuel' ? 'Enregistrer le dépôt' : 'Payer avec SycaPay'}
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="h-4 w-4" />}
+              {loading ? 'Traitement…' : 'Payer avec SycaPay'}
             </button>
           </DialogFooter>
         </form>
