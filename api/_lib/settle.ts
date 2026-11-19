@@ -226,9 +226,22 @@ async function settleInternal(args: SettleArgs, db: SupabaseClient = adminClient
 
   // Une recharge porte sa référence dans wallet_transactions ; on tente
   // d'abord oresto_payments, et « unknown » bascule alors sur le wallet.
-  const first = await settleWithRpc(db, 'oresto_settle_payment', { ...common, p_event_type: args.eventType ?? null });
+  //
+  // L'eventId ne part que vers la table qui porte réellement la référence :
+  // chaque fonction SQL l'insère dans sycapay_events avant de chercher sa
+  // ligne. Sans ce garde-fou, la sonde « paiement » graverait l'événement
+  // d'une recharge, puis oresto_settle_topup la classerait « duplicate » sans
+  // jamais créditer la carte. Une sonde sans eventId, elle, reste sans effet.
+  const first = await settleWithRpc(db, 'oresto_settle_payment', {
+    ...common,
+    p_event_id: payment ? common.p_event_id : null,
+    p_event_type: args.eventType ?? null,
+  });
   if (first.outcome !== 'unknown') return first;
-  return settleWithRpc(db, 'oresto_settle_topup', common);
+  return settleWithRpc(db, 'oresto_settle_topup', {
+    ...common,
+    p_event_id: payment ? null : common.p_event_id,
+  });
 }
 
 /**

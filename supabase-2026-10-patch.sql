@@ -44,7 +44,7 @@ DECLARE
 BEGIN
   -- Idempotence : un eventId déjà vu ne fait rien.
   IF p_event_id IS NOT NULL THEN
-    INSERT INTO sycapay_events (event_id, reference, tag) VALUES (p_reference, p_tag)
+    INSERT INTO sycapay_events (event_id, reference, tag) VALUES (p_event_id, p_reference, p_tag)
     ON CONFLICT (event_id) DO NOTHING;
     IF NOT FOUND THEN
       RETURN jsonb_build_object('outcome', 'duplicate', 'reference', p_reference);
