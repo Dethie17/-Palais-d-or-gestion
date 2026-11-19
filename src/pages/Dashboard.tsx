@@ -43,7 +43,7 @@ const DARK_CARD = 'bg-slate-900 border border-slate-800 rounded-2xl shadow-sm';
 
 const getStatCards = (orders: Order[], period: PeriodFilter) => {
   const stats = getOrderStats(orders, period === 'realtime' ? 'day' : period);
-  const periodLabel = period === 'realtime' ? 'en temps rÃ©el' : period === 'day' ? 'du jour' : period === 'week' ? 'de la semaine' : 'du mois';
+  const periodLabel = period === 'realtime' ? 'en temps réel' : period === 'day' ? 'du jour' : period === 'week' ? 'de la semaine' : 'du mois';
 
 
   return [
@@ -85,9 +85,9 @@ const statusColors: Record<string, string> = {
 const statusLabels: Record<string, string> = {
   pending: 'En attente',
   preparing: 'En cours',
-  ready: 'PrÃªt',
+  ready: 'Prêt',
   completed: 'Vendu',
-  cancelled: 'AnnulÃ©',
+  cancelled: 'Annulé',
 };
 
 const Dashboard = ({ onNavigate }: DashboardProps) => {
@@ -100,8 +100,8 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
   const { user } = useAuth();
   const [period, setPeriod] = useState<PeriodFilter>('realtime');
 
-  // ComptabilitÃ© : la base fait foi (horodatage de rÃ¨glement). Sans elle,
-  // on retombe sur les paiements du poste, filtrÃ©s par la rÃ¨gle locale.
+  // Comptabilité : la base fait foi (horodatage de règlement). Sans elle,
+  // on retombe sur les paiements du poste, filtrés par la règle locale.
   const { data: validatedFinance } = useValidatedFinance();
   const accounted = useMemo(
     () => accountablePayments(payments, validatedFinance),
@@ -121,7 +121,7 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
     return v.status === 'accepted' && d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
   });
 
-  // ---- Chiffre d'affaires : ventes rÃ©elles + abonnements validÃ©s.
+  // ---- Chiffre d'affaires : ventes réelles + abonnements validés.
   // Jamais les recharges de carte : ce n'est pas une vente.
   const nowRef = new Date();
   const startOfDay = new Date(nowRef.getFullYear(), nowRef.getMonth(), nowRef.getDate(), 0, 0, 0, 0);
@@ -139,7 +139,7 @@ const caWeek = { orders: revWeek.sales, subs: revWeek.subscriptions, total: revW
 const caMonth = { orders: revMonth.sales, subs: revMonth.subscriptions, total: revMonth.total };
   const caPeriod = period === 'week' ? caWeek : period === 'month' ? caMonth : caDay;
 
-  // Courbe DG : ventes (caisse, kiosque, tickets, repas carte) + abonnements validÃ©s.
+  // Courbe DG : ventes (caisse, kiosque, tickets, repas carte) + abonnements validés.
   const globalData = globalChartData(orders, accounted, period, {
     sales: revAll.extraSalesEvents,
     subscriptions,
@@ -162,7 +162,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
       : card,
   );
 
-  // ---- Volet superviseur : ce qui compte Ã  la cantine, pas la caisse.
+  // ---- Volet superviseur : ce qui compte à la cantine, pas la caisse.
   // Le DAF garde les indicateurs commerciaux ; le superviseur suit le service.
   const openComplaints = complaints.filter((c) => c.status === 'open' || c.status === 'in_progress');
   const rejectedToday = validations.filter((v) => {
@@ -174,14 +174,14 @@ const statCards = getStatCards(orders, period).map((card, index) =>
   const menuDuJour = weeklyMenus.find((m) => m.day === JOURS[new Date().getDay()]);
   const nomDeLEleve = (childId?: string) => {
     const c = kids.find((x) => x.id === childId);
-    return c ? `${c.firstName} ${c.lastName}` : 'Ã‰lÃ¨ve';
+    return c ? `${c.firstName} ${c.lastName}` : 'Élève';
   };
 
   const supervisorCards = [
     {
-      label: 'Repas servis aujourdâ€™hui',
+      label: 'Repas servis aujourd’hui',
       value: todayAccepted.length.toString(),
-      change: rejectedToday.length > 0 ? `${rejectedToday.length} refusÃ©s` : 'aucun refus',
+      change: rejectedToday.length > 0 ? `${rejectedToday.length} refusés` : 'aucun refus',
       positive: rejectedToday.length === 0,
       icon: UtensilsCrossed,
       chip: 'bg-emerald-500/15 text-emerald-400',
@@ -195,24 +195,24 @@ const statCards = getStatCards(orders, period).map((card, index) =>
       chip: 'bg-slate-500/15 text-slate-300',
     },
     {
-      label: 'AbonnÃ©s actifs',
+      label: 'Abonnés actifs',
       value: activeSubs.length.toString(),
-      change: expiringSoon.length > 0 ? `${expiringSoon.length} expirent` : 'aucune Ã©chÃ©ance',
+      change: expiringSoon.length > 0 ? `${expiringSoon.length} expirent` : 'aucune échéance',
       positive: expiringSoon.length === 0,
       icon: Users,
       chip: 'bg-slate-500/15 text-slate-300',
     },
     {
-      label: 'RÃ©clamations Ã  traiter',
+      label: 'Réclamations à traiter',
       value: openComplaints.length.toString(),
-      change: openComplaints.length > 0 ? 'en attente de rÃ©ponse' : 'File vide',
+      change: openComplaints.length > 0 ? 'en attente de réponse' : 'File vide',
       positive: openComplaints.length === 0,
       icon: MessageSquareWarning,
       chip: 'bg-amber-500/15 text-amber-300',
     },
   ];
 
-  // ---- ComptabilitÃ© ISM du mois (espace DG) : 2000 F / abonnement + % ventes
+  // ---- Comptabilité ISM du mois (espace DG) : 2000 F / abonnement + % ventes
   const ismMonth = useMemo(
     () => ismPeriod(accounted, orders, subscriptions, formulas, financeSettings, startOfMonth.getTime(), caMonth.orders),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -242,7 +242,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
 
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
-      doc.text(`GÃ©nÃ©rÃ© le ${now.toLocaleDateString('fr-FR')} Ã  ${now.toLocaleTimeString('fr-FR')}`, 105, 37, { align: 'center' });
+      doc.text(`Généré le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR')}`, 105, 37, { align: 'center' });
 
       doc.setDrawColor(234, 88, 12);
       doc.setLineWidth(0.5);
@@ -259,7 +259,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
       doc.text(`Total Clients: ${stats.customers}`, 20, statsY + 14);
 
       doc.setFontSize(14);
-      doc.text("Chiffre d'affaires global (ventes + abonnements validÃ©s)", 20, statsY + 28);
+      doc.text("Chiffre d'affaires global (ventes + abonnements validés)", 20, statsY + 28);
       doc.setFontSize(11);
       doc.text(`CA du jour: ${formatCurrency(caDay.orders)} (ventes ${formatCurrency(caDay.orders)})`, 20, statsY + 36);
       doc.text(`CA de la semaine: ${formatCurrency(caWeek.orders)} (ventes ${formatCurrency(caWeek.orders)})`, 20, statsY + 43);
@@ -268,10 +268,10 @@ const statCards = getStatCards(orders, period).map((card, index) =>
 
       // Solde ISM du mois
       doc.setFontSize(14);
-      doc.text('Solde ISM du mois (Ã  verser)', 20, statsY + 71);
+      doc.text('Solde ISM du mois (à verser)', 20, statsY + 71);
       doc.setFontSize(11);
       doc.text(`Abonnements: ${ismMonth.aboCount} x ${formatCurrency(financeSettings.ismPerSubscription)} = ${formatCurrency(ismMonth.ismAbo)}`, 20, statsY + 79);
-      doc.text(`  dont PrÃ©scolaire-Ã‰lÃ©mentaire: ${ismMonth.split.primaire} â€¢ LycÃ©e: ${ismMonth.split.lycee} â€¢ Hebdo: ${ismMonth.split.hebdo}`, 20, statsY + 86);
+      doc.text(`  dont Préscolaire-Élémentaire: ${ismMonth.split.primaire} • Lycée: ${ismMonth.split.lycee} • Hebdo: ${ismMonth.split.hebdo}`, 20, statsY + 86);
       doc.text(`Ventes: ${formatCurrency(ismMonth.salesGross)} x ${financeSettings.ismSalesPct}% = ${formatCurrency(ismMonth.ismSales)}`, 20, statsY + 93);
       doc.text(`SOLDE TOTAL ISM: ${formatCurrency(ismMonth.total)}`, 20, statsY + 100);
 
@@ -287,7 +287,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
       });
 
       doc.setFontSize(14);
-      doc.text('DerniÃ¨res Commandes', 20, statsY + 164);
+      doc.text('Dernières Commandes', 20, statsY + 164);
 
       doc.setFontSize(9);
       recentOrders.slice(0, 10).forEach((order, i) => {
@@ -305,7 +305,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
 
       doc.save(`rapport-${monthName.replace(' ', '-')}.pdf`);
     } catch {
-      /* gÃ©nÃ©ration PDF indisponible */
+      /* génération PDF indisponible */
     }
   };
 
@@ -313,24 +313,24 @@ const statCards = getStatCards(orders, period).map((card, index) =>
     try {
       const now = new Date();
       const rows: string[][] = [];
-      rows.push(['O RESTO â€” Rapport Direction']);
-      rows.push([`GÃ©nÃ©rÃ© le ${now.toLocaleDateString('fr-FR')} Ã  ${now.toLocaleTimeString('fr-FR')}`]);
+      rows.push(['O RESTO — Rapport Direction']);
+      rows.push([`Généré le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR')}`]);
       rows.push([]);
-      rows.push(['CHIFFRE D\'AFFAIRES', 'Ventes', 'Abonnements validÃ©s', 'Total']);
+      rows.push(['CHIFFRE D\'AFFAIRES', 'Ventes', 'Abonnements validés', 'Total']);
       rows.push(['CA du jour', String(caDay.orders), String(caDay.orders)]);
       rows.push(['CA de la semaine', String(caWeek.orders), String(caWeek.orders)]);
       rows.push(['CA du mois', String(caMonth.orders), String(caMonth.orders)]);
       rows.push([]);
-      rows.push(['SOLDE ISM DU MOIS (Ã  verser)', 'Montant']);
+      rows.push(['SOLDE ISM DU MOIS (à verser)', 'Montant']);
       rows.push([`Abonnements : ${ismMonth.aboCount} x ${financeSettings.ismPerSubscription}`, String(ismMonth.ismAbo)]);
-      rows.push([`  dont PrÃ©scolaire-Ã‰lÃ©mentaire`, String(ismMonth.split.primaire)]);
-      rows.push([`  dont LycÃ©e`, String(ismMonth.split.lycee)]);
+      rows.push([`  dont Préscolaire-Élémentaire`, String(ismMonth.split.primaire)]);
+      rows.push([`  dont Lycée`, String(ismMonth.split.lycee)]);
       rows.push([`  dont Hebdo`, String(ismMonth.split.hebdo)]);
       rows.push([`Ventes : ${financeSettings.ismSalesPct}% de ${ismMonth.salesGross}`, String(ismMonth.ismSales)]);
       rows.push(['TOTAL ISM', String(ismMonth.total)]);
       rows.push([]);
-      rows.push(['AbonnÃ©s actifs', String(restoStats.activeClients)]);
-      rows.push(['Repas validÃ©s aujourd\'hui', String(todayAccepted.length)]);
+      rows.push(['Abonnés actifs', String(restoStats.activeClients)]);
+      rows.push(['Repas validés aujourd\'hui', String(todayAccepted.length)]);
       rows.push([]);
       rows.push(['TOP PRODUITS', 'Vendus', 'Revenus']);
       topProducts.forEach((p) => rows.push([p.name, String(p.sold), String(p.revenue)]));
@@ -363,7 +363,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
   };
 
   const periodOptions: { value: PeriodFilter; label: string }[] = [
-    { value: 'realtime', label: 'Temps rÃ©el' },
+    { value: 'realtime', label: 'Temps réel' },
     { value: 'day', label: 'Jour' },
     { value: 'week', label: 'Semaine' },
     { value: 'month', label: 'Mois' }
@@ -372,7 +372,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
   return (
     <div className="min-h-screen animate-fade-in">
       <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-[1400px] mx-auto">
-        {/* Barre supÃ©rieure */}
+        {/* Barre supérieure */}
         <div className="flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -386,7 +386,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
                 </span>
               </h1>
               <p className="text-xs sm:text-sm text-slate-600 mt-1">
-                {isAdmin ? 'Pilotage global O RESTO â€” Ventes + Abonnements validÃ©s + Solde ISM' : 'Supervision de votre cantine â€” Repas servis, menus, abonnÃ©s, rÃ©clamations'}
+                {isAdmin ? 'Pilotage global O RESTO — Ventes + Abonnements validés + Solde ISM' : 'Supervision de votre cantine — Repas servis, menus, abonnés, réclamations'}
               </p>
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -405,7 +405,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
 
           <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 w-full sm:w-auto shadow-sm">
             <Calendar aria-hidden className="w-4 h-4 text-slate-500 ml-2" />
-            <div className="flex flex-1 sm:flex-none gap-1" role="tablist" aria-label="PÃ©riode">
+            <div className="flex flex-1 sm:flex-none gap-1" role="tablist" aria-label="Période">
               {periodOptions.map((option) => (
                 <button
                   key={option.value}
@@ -424,7 +424,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
           </div>
         </div>
 
-        {/* KPI â€” indicateurs du rÃ´le : commercial pour le DAF, service pour le superviseur */}
+        {/* KPI — indicateurs du rôle : commercial pour le DAF, service pour le superviseur */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {(isAdmin ? statCards : supervisorCards).map((stat) => {
             const Icon = stat.icon;
@@ -445,7 +445,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
           })}
         </div>
 
-        {/* Volet superviseur : l'Ã©tat du service, pas la caisse */}
+        {/* Volet superviseur : l'état du service, pas la caisse */}
         {!isAdmin && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className={`lg:col-span-2 ${DARK_CARD} p-4 sm:p-6`}>
@@ -465,11 +465,11 @@ const statCards = getStatCards(orders, period).map((card, index) =>
                 </div>
                 <div className="rounded-xl bg-white/5 border border-white/10 p-3">
                   <p className="text-2xl font-black text-white">{rejectedToday.length}</p>
-                  <p className="text-[11px] text-slate-400 font-semibold mt-0.5">RefusÃ©s</p>
+                  <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Refusés</p>
                 </div>
                 <div className="rounded-xl bg-white/5 border border-white/10 p-3">
                   <p className="text-2xl font-black text-white">{activeSubs.length}</p>
-                  <p className="text-[11px] text-slate-400 font-semibold mt-0.5">AbonnÃ©s actifs</p>
+                  <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Abonnés actifs</p>
                 </div>
               </div>
 
@@ -477,9 +477,9 @@ const statCards = getStatCards(orders, period).map((card, index) =>
                 <CalendarDays className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
                 <p className="text-sm text-emerald-100">
                   {menuDuJour ? (
-                    <span>Menu publiÃ© pour aujourdâ€™hui : <strong>Menu du {menuDuJour.day}</strong>{(menuDuJour.items ?? []).length > 0 ? ` â€” ${(menuDuJour.items ?? []).map((i) => i.name).join(', ')}` : ''}{menuDuJour.dessert ? ` â€” Dessert : ${menuDuJour.dessert}` : ''}</span>
+                    <span>Menu publié pour aujourd’hui : <strong>Menu du {menuDuJour.day}</strong>{(menuDuJour.items ?? []).length > 0 ? ` — ${(menuDuJour.items ?? []).map((i) => i.name).join(', ')}` : ''}{menuDuJour.dessert ? ` — Dessert : ${menuDuJour.dessert}` : ''}</span>
                   ) : (
-                    <span>Aucun menu publiÃ© pour aujourdâ€™hui â€” la validation fonctionne par abonnement / solde carte.</span>
+                    <span>Aucun menu publié pour aujourd’hui — la validation fonctionne par abonnement / solde carte.</span>
                   )}
                 </p>
               </div>
@@ -498,7 +498,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
                 </div>
               ) : (
                 <p className="text-sm text-slate-500 text-center py-6 border border-dashed border-white/15 rounded-2xl">
-                  Aucun repas servi pour lâ€™instant aujourdâ€™hui.
+                  Aucun repas servi pour l’instant aujourd’hui.
                 </p>
               )}
             </div>
@@ -506,7 +506,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
             <div className={`${DARK_CARD} p-4 sm:p-6`}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                  <MessageSquareWarning className="w-5 h-5 text-amber-400" /> RÃ©clamations
+                  <MessageSquareWarning className="w-5 h-5 text-amber-400" /> Réclamations
                 </h2>
                 <button onClick={() => onNavigate('reclamations')} className="flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300">
                   Tout traiter <ArrowRight className="w-3.5 h-3.5" />
@@ -529,14 +529,14 @@ const statCards = getStatCards(orders, period).map((card, index) =>
                 </div>
               ) : (
                 <p className="text-sm text-slate-500 text-center py-6 border border-dashed border-white/15 rounded-2xl">
-                  Aucune rÃ©clamation en attente. Les parents nâ€™ont rien signalÃ©.
+                  Aucune réclamation en attente. Les parents n’ont rien signalé.
                 </p>
               )}
             </div>
           </div>
         )}
 
-        {/* Solde ISM du mois â€” Direction */}
+        {/* Solde ISM du mois — Direction */}
         {isAdmin && (
           <section className="rounded-2xl overflow-hidden border border-amber-500/30 bg-gradient-to-br from-[#1a1408] via-[#151b2b] to-[#151b2b]">
             <div className="px-4 sm:px-6 pt-4 sm:pt-5 flex flex-wrap items-center gap-2">
@@ -545,9 +545,9 @@ const statCards = getStatCards(orders, period).map((card, index) =>
               </span>
               <div>
                 <p className="font-black text-white flex items-center gap-2">
-                  Solde ISM du mois â€” Ã  verser <Crown className="w-4 h-4 text-amber-400" />
+                  Solde ISM du mois — à verser <Crown className="w-4 h-4 text-amber-400" />
                 </p>
-                <p className="text-[11px] sm:text-xs text-slate-400">2 000 F par abonnement (lycÃ©e comme prÃ©scolaire-Ã©lÃ©mentaire) + {financeSettings.ismSalesPct} % des ventes</p>
+                <p className="text-[11px] sm:text-xs text-slate-400">2 000 F par abonnement (lycée comme préscolaire-élémentaire) + {financeSettings.ismSalesPct} % des ventes</p>
               </div>
               <p className="ml-auto text-2xl sm:text-4xl font-black text-amber-400 tracking-tight">{formatCurrency(ismMonth.total)}</p>
             </div>
@@ -556,11 +556,11 @@ const statCards = getStatCards(orders, period).map((card, index) =>
                 <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Part abonnements</p>
                 <p className="text-xl sm:text-2xl font-black text-white mt-1">{formatCurrency(ismMonth.ismAbo)}</p>
                 <p className="text-xs text-slate-400 mt-1">
-                  {ismMonth.aboCount} abo(s) Ã— {formatCurrency(financeSettings.ismPerSubscription)}
+                  {ismMonth.aboCount} abo(s) × {formatCurrency(financeSettings.ismPerSubscription)}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-bold">
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300">PrÃ©sco-Ã‰lÃ©m : {ismMonth.split.primaire}</span>
-                  <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300">LycÃ©e : {ismMonth.split.lycee}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300">Présco-Élém : {ismMonth.split.primaire}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300">Lycée : {ismMonth.split.lycee}</span>
                   <span className="px-2 py-0.5 rounded-full bg-slate-500/15 text-slate-300">Hebdo : {ismMonth.split.hebdo}{ismMonth.split.autres > 0 ? ` (+${ismMonth.split.autres})` : ''}</span>
                 </div>
               </div>
@@ -569,11 +569,11 @@ const statCards = getStatCards(orders, period).map((card, index) =>
                 <p className="text-xl sm:text-2xl font-black text-white mt-1">{formatCurrency(ismMonth.ismSales)}</p>
                 <p className="text-xs text-slate-400 mt-1">Ventes du mois : {formatCurrency(ismMonth.salesGross)}</p>
                 <button onClick={() => onNavigate('finance')} className="mt-2 text-xs font-bold text-amber-400 hover:underline flex items-center gap-1">
-                  DÃ©tail comptable <ArrowRight className="w-3.5 h-3.5" />
+                  Détail comptable <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
               <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Solde ISM â€” 6 derniers mois</p>
+                <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Solde ISM — 6 derniers mois</p>
                 <div className="h-28 mt-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={ismHistory} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
@@ -596,8 +596,8 @@ const statCards = getStatCards(orders, period).map((card, index) =>
           <div className="grid md:grid-cols-3 gap-3">
             {expiringSoon.length > 0 && (
               <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4">
-                <p className="font-bold text-red-300 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {expiringSoon.length} abonnement(s) expirent â‰¤ 2 jours</p>
-                <p className="text-xs text-red-200/70 mt-1">{expiringSoon.slice(0, 3).map((s) => s.clientUsername).join(', ')}{expiringSoon.length > 3 ? 'â€¦' : ''}</p>
+                <p className="font-bold text-red-300 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {expiringSoon.length} abonnement(s) expirent ≤ 2 jours</p>
+                <p className="text-xs text-red-200/70 mt-1">{expiringSoon.slice(0, 3).map((s) => s.clientUsername).join(', ')}{expiringSoon.length > 3 ? '…' : ''}</p>
               </div>
             )}
           </div>
@@ -607,10 +607,10 @@ const statCards = getStatCards(orders, period).map((card, index) =>
           {/* Performance */}
           <div className={`lg:col-span-2 ${DARK_CARD} p-4 sm:p-6`}>
             <h2 className="text-base sm:text-lg font-bold text-white">
-              Performance {period === 'realtime' ? 'en temps rÃ©el' : period === 'day' ? 'journaliÃ¨re' : period === 'week' ? 'hebdomadaire' : 'mensuelle'}
+              Performance {period === 'realtime' ? 'en temps réel' : period === 'day' ? 'journalière' : period === 'week' ? 'hebdomadaire' : 'mensuelle'}
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              {period === 'realtime' ? 'DerniÃ¨res 12 heures â€” mise Ã  jour instantanÃ©e' : 'Ventes + abonnements validÃ©s'}
+              {period === 'realtime' ? 'Dernières 12 heures — mise à jour instantanée' : 'Ventes + abonnements validés'}
             </p>
             {hasGlobalData ? (
             <div className="h-64 sm:h-80 w-full mt-3">
@@ -639,8 +639,8 @@ const statCards = getStatCards(orders, period).map((card, index) =>
             ) : (
               <div className="h-64 sm:h-80 w-full mt-3 flex flex-col items-center justify-center text-center border border-dashed border-white/15 rounded-2xl">
                 <TrendingUp className="w-10 h-10 text-slate-600" />
-                <p className="mt-2 font-bold text-slate-300 text-sm">Aucune vente ni abonnement validÃ© sur la pÃ©riode</p>
-                <p className="text-xs text-slate-500 mt-1">Les courbes Ventes + Abonnements apparaÃ®tront ici dÃ¨s la premiÃ¨re vente validÃ©e.</p>
+                <p className="mt-2 font-bold text-slate-300 text-sm">Aucune vente ni abonnement validé sur la période</p>
+                <p className="text-xs text-slate-500 mt-1">Les courbes Ventes + Abonnements apparaîtront ici dès la première vente validée.</p>
               </div>
             )}
           </div>
@@ -673,17 +673,17 @@ const statCards = getStatCards(orders, period).map((card, index) =>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-slate-500 text-sm">Aucune donnÃ©e disponible</div>
+              <div className="text-center py-8 text-slate-500 text-sm">Aucune donnée disponible</div>
             )}
           </div>
         </div>
 
-        {/* Commandes rÃ©centes */}
+        {/* Commandes récentes */}
         <div className={`${DARK_CARD} p-4 sm:p-6`}>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-white">Commandes rÃ©centes</h2>
-              <p className="text-xs text-slate-400 mt-0.5">DerniÃ¨res activitÃ©s</p>
+              <h2 className="text-base sm:text-lg font-bold text-white">Commandes récentes</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Dernières activités</p>
             </div>
             <button onClick={() => onNavigate('history')} className="text-sm font-semibold text-slate-400 hover:text-slate-300 flex items-center gap-1">
               Voir tout <ArrowRight className="w-4 h-4" />
@@ -694,7 +694,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/10">
-                    <th className="text-left py-3 text-slate-400 font-semibold text-xs">NÂ° Commande</th>
+                    <th className="text-left py-3 text-slate-400 font-semibold text-xs">N° Commande</th>
                     <th className="text-left py-3 text-slate-400 font-semibold text-xs">Client</th>
                     <th className="text-left py-3 text-slate-400 font-semibold text-xs">Articles</th>
                     <th className="text-right py-3 text-slate-400 font-semibold text-xs">Montant</th>
@@ -722,7 +722,7 @@ const statCards = getStatCards(orders, period).map((card, index) =>
                 </tbody>
               </table>
             ) : (
-              <div className="text-center py-8 text-slate-500 text-sm">Aucune commande rÃ©cente</div>
+              <div className="text-center py-8 text-slate-500 text-sm">Aucune commande récente</div>
             )}
           </div>
           <div className="md:hidden space-y-2">
@@ -736,13 +736,13 @@ const statCards = getStatCards(orders, period).map((card, index) =>
                         {statusLabels[order.status]}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 truncate">{order.customerName || 'Client'} Â· {order.items.length} article(s)</p>
+                    <p className="text-xs text-slate-400 truncate">{order.customerName || 'Client'} · {order.items.length} article(s)</p>
                   </div>
                   <p className="text-sm font-bold text-white flex-shrink-0">{formatCurrency(order.total)}</p>
                 </div>
               ))
             ) : (
-              <div className="text-center py-8 text-slate-500 text-sm">Aucune commande rÃ©cente</div>
+              <div className="text-center py-8 text-slate-500 text-sm">Aucune commande récente</div>
             )}
           </div>
         </div>

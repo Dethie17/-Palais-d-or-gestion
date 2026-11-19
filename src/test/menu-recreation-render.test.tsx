@@ -7,11 +7,11 @@ const WEEK_KEY = 'o-resto-weeklymenus-v3';
 
 function seedPublishedWeek() {
   localStorage.setItem(WEEK_KEY, JSON.stringify([
-    { day: 'Lundi', name: 'Menu Lundi', description: 'Plat du jour', items: [{ name: 'Riz', price: 800 }, { name: 'Jus', price: 500 }] },
-    { day: 'Mardi', name: 'Menu Mardi', description: '', items: [{ name: 'Pâtes', price: 900 }] },
-    { day: 'Mercredi', name: 'Menu Mercredi', description: '', items: [{ name: 'Thiéboudienne', price: 1200 }] },
-    { day: 'Jeudi', name: 'Menu Jeudi', description: '', items: [{ name: 'Yassa', price: 1000 }] },
-    { day: 'Vendredi', name: 'Menu Vendredi', description: '', items: [{ name: 'Mafé', price: 1100 }] },
+    { day: '2026-11-02', name: 'Menu Lundi', description: 'Plat du jour', items: [{ name: 'Riz', price: 800 }, { name: 'Jus', price: 500 }] },
+    { day: '2026-11-03', name: 'Menu Mardi', description: '', items: [{ name: 'Pâtes', price: 900 }] },
+    { day: '2026-11-04', name: 'Menu Mercredi', description: '', items: [{ name: 'Thiéboudienne', price: 1200 }] },
+    { day: '2026-11-05', name: 'Menu Jeudi', description: '', items: [{ name: 'Yassa', price: 1000 }] },
+    { day: '2026-11-06', name: 'Menu Vendredi', description: '', items: [{ name: 'Mafé', price: 1100 }] },
   ]));
 }
 
@@ -39,11 +39,11 @@ describe('Espace Repas (caisse) — vitrine des menus publiés', () => {
 
   it('affiche un bel état vide quand aucun menu n’est publié', async () => {
     localStorage.setItem(WEEK_KEY, JSON.stringify([
-      { day: 'Lundi', name: '', description: '', items: [] },
-      { day: 'Mardi', name: '', description: '', items: [] },
-      { day: 'Mercredi', name: '', description: '', items: [] },
-      { day: 'Jeudi', name: '', description: '', items: [] },
-      { day: 'Vendredi', name: '', description: '', items: [] },
+      { day: '2026-11-02', name: '', description: '', items: [] },
+      { day: '2026-11-03', name: '', description: '', items: [] },
+      { day: '2026-11-04', name: '', description: '', items: [] },
+      { day: '2026-11-05', name: '', description: '', items: [] },
+      { day: '2026-11-06', name: '', description: '', items: [] },
     ]));
     renderPage();
     await screen.findByText(/Aucun menu publié/);

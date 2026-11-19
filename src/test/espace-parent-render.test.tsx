@@ -9,11 +9,11 @@ const WEEK_KEY = 'o-resto-weeklymenus-v3';
 
 function seedPublishedWeek() {
   localStorage.setItem(WEEK_KEY, JSON.stringify([
-    { day: 'Lundi', name: 'Menu Lundi', description: '', items: [{ name: 'Riz', price: 800 }, { name: 'Jus', price: 500 }] },
-    { day: 'Mardi', name: 'Menu Mardi', description: '', items: [{ name: 'Pâtes', price: 900 }] },
-    { day: 'Mercredi', name: '', description: '', items: [] },
-    { day: 'Jeudi', name: '', description: '', items: [] },
-    { day: 'Vendredi', name: '', description: '', items: [] },
+    { day: '2026-11-02', name: 'Menu Lundi', description: '', items: [{ name: 'Riz', price: 800 }, { name: 'Jus', price: 500 }] },
+    { day: '2026-11-03', name: 'Menu Mardi', description: '', items: [{ name: 'Pâtes', price: 900 }] },
+    { day: '2026-11-04', name: '', description: '', items: [] },
+    { day: '2026-11-05', name: '', description: '', items: [] },
+    { day: '2026-11-06', name: '', description: '', items: [] },
   ]));
 }
 
@@ -81,30 +81,31 @@ describe('EspaceParentPage render (repro crash childId)', () => {
 
   it('menu du jour de la semaine de référence affiché par défaut (consultation seule)', async () => {
     seedChild();
+    seedPublishedWeek();
     renderPage();
     // La nouvelle UX ne montre que le menu du jour (jour courant, sinon
     // le premier jour publié de la semaine de référence).
     await screen.findByText(/Menu du jour — /);
-    expect(screen.getByText(/Menu du jour — (Lundi|Mardi|Mercredi|Jeudi|Vendredi)/)).toBeTruthy();
+    expect(screen.getByText(/Menu du jour — 2026-11-02/)).toBeTruthy();
     expect(screen.queryByText(/Menu (Élève|Gourmand|Petit Budget|Goûter|Burger)/)).toBeNull();
   });
 
   it('semaine explicitement vidée par le Personnel (bel état vide)', async () => {
     localStorage.setItem(WEEK_KEY, JSON.stringify([
-      { day: 'Lundi', name: '', description: '', items: [] },
-      { day: 'Mardi', name: '', description: '', items: [] },
-      { day: 'Mercredi', name: '', description: '', items: [] },
-      { day: 'Jeudi', name: '', description: '', items: [] },
-      { day: 'Vendredi', name: '', description: '', items: [] },
+      { day: '2026-11-02', name: '', description: '', items: [] },
+      { day: '2026-11-03', name: '', description: '', items: [] },
+      { day: '2026-11-04', name: '', description: '', items: [] },
+      { day: '2026-11-05', name: '', description: '', items: [] },
+      { day: '2026-11-06', name: '', description: '', items: [] },
     ]));
     seedChild();
     // Le seed enfant ne touche pas aux menus : la semaine vidée survit.
     localStorage.setItem(WEEK_KEY, JSON.stringify([
-      { day: 'Lundi', name: '', description: '', items: [] },
-      { day: 'Mardi', name: '', description: '', items: [] },
-      { day: 'Mercredi', name: '', description: '', items: [] },
-      { day: 'Jeudi', name: '', description: '', items: [] },
-      { day: 'Vendredi', name: '', description: '', items: [] },
+      { day: '2026-11-02', name: '', description: '', items: [] },
+      { day: '2026-11-03', name: '', description: '', items: [] },
+      { day: '2026-11-04', name: '', description: '', items: [] },
+      { day: '2026-11-05', name: '', description: '', items: [] },
+      { day: '2026-11-06', name: '', description: '', items: [] },
     ]));
     renderPage();
     await screen.findByText(/Menus en préparation/);

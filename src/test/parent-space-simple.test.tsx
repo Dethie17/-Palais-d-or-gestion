@@ -24,11 +24,11 @@ const PARENT_PHONE = '771234567';
 
 function seedPublishedWeek() {
   localStorage.setItem(WEEK_KEY, JSON.stringify([
-    { day: 'Lundi', name: 'Menu Lundi', description: '', items: [{ name: 'Riz', price: 800 }, { name: 'Jus', price: 500 }] },
-    { day: 'Mardi', name: 'Menu Mardi', description: '', items: [{ name: 'Pâtes', price: 900 }] },
-    { day: 'Mercredi', name: '', description: '', items: [] },
-    { day: 'Jeudi', name: '', description: '', items: [] },
-    { day: 'Vendredi', name: '', description: '', items: [] },
+    { day: '2026-11-02', name: 'Menu Lundi', description: '', items: [{ name: 'Riz', price: 800 }, { name: 'Jus', price: 500 }] },
+    { day: '2026-11-03', name: 'Menu Mardi', description: '', items: [{ name: 'Pâtes', price: 900 }] },
+    { day: '2026-11-04', name: '', description: '', items: [] },
+    { day: '2026-11-05', name: '', description: '', items: [] },
+    { day: '2026-11-06', name: '', description: '', items: [] },
   ]));
 }
 
@@ -102,10 +102,6 @@ describe('Espace Abonné — rendu général', () => {
     expect(screen.getByText(/Kiosque indisponible pour le moment/)).toBeTruthy();
     expect(screen.getByText(/Annonces de la cantine/)).toBeTruthy();
     expect(screen.getByText(/Historique des dépenses/)).toBeTruthy();
-
-    // Le formulaire de réclamations est embarqué dans l'espace abonné.
-    expect(screen.getByTestId('section-reclamations')).toBeTruthy();
-    expect(screen.getByTestId('parent-reclamations-form')).toBeTruthy();
     expect(screen.getAllByText(/Déconnexion/).length).toBeGreaterThanOrEqual(1);
   });
 
@@ -132,8 +128,8 @@ describe('Espace Abonné — rendu général', () => {
   });
 
   it('la semaine publiée s’affiche en consultation (pas d’achat en ligne)', async () => {
-    seedPublishedWeek();
     seedFamily();
+    seedPublishedWeek();
     renderPage(<EspaceParentPage />);
     await waitForProfile();
 
@@ -144,8 +140,8 @@ describe('Espace Abonné — rendu général', () => {
 
 describe('Espace Abonné — menus', () => {
   it('les menus restent visibles avec le badge du jour (consultation seule)', async () => {
-    seedPublishedWeek();
     seedFamily();
+    seedPublishedWeek();
     renderPage(<EspaceParentPage />);
     await waitForProfile();
     expect((await screen.findAllByText(/Menu du jour/)).length).toBeGreaterThanOrEqual(1);

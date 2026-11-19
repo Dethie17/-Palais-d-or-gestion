@@ -13,7 +13,7 @@ import {
 
 const LOW_MEALS = 3;
 
-/** 771234567 â†’ Â« 77 123 45 67 Â» (affichage seulement). */
+/** 771234567 → « 77 123 45 67 » (affichage seulement). */
 function formatPhone(value: string): string {
   const d = value.replace(/\D/g, '');
   return d.length === 9 ? `${d.slice(0, 2)} ${d.slice(2, 5)} ${d.slice(5, 7)} ${d.slice(7)}` : value;
@@ -22,17 +22,17 @@ function formatPhone(value: string): string {
 const SUB_STATUS_LABEL: Record<SubscriptionStatus, { label: string; cls: string }> = {
   active: { label: 'Active', cls: 'bg-emerald-100 text-emerald-700' },
   pending: { label: 'En attente de paiement', cls: 'bg-amber-100 text-amber-700' },
-  expired: { label: 'ExpirÃ©e', cls: 'bg-slate-100 text-slate-500' },
-  cancelled: { label: 'AnnulÃ©e', cls: 'bg-red-100 text-red-600' },
+  expired: { label: 'Expirée', cls: 'bg-slate-100 text-slate-500' },
+  cancelled: { label: 'Annulée', cls: 'bg-red-100 text-red-600' },
 };
 
 /**
- * Liste des parents â€” registre professionnel, en tableau.
+ * Liste des parents — registre professionnel, en tableau.
  *
- * Un clic sur un parent (ou Â« Fiche Â») ouvre sa fiche complÃ¨te : profil,
- * enfants avec leurs QR codes et tous ses abonnements avec Ã©tat + action.
- * L'abonnement hebdomadaire a Ã©tÃ© retirÃ© : F1 ne s'affiche plus nulle part.
- * La crÃ©ation de compte parent se fait dans Import â†’ Import Parent.
+ * Un clic sur un parent (ou « Fiche ») ouvre sa fiche complète : profil,
+ * enfants avec leurs QR codes et tous ses abonnements avec état + action.
+ * L'abonnement hebdomadaire a été retiré : F1 ne s'affiche plus nulle part.
+ * La création de compte parent se fait dans Import → Import Parent.
  */
 const UsersPage = () => {
   const { user } = useAuth();
@@ -41,14 +41,14 @@ const UsersPage = () => {
     deleteParent, inactiveParents, isParentInactive, setParentActive, cancelSubscription, deactivateSubscription, reactivateSubscription,
   } = useResto();
   const me = getRoleDef(user?.role);
-  /** Suppression dÃ©finitive d'un parent : Superviseur et DG seulement. */
+  /** Suppression définitive d'un parent : Superviseur et DG seulement. */
   const peutSupprimer = peutSupprimerParent(user?.role);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'none' | 'low'>('all');
   const [deleteTargets, setDeleteTargets] = useState<string[] | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  /** Fiche dÃ©taillÃ©e d'un parent : identifiant (username) courant. */
+  /** Fiche détaillée d'un parent : identifiant (username) courant. */
   const [detailParent, setDetailParent] = useState<string | null>(null);
 
   const clientsSeen = Array.from(new Set(subscriptions.map((s) => s.clientUsername)));
@@ -57,7 +57,7 @@ const UsersPage = () => {
     ...parentProfiles.map((p) => p.parentUsername),
   ])).sort();
 
-  /** Abonnement hebdomadaire retirÃ© du catalogue (F1 et Ã©quivalents courts). */
+  /** Abonnement hebdomadaire retiré du catalogue (F1 et équivalents courts). */
   const isHebdoSub = (s: Subscription) => {
     if (s.formulaId === 'F1') return true;
     return isHebdoFormula(formulas.find((f) => f.id === s.formulaId));
@@ -111,9 +111,9 @@ const UsersPage = () => {
 
   const chips: { id: typeof filter; label: string }[] = [
     { id: 'all', label: 'Tous' },
-    { id: 'active', label: 'AbonnÃ©s actifs' },
+    { id: 'active', label: 'Abonnés actifs' },
     { id: 'none', label: 'Sans abonnement' },
-    { id: 'low', label: `Repas faibles (â‰¤ ${LOW_MEALS})` },
+    { id: 'low', label: `Repas faibles (≤ ${LOW_MEALS})` },
   ];
 
   return (
@@ -127,13 +127,13 @@ const UsersPage = () => {
       )}
       <div>
         <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">
-          Comptes Â· {parentsSeen.length} parent{parentsSeen.length > 1 ? 's' : ''}
+          Comptes · {parentsSeen.length} parent{parentsSeen.length > 1 ? 's' : ''}
         </p>
         <h1 className="mt-1 text-2xl md:text-3xl font-black tracking-tight text-slate-900 flex items-center gap-2">
           <ShieldCheck className="w-7 h-7 text-slate-900" /> Utilisateurs
         </h1>
         <p className="text-slate-500 text-sm mt-1">
-          ConnectÃ© en <strong>{me.title}</strong> â€” cliquez sur un parent pour ouvrir sa fiche : profil, enfants et abonnements. La suppression d&apos;un parent est dÃ©finitive, rÃ©servÃ©e au Superviseur et au DG, et tient compte de la comptabilitÃ©.
+          Connecté en <strong>{me.title}</strong> — cliquez sur un parent pour ouvrir sa fiche : profil, enfants et abonnements. La suppression d&apos;un parent est définitive, réservée au Superviseur et au DG, et tient compte de la comptabilité.
         </p>
       </div>
 
@@ -159,7 +159,7 @@ const UsersPage = () => {
             id="search-users"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher un parent, un enfant, une classeâ€¦"
+            placeholder="Rechercher un parent, un enfant, une classe…"
             className="w-full pl-10 pr-4 py-3 rounded-2xl border-2 border-slate-200 bg-white text-sm outline-none focus:border-slate-900 shadow-sm"
           />
         </div>
@@ -181,7 +181,7 @@ const UsersPage = () => {
       <div className="bg-white rounded-2xl border-2 border-slate-100 overflow-hidden shadow-sm">
         {filtered.length === 0 ? (
           <p className="text-sm text-slate-400 px-4 py-10 text-center">
-            {parentsSeen.length === 0 ? 'Aucun parent pour le moment.' : 'Aucun rÃ©sultat pour cette recherche.'}
+            {parentsSeen.length === 0 ? 'Aucun parent pour le moment.' : 'Aucun résultat pour cette recherche.'}
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -193,7 +193,7 @@ const UsersPage = () => {
                   <th className="px-4 py-3 text-left font-black">Enfants</th>
                   <th className="px-4 py-3 text-left font-black">Abonnement</th>
                   <th className="px-4 py-3 text-right font-black">Repas</th>
-                  <th className="px-4 py-3 text-left font-black">Ã‰tat</th>
+                  <th className="px-4 py-3 text-left font-black">État</th>
                   <th className="px-4 py-3 text-right font-black">Actions</th>
                 </tr>
               </thead>
@@ -236,7 +236,7 @@ const UsersPage = () => {
                           <span className="tabular-nums font-semibold text-slate-700">{formatPhone(c)}</span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-                            {c} Â· historique
+                            {c} · historique
                           </span>
                         )}
                         {prof?.phone && phoneUsername && (
@@ -245,12 +245,12 @@ const UsersPage = () => {
                       </td>
                       <td className="px-4 py-3">
                         {kids.length === 0 ? (
-                          <span className="text-slate-300">â€”</span>
+                          <span className="text-slate-300">—</span>
                         ) : (
                           <div className="flex flex-wrap gap-1">
                             {kids.slice(0, 2).map((k) => (
                               <span key={k.id} className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-50 border border-green-100 text-slate-800">
-                                <Baby className="w-3 h-3" /> {k.firstName} {k.lastName} Â· {k.className}
+                                <Baby className="w-3 h-3" /> {k.firstName} {k.lastName} · {k.className}
                               </span>
                             ))}
                             {kids.length > 2 && (
@@ -276,7 +276,7 @@ const UsersPage = () => {
                             {meals}
                           </span>
                         ) : (
-                          <span className="text-slate-300">â€”</span>
+                          <span className="text-slate-300">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -325,7 +325,7 @@ const UsersPage = () => {
               <p className="font-black">Supprimer ce parent ?</p>
             </div>
              <p className="mt-2 text-sm text-slate-600">
-              Le compte <strong>{formatPhone(deleteTargets[0])}</strong>, ses enfants, ses rÃ©clamations et ses cartes seront retirÃ©s dÃ©finitivement. Les rÃ¨glements rÃ©glÃ©s restent dans la comptabilitÃ©.
+              Le compte <strong>{formatPhone(deleteTargets[0])}</strong>, ses enfants, ses réclamations et ses cartes seront retirés définitivement. Les règlements réglés restent dans la comptabilité.
             </p>
             <div className="mt-4 flex gap-2">
               <button
@@ -337,7 +337,7 @@ const UsersPage = () => {
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700"
               >
-                Supprimer dÃ©finitivement
+                Supprimer définitivement
               </button>
               <button
                 onClick={() => setDeleteTargets(null)}
@@ -364,9 +364,9 @@ const UsersPage = () => {
 };
 
 /**
- * Fiche dÃ©taillÃ©e d'un parent : profil, Ã©tat du compte, enfants
- * avec leurs QR de cantine, abonnements (Ã©tat + action) â€” le registre
- * et les repas servis rÃ©capitulent ce que le personnel a encaissÃ©.
+ * Fiche détaillée d'un parent : profil, état du compte, enfants
+ * avec leurs QR de cantine, abonnements (état + action) — le registre
+ * et les repas servis récapitulent ce que le personnel a encaissé.
  */
 function ParentFicheDialog({
   username, onClose, isHebdoSub,
@@ -389,7 +389,7 @@ function ParentFicheDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" data-testid="parent-fiche">
       <button aria-label="Fermer" onClick={onClose} className="absolute inset-0 bg-slate-900/60" />
       <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[88vh] overflow-y-auto p-6">
-        {/* En-tÃªte : profil + Ã©tat du compte */}
+        {/* En-tête : profil + état du compte */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <span className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-base font-black flex-shrink-0">
@@ -401,7 +401,7 @@ function ParentFicheDialog({
               </h2>
               <p className="text-xs text-slate-500 tabular-nums">
                 Identifiant : {phoneUsername ? formatPhone(username) : username}
-                {prof?.phone && phoneUsername && prof.phone !== username ? ` Â· fiche : ${formatPhone(prof.phone)}` : ''}
+                {prof?.phone && phoneUsername && prof.phone !== username ? ` · fiche : ${formatPhone(prof.phone)}` : ''}
               </p>
             </div>
           </div>
@@ -410,7 +410,7 @@ function ParentFicheDialog({
               onClick={() => setParentActive(username, !isInactive)}
               className={`text-xs font-bold px-3 py-1.5 rounded-full ${isInactive ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
             >
-              {isInactive ? 'RÃ©activer le compte' : 'Inactiver le compte'}
+              {isInactive ? 'Réactiver le compte' : 'Inactiver le compte'}
             </button>
             <button
               onClick={onClose}
@@ -434,19 +434,19 @@ function ParentFicheDialog({
           </span>
         </div>
 
-        {/* Enfants : identitÃ© + QR de cantine */}
+        {/* Enfants : identité + QR de cantine */}
         <section className="mt-6" data-testid="fiche-enfants">
           <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
             <QrCode className="w-4 h-4" /> Enfants & QR cantine
           </h3>
           {kids.length === 0 ? (
             <p className="text-sm text-slate-400 py-6 text-center border-2 border-dashed border-slate-100 rounded-2xl mt-2">
-              Aucun enfant enregistrÃ© pour ce parent.
+              Aucun enfant enregistré pour ce parent.
             </p>
           ) : (
             <div className="grid sm:grid-cols-2 gap-3 mt-2">
               {kids.map((k) => {
-                /** Abonnement de CET enfant : actif, sinon en attente, sinon expirÃ©. */
+                /** Abonnement de CET enfant : actif, sinon en attente, sinon expiré. */
                 const kidSubs = subscriptions.filter((s) => s.childId === k.id && !isHebdoSub(s));
                 const kidSub =
                   kidSubs.find((s) => s.status === 'active') ??
@@ -474,7 +474,7 @@ function ParentFicheDialog({
                           <div className="mt-1 flex flex-wrap items-center gap-1.5">
                             <span className={`text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full ${kidBadge.cls}`}>
                               {kidBadge.label}
-                              {kidSub.status === 'active' ? ` Â· ${kidSub.mealsRemaining} repas` : ''}
+                              {kidSub.status === 'active' ? ` · ${kidSub.mealsRemaining} repas` : ''}
                             </span>
                             {kidSub.status === 'pending' && (
                               <button
@@ -503,14 +503,14 @@ function ParentFicheDialog({
           )}
         </section>
 
-        {/* Abonnements : type, Ã©tat, action */}
+        {/* Abonnements : type, état, action */}
         <section className="mt-6" data-testid="fiche-abonnements">
           <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
             <ShieldCheck className="w-4 h-4" /> Abonnements
           </h3>
           {subs.length === 0 ? (
             <p className="text-sm text-slate-400 py-6 text-center border-2 border-dashed border-slate-100 rounded-2xl mt-2">
-              Aucun abonnement (l&apos;hebdomadaire a Ã©tÃ© retirÃ© du catalogue).
+              Aucun abonnement (l&apos;hebdomadaire a été retiré du catalogue).
             </p>
           ) : (
             <div className="mt-2 divide-y divide-slate-100 border-2 border-slate-100 rounded-2xl overflow-hidden">
@@ -522,8 +522,8 @@ function ParentFicheDialog({
                     <div className="min-w-0">
                       <p className="font-bold text-slate-800 text-sm">{formula?.name ?? 'Formule'}</p>
                       <p className="text-[11px] text-slate-400 tabular-nums">
-                        {new Date(s.startDate).toLocaleDateString('fr-FR')} â†’ {new Date(s.endDate).toLocaleDateString('fr-FR')}
-                        {s.status === 'active' ? ` Â· ${s.mealsRemaining} repas restants` : ''}
+                        {new Date(s.startDate).toLocaleDateString('fr-FR')} → {new Date(s.endDate).toLocaleDateString('fr-FR')}
+                        {s.status === 'active' ? ` · ${s.mealsRemaining} repas restants` : ''}
                       </p>
                       <span className={`mt-1 inline-block text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full ${badge.cls}`}>
                         {badge.label}
@@ -550,7 +550,7 @@ function ParentFicheDialog({
 }
 
 /**
- * Petit rappel de l'unique porte de crÃ©ation : la DAF passe par Import Parent.
+ * Petit rappel de l'unique porte de création : la DAF passe par Import Parent.
  * (Composant local pour garder le rendu ci-dessus lisible.)
  */
 function isAdminHint(role: string | undefined) {
@@ -558,7 +558,7 @@ function isAdminHint(role: string | undefined) {
   return (
     <p className="text-xs text-slate-400 flex items-center gap-1.5">
       <UserRound className="w-3.5 h-3.5" />
-      CrÃ©ation et activation des accÃ¨s parent : Import â†’ Import Parent (numÃ©ro de tÃ©lÃ©phone, sans mot de passe).
+      Création et activation des accès parent : Import → Import Parent (numéro de téléphone, sans mot de passe).
     </p>
   );
 }

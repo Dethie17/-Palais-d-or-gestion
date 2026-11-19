@@ -1,6 +1,6 @@
 -- CONSTAT : parent_profiles n'existe pas (404) meme avec service_role.
--- On la recrée avec droits + RLS. SANS DELETE du personnel.
--- À coller tel quel dans SQL Editor.
+-- On la recrÃ©e avec droits + RLS. SANS DELETE du personnel.
+-- Ã€ coller tel quel dans SQL Editor.
 CREATE TABLE IF NOT EXISTS parent_profiles (
   parent_username TEXT PRIMARY KEY,
   first_name TEXT NOT NULL,

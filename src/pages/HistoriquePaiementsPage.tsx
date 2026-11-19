@@ -27,7 +27,7 @@ import {
   ReceiptText, FileSpreadsheet, Download, Search, ChevronLeft, ChevronRight, Loader2, RefreshCw,
 } from 'lucide-react';
 
-/** Ligne finalement affichÃ©e / exportÃ©e (mise en forme une seule fois). */
+/** Ligne finalement affichée / exportée (mise en forme une seule fois). */
 interface HistoLigne {
   nomParent: string;
   prenomParent: string;
@@ -43,12 +43,12 @@ interface HistoLigne {
 }
 
 /**
- * Superviseur & Espace ISM â€” Historique des paiements (parents â†” Ã©cole).
- * Lecture paginÃ©e CÃ”TÃ‰ SERVEUR de `oresto_payments`, filtres (pÃ©riode,
- * classe, recherche) et export Excel/PDF de TOUTES les lignes filtrÃ©es
- * (pas seulement la page affichÃ©e). L'enrichissement (identitÃ©s des
- * parents et des enfants, mois de l'abonnement) provient des listes dÃ©jÃ 
- * chargÃ©es par le contexte â€” la base ne stocke que les identifiants.
+ * Superviseur & Espace ISM — Historique des paiements (parents ↔ école).
+ * Lecture paginée CÔTÉ SERVEUR de `oresto_payments`, filtres (période,
+ * classe, recherche) et export Excel/PDF de TOUTES les lignes filtrées
+ * (pas seulement la page affichée). L'enrichissement (identités des
+ * parents et des enfants, mois de l'abonnement) provient des listes déjà
+ * chargées par le contexte — la base ne stocke que les identifiants.
  */
 const HistoriquePaiementsPage = () => {
   const { children: kids, parentProfiles, parentProfileOf, subscriptions, formulas } = useResto();
@@ -74,7 +74,7 @@ const HistoriquePaiementsPage = () => {
   const subById = useMemo(() => new Map(subscriptions.map((s) => [s.id, s])), [subscriptions]);
 
   // Enfants / parents retenus par les filtres (l'or PostgREST exige des
-  // identifiants : ils sont rÃ©solus ici, Ã  partir des listes de contexte).
+  // identifiants : ils sont résolus ici, à partir des listes de contexte).
   const conn: PaiementsConnections = useMemo(() => {
     const brut = (applied.recherche ?? '').trim();
     const digits = brut.replace(/\D/g, '');
@@ -82,8 +82,8 @@ const HistoriquePaiementsPage = () => {
     const nameTerm = /[\p{L}]/u.test(brut) ? normKey(brut) : null;
 
     let enfants = kids;
-    // Classe saisie LIBREMENT : comparaison tolÃ©rante (accents, casse,
-    // recherche partielle Â« 6a Â» retient Â« CI-6A Â» et Â« 6A2 Â»).
+    // Classe saisie LIBREMENT : comparaison tolérante (accents, casse,
+    // recherche partielle « 6a » retient « CI-6A » et « 6A2 »).
     const classeTerm = applied.classe ? normKey(applied.classe) : null;
     if (classeTerm) enfants = enfants.filter((c) => normKey(c.className ?? '').includes(classeTerm));
     if (nameTerm) {
@@ -210,11 +210,11 @@ const HistoriquePaiementsPage = () => {
     return {
       nomParent: profile?.lastName ?? '',
       prenomParent: profile?.firstName ?? '',
-      telephone: formatParentPhone(profile?.phone ?? parentUsername) || 'â€”',
+      telephone: formatParentPhone(profile?.phone ?? parentUsername) || '—',
       montant: p.amount,
       enfantNom: child?.lastName ?? '',
       enfantPrenom: child?.firstName ?? '',
-      classe: child?.className ?? 'â€”',
+      classe: child?.className ?? '—',
       mois: sub
         ? (() => {
             const formula = formulas.find((f) => f.id === sub.formulaId);
@@ -237,11 +237,11 @@ const HistoriquePaiementsPage = () => {
             for (let i = 0; i < count; i++) {
               const d = new Date(sub.startDate);
               d.setMonth(d.getMonth() + i);
-              labels.push(`${['Janvier','FÃ©vrier','Mars','Avril','Mai','Juin','Juillet','AoÃ»t','Septembre','Octobre','Novembre','DÃ©cembre'][d.getMonth()]} ${d.getFullYear()}`);
+              labels.push(`${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][d.getMonth()]} ${d.getFullYear()}`);
             }
-            return labels.join(', ') || 'â€”';
+            return labels.join(', ') || '—';
           })()
-        : 'â€”',
+        : '—',
       date: formatDateJJMMAAAA(paiementDate(p)),
       heure: formatHeureHHMM(paiementDate(p)),
       statut: paiementsStatusLabel(p.status),
@@ -251,7 +251,7 @@ const HistoriquePaiementsPage = () => {
   /**
    * Un paiement multi-enfants couvre plusieurs abonnements : on produit une
    * ligne par enfant, avec sa part du montant. Un paiement simple garde la
-   * mise en forme historique (mois calculÃ©s depuis l'abonnement).
+   * mise en forme historique (mois calculés depuis l'abonnement).
    */
   const enrichLignes = (p: PaiementBrut): HistoLigne[] => {
     const subIds = paiementSubscriptionIds(p);
@@ -276,11 +276,11 @@ const HistoriquePaiementsPage = () => {
       return {
         nomParent: profile?.lastName ?? '',
         prenomParent: profile?.firstName ?? '',
-        telephone: formatParentPhone(profile?.phone ?? parentUsername) || 'â€”',
+        telephone: formatParentPhone(profile?.phone ?? parentUsername) || '—',
         enfantNom: child?.lastName ?? '',
         enfantPrenom: child?.firstName ?? '',
-        classe: child?.className ?? 'â€”',
-        mois: sub ? moisLibelleRange(sub.startDate, sub.endDate) : 'â€”',
+        classe: child?.className ?? '—',
+        mois: sub ? moisLibelleRange(sub.startDate, sub.endDate) : '—',
         expected,
       };
     });
@@ -307,11 +307,11 @@ const HistoriquePaiementsPage = () => {
 
   const genereSousTitre = (): string => {
     const parts: string[] = [];
-    if (applied.du) parts.push(`Ã€ partir du ${formatDateJJMMAAAA(`${applied.du}T00:00:00Z`)}`);
+    if (applied.du) parts.push(`À partir du ${formatDateJJMMAAAA(`${applied.du}T00:00:00Z`)}`);
     if (applied.au) parts.push(`Jusqu'au ${formatDateJJMMAAAA(`${applied.au}T00:00:00Z`)}`);
     if (applied.classe) parts.push(`Classe : ${applied.classe}`);
     if (applied.recherche) parts.push(`Recherche : ${applied.recherche.trim()}`);
-    return parts.join(' Â· ') || 'Tous les paiements';
+    return parts.join(' · ') || 'Tous les paiements';
   };
 
   const prepareExport = async (kind: 'xlsx' | 'pdf') => {
@@ -321,7 +321,7 @@ const HistoriquePaiementsPage = () => {
       const all = await fetchTousPaiements({ filtres: applied, conn, constraint: contrainteActuelle() });
       const lignes = all.flatMap(enrichLignes);
       if (lignes.length === 0) {
-        setError('Aucun paiement Ã  exporter pour ces critÃ¨res.');
+        setError('Aucun paiement à exporter pour ces critères.');
         return;
       }
       if (kind === 'xlsx') await exportExcel(lignes);
@@ -335,10 +335,10 @@ const HistoriquePaiementsPage = () => {
 
   const exportExcel = async (lignes: HistoLigne[]) => {
     const sheet = toSheetData([
-      ['Historique des paiements â€” O RESTO'],
+      ['Historique des paiements — O RESTO'],
       [genereSousTitre()],
       [],
-      ['Nom parent', 'PrÃ©nom parent', 'TÃ©lÃ©phone', 'Montant (FCFA)', 'Nom enfant bÃ©nÃ©ficiaire', 'PrÃ©nom enfant', 'Classe', 'Mois payÃ©', 'Date du paiement', 'Heure', 'Statut'],
+      ['Nom parent', 'Prénom parent', 'Téléphone', 'Montant (FCFA)', 'Nom enfant bénéficiaire', 'Prénom enfant', 'Classe', 'Mois payé', 'Date du paiement', 'Heure', 'Statut'],
       ...lignes.map((l) => [
         l.nomParent, l.prenomParent, l.telephone, l.montant,
         l.enfantNom, l.enfantPrenom, l.classe, l.mois, l.date, l.heure, l.statut,
@@ -360,10 +360,10 @@ const HistoriquePaiementsPage = () => {
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ orientation: 'landscape' });
     doc.setFontSize(16);
-    doc.text('Historique des paiements â€” O RESTO', 12, 14);
+    doc.text('Historique des paiements — O RESTO', 12, 14);
     doc.setFontSize(9);
     doc.text(genereSousTitre(), 12, 20);
-    const avaient: string[] = ['Date du paiement', 'Heure', 'Statut', 'Montant', 'Nom parent', 'PrÃ©nom parent', 'TÃ©lÃ©phone', 'Enfant bÃ©nÃ©ficiaire', 'Classe', 'Mois payÃ©'];
+    const avaient: string[] = ['Date du paiement', 'Heure', 'Statut', 'Montant', 'Nom parent', 'Prénom parent', 'Téléphone', 'Enfant bénéficiaire', 'Classe', 'Mois payé'];
     const xs = [10, 34, 48, 68, 96, 146, 186, 210, 246, 266];
     const entete = (y: number) => {
       doc.setFont(undefined, 'bold');
@@ -385,10 +385,10 @@ const HistoriquePaiementsPage = () => {
       doc.text(l.heure, xs[1], y);
       doc.text(l.statut, xs[2], y);
       doc.text(formatCurrency(l.montant), xs[3], y);
-      doc.text(l.nomParent || 'â€”', xs[4], y);
-      doc.text(l.prenomParent || 'â€”', xs[5], y);
+      doc.text(l.nomParent || '—', xs[4], y);
+      doc.text(l.prenomParent || '—', xs[5], y);
       doc.text(l.telephone, xs[6], y);
-      doc.text([l.enfantPrenom, l.enfantNom].filter(Boolean).join(' ') || 'â€”', xs[7], y);
+      doc.text([l.enfantPrenom, l.enfantNom].filter(Boolean).join(' ') || '—', xs[7], y);
       doc.text(l.classe, xs[8], y);
       doc.text(l.mois, xs[9], y);
       y += 5.5;
@@ -410,7 +410,7 @@ const HistoriquePaiementsPage = () => {
               <ReceiptText className="w-4 h-4" /> Suivi des encaissements
             </p>
             <h1 className="mt-1 text-3xl md:text-4xl font-black tracking-tight">Historique des paiements</h1>
-            <p className="text-sm text-slate-300 mt-1">Parents â†” Ã©cole : abonnements, tickets et paiements, avec date et heure dâ€™encaissement.</p>
+            <p className="text-sm text-slate-300 mt-1">Parents ↔ école : abonnements, tickets et paiements, avec date et heure d’encaissement.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -420,7 +420,7 @@ const HistoriquePaiementsPage = () => {
               disabled={exporting !== ''}
               className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 border border-white/15 text-xs font-bold hover:bg-white/20 disabled:opacity-60"
             >
-              <FileSpreadsheet className="w-4 h-4" /> {exporting === 'xlsx' ? 'PrÃ©parationâ€¦' : 'TÃ©lÃ©charger Excel'}
+              <FileSpreadsheet className="w-4 h-4" /> {exporting === 'xlsx' ? 'Préparation…' : 'Télécharger Excel'}
             </button>
             <button
               type="button"
@@ -429,7 +429,7 @@ const HistoriquePaiementsPage = () => {
               disabled={exporting !== ''}
               className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-amber-400 text-slate-900 text-xs font-extrabold hover:bg-amber-300 shadow disabled:opacity-60"
             >
-              <Download className="w-4 h-4" /> {exporting === 'pdf' ? 'PrÃ©parationâ€¦' : 'TÃ©lÃ©charger PDF'}
+              <Download className="w-4 h-4" /> {exporting === 'pdf' ? 'Préparation…' : 'Télécharger PDF'}
             </button>
           </div>
         </div>
@@ -472,8 +472,8 @@ const HistoriquePaiementsPage = () => {
           </label>
       <label className="text-xs font-bold text-slate-600">
         Classe
-        {/* Champ Libre : la saisie au clavier reste possible mÃªme quand la
-            liste des classes (dÃ©duite des enfants chargÃ©s) est vide. */}
+        {/* Champ Libre : la saisie au clavier reste possible même quand la
+            liste des classes (déduite des enfants chargés) est vide. */}
         <input
           data-testid="paiements-classe"
           list="paiements-classes-suggestions"
@@ -487,7 +487,7 @@ const HistoriquePaiementsPage = () => {
         </datalist>
       </label>
           <label className="text-xs font-bold text-slate-600 sm:col-span-2">
-            Recherche (nom, prÃ©nom ou tÃ©lÃ©phone)
+            Recherche (nom, prénom ou téléphone)
             <div className="mt-1 relative">
               <Search aria-hidden className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -505,10 +505,10 @@ const HistoriquePaiementsPage = () => {
             <RefreshCw className="w-4 h-4" /> Appliquer les filtres
           </button>
           <button type="button" onClick={resetFilters} className="px-4 py-2 rounded-xl border-2 border-slate-200 text-sm font-bold text-slate-700 hover:border-slate-300">
-            RÃ©initialiser
+            Réinitialiser
           </button>
-          {/* TÃ©lÃ©chargement directement dans le pavÃ© de filtres : l'export
-              suit les critÃ¨res affichÃ©s (Excel, mÃªmes colonnes que le haut de page). */}
+          {/* Téléchargement directement dans le pavé de filtres : l'export
+              suit les critères affichés (Excel, mêmes colonnes que le haut de page). */}
           <button
             type="button"
             data-testid="paiements-download"
@@ -517,17 +517,17 @@ const HistoriquePaiementsPage = () => {
             className="px-4 py-2 rounded-xl border-2 border-slate-900 text-slate-800 text-sm font-bold flex items-center gap-1.5 hover:bg-green-50 disabled:opacity-60"
           >
             <Download className="w-4 h-4" />
-            {exporting !== '' ? 'PrÃ©parationâ€¦' : 'TÃ©lÃ©charger'}
+            {exporting !== '' ? 'Préparation…' : 'Télécharger'}
           </button>
           <span className="ml-auto text-xs text-slate-500">
-            {loading ? 'Chargementâ€¦' : `${total} paiement${total > 1 ? 's' : ''} au total`}
+            {loading ? 'Chargement…' : `${total} paiement${total > 1 ? 's' : ''} au total`}
           </span>
         </div>
       </form>
 
       {!isSupabaseConfigured && (
         <p className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-          Base de donnÃ©es non configurÃ©e ici : l&apos;historique des paiements est disponible sur la version dÃ©ployÃ©e (connectÃ©e Ã  Supabase).
+          Base de données non configurée ici : l&apos;historique des paiements est disponible sur la version déployée (connectée à Supabase).
         </p>
       )}
       {error && (
@@ -543,12 +543,12 @@ const HistoriquePaiementsPage = () => {
             <thead className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="text-left p-3 font-black">Nom parent</th>
-                <th className="text-left p-3 font-black">PrÃ©nom parent</th>
-                <th className="text-left p-3 font-black">TÃ©lÃ©phone</th>
+                <th className="text-left p-3 font-black">Prénom parent</th>
+                <th className="text-left p-3 font-black">Téléphone</th>
                 <th className="text-right p-3 font-black">Montant</th>
-                <th className="text-left p-3 font-black">Enfant bÃ©nÃ©ficiaire</th>
+                <th className="text-left p-3 font-black">Enfant bénéficiaire</th>
                 <th className="text-left p-3 font-black">Classe</th>
-                <th className="text-left p-3 font-black">Mois payÃ©</th>
+                <th className="text-left p-3 font-black">Mois payé</th>
                 <th className="text-left p-3 font-black">Date du paiement</th>
                 <th className="text-left p-3 font-black">Heure</th>
                 <th className="text-left p-3 font-black">Statut</th>
@@ -558,11 +558,11 @@ const HistoriquePaiementsPage = () => {
               {(rows ?? []).flatMap((p) => (
                 enrichLignes(p).map((l, index) => (
                   <tr key={`${p.id}-${index}`} data-testid="paiement-row" className="border-t border-slate-100 hover:bg-slate-50/60">
-                    <td className="p-3 font-semibold text-slate-800">{l.nomParent || 'â€”'}</td>
-                    <td className="p-3 text-slate-700">{l.prenomParent || 'â€”'}</td>
+                    <td className="p-3 font-semibold text-slate-800">{l.nomParent || '—'}</td>
+                    <td className="p-3 text-slate-700">{l.prenomParent || '—'}</td>
                     <td className="p-3 text-xs whitespace-nowrap tabular-nums text-slate-600">{l.telephone}</td>
                     <td className="p-3 font-bold text-right whitespace-nowrap tabular-nums text-emerald-700">{formatCurrency(l.montant)}</td>
-                    <td className="p-3 text-slate-800">{[l.enfantPrenom, l.enfantNom].filter(Boolean).join(' ') || 'â€”'}</td>
+                    <td className="p-3 text-slate-800">{[l.enfantPrenom, l.enfantNom].filter(Boolean).join(' ') || '—'}</td>
                     <td className="p-3 text-xs text-slate-600">{l.classe}</td>
                     <td className="p-3 text-xs font-bold text-slate-700">{l.mois}</td>
                     <td className="p-3 text-xs whitespace-nowrap tabular-nums text-slate-600">{l.date}</td>
@@ -579,10 +579,10 @@ const HistoriquePaiementsPage = () => {
                 ))
               ))}
               {(rows ?? []).length === 0 && !loading && !error && (
-                <tr><td colSpan={10} className="p-8 text-center text-slate-400">Aucun paiement pour ces critÃ¨res.</td></tr>
+                <tr><td colSpan={10} className="p-8 text-center text-slate-400">Aucun paiement pour ces critères.</td></tr>
               )}
               {loading && (
-                <tr><td colSpan={10} className="p-8 text-center text-slate-400">Chargement de lâ€™historiqueâ€¦</td></tr>
+                <tr><td colSpan={10} className="p-8 text-center text-slate-400">Chargement de l’historique…</td></tr>
               )}
             </tbody>
           </table>
@@ -600,7 +600,7 @@ const HistoriquePaiementsPage = () => {
       {/* Cartes (mobile) */}
       <div className="md:hidden space-y-3" data-testid="paiements-mobile">
         {!loading && (rows ?? []).length === 0 && !error && (
-          <p className="bg-white rounded-2xl border p-6 text-center text-slate-400 text-sm">Aucun paiement pour ces critÃ¨res.</p>
+          <p className="bg-white rounded-2xl border p-6 text-center text-slate-400 text-sm">Aucun paiement pour ces critères.</p>
         )}
         {(rows ?? []).flatMap((p) => (
           enrichLignes(p).map((l, index) => (
@@ -614,14 +614,14 @@ const HistoriquePaiementsPage = () => {
               <p className="text-xs text-slate-600 tabular-nums">{l.telephone}</p>
               <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2 mt-1">
                 <p className="text-sm text-slate-800 font-semibold">
-                  {[l.enfantPrenom, l.enfantNom].filter(Boolean).join(' ') || 'â€”'}
+                  {[l.enfantPrenom, l.enfantNom].filter(Boolean).join(' ') || '—'}
                   <span className="text-slate-400 font-normal"> ({l.classe})</span>
                 </p>
                 <p className="font-black text-emerald-700 whitespace-nowrap">{formatCurrency(l.montant)}</p>
               </div>
               <p className="text-xs text-slate-500 flex flex-wrap justify-between gap-1">
-                <span>Mois payÃ© : <strong className="text-slate-700">{l.mois}</strong></span>
-                <span>Le {l.date} Ã  {l.heure}</span>
+                <span>Mois payé : <strong className="text-slate-700">{l.mois}</strong></span>
+                <span>Le {l.date} à {l.heure}</span>
               </p>
             </div>
           ))
@@ -647,9 +647,9 @@ function PaiementsPagination({ page, totalPages, rowCount, total, onPage, loadin
     <div data-testid="paiements-pagination" className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 bg-slate-50/60">
       <p className="text-xs text-slate-500">
         {total === 0
-          ? 'Aucun rÃ©sultat'
-          : `${total} paiement${total > 1 ? 's' : ''}${rowCount > total ? ` Â· ${rowCount} lignes` : ''}`}
-        {totalPages > 1 ? ` Â· page ${page} / ${totalPages}` : ''}
+          ? 'Aucun résultat'
+          : `${total} paiement${total > 1 ? 's' : ''}${rowCount > total ? ` · ${rowCount} lignes` : ''}`}
+        {totalPages > 1 ? ` · page ${page} / ${totalPages}` : ''}
       </p>
       <div className="flex items-center gap-2">
         <button
@@ -658,7 +658,7 @@ function PaiementsPagination({ page, totalPages, rowCount, total, onPage, loadin
           disabled={page <= 1 || loading}
           className="px-3 py-1.5 rounded-xl border-2 border-slate-200 text-xs font-bold text-slate-700 disabled:opacity-40 hover:border-slate-300 flex items-center gap-1"
         >
-          <ChevronLeft className="w-3.5 h-3.5" /> PrÃ©cÃ©dent
+          <ChevronLeft className="w-3.5 h-3.5" /> Précédent
         </button>
         <button
           type="button"

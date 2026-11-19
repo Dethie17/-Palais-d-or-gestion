@@ -1,4 +1,4 @@
--- URGENT : recréer parent_profiles
+-- URGENT : recrÃ©er parent_profiles
 CREATE TABLE IF NOT EXISTS parent_profiles (
   parent_username TEXT PRIMARY KEY,
   first_name TEXT NOT NULL,

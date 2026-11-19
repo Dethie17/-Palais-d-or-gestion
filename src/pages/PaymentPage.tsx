@@ -121,7 +121,7 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
         <div className="text-center max-w-sm">
           <p className="text-lg font-bold text-slate-800">Panier vide</p>
           <p className="mt-2 text-sm text-slate-600">Ajoutez des articles depuis la caisse avant de passer au paiement.</p>
-          <button onClick={onBack} className="btn-primary mt-6">Retour Ã  la caisse</button>
+          <button onClick={onBack} className="btn-primary mt-6">Retour à la caisse</button>
         </div>
       </div>
     );
@@ -140,13 +140,13 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
         {/* Order Summary */}
         <div className="bg-white rounded-2xl border border-slate-200 p-6 lg:p-8 shadow-sm space-y-6">
           <div>
-            <h2 className="text-xl font-bold text-slate-800 mb-5">RÃ©capitulatif</h2>
+            <h2 className="text-xl font-bold text-slate-800 mb-5">Récapitulatif</h2>
             <div className="space-y-3 mb-6">
               {cart.map((item) => (
                 <div key={item.id} className="flex justify-between items-start pb-3 border-b border-slate-100 last:border-0">
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-slate-800">{item.name}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">QuantitÃ©: {item.quantity}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Quantité: {item.quantity}</p>
                   </div>
                   <span className="font-bold text-slate-800">{formatCurrency(item.price * item.quantity)}</span>
                 </div>
@@ -154,11 +154,11 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
             </div>
           </div>
 
-          {/* SupplÃ©ments */}
+          {/* Suppléments */}
           <div className="border-t-2 border-slate-200 pt-4">
             <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
               <Plus className="w-5 h-5 text-slate-600" />
-              Ajouter des supplÃ©ments
+              Ajouter des suppléments
             </h3>
             <div className="space-y-3">
               {availableExtras.map((extra) => (
@@ -201,7 +201,7 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
             </div>
             {extrasTotal > 0 && (
               <div className="flex justify-between text-sm text-slate-600">
-                <span>SupplÃ©ments</span>
+                <span>Suppléments</span>
                 <span className="font-semibold">{formatCurrency(extrasTotal)}</span>
               </div>
             )}
@@ -217,7 +217,7 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
         {/* Payment Methods + Numpad */}
         <div className="space-y-6">
           <div>
-            <label htmlFor="customer-name" className="label-pro">Client (reÃ§u + stats)</label>
+            <label htmlFor="customer-name" className="label-pro">Client (reçu + stats)</label>
             <input
               id="customer-name"
               value={customerName}
@@ -228,7 +228,7 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
             />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-800 mb-4">MÃ©thode de paiement</h2>
+            <h2 className="text-xl font-bold text-slate-800 mb-4">Méthode de paiement</h2>
             <div className="grid grid-cols-2 gap-3">
               {paymentMethods.map((method) => {
                 const Icon = method.icon;
@@ -304,11 +304,11 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
                   onClick={copyWaveLink}
                   className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50"
                 >
-                  <Copy className="w-4 h-4" /> {linkCopied ? 'CopiÃ© !' : 'Copier'}
+                  <Copy className="w-4 h-4" /> {linkCopied ? 'Copié !' : 'Copier'}
                 </button>
               </div>
               <p className="mt-3 text-xs text-slate-500 bg-white border border-slate-200 rounded-xl px-3 py-2.5">
-                VÃ©rifiez la notification Wave Business sur le tÃ©lÃ©phone, puis cliquez ci-dessous sur Â« Paiement Wave reÃ§u Â».
+                Vérifiez la notification Wave Business sur le téléphone, puis cliquez ci-dessous sur « Paiement Wave reçu ».
               </p>
             </div>
           )}
@@ -320,7 +320,7 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
               </p>
               <p className="text-3xl lg:text-4xl font-black text-slate-900 mt-2">{formatCurrency(total)}</p>
               <p className="mt-2 text-xs text-slate-500 bg-white border border-slate-200 rounded-xl px-3 py-2.5">
-                Le client paie ce montant via Orange Money (transfert ou paiement marchand), puis Â« Paiement Orange Money reÃ§u Â» pour encaisser.
+                Le client paie ce montant via Orange Money (transfert ou paiement marchand), puis « Paiement Orange Money reçu » pour encaisser.
               </p>
             </div>
           )}
@@ -333,8 +333,8 @@ const PaymentPage = ({ cart, onPaymentComplete, onBack }: PaymentPageProps) => {
           >
             <CheckCircle aria-hidden className="w-6 h-6" />
             {selectedMethod === 'wave'
-              ? 'Paiement Wave reÃ§u â€” encaisser'
-              : 'Paiement Orange Money reÃ§u â€” encaisser'}
+              ? 'Paiement Wave reçu — encaisser'
+              : 'Paiement Orange Money reçu — encaisser'}
           </button>
         </div>
       </div>

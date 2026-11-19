@@ -117,7 +117,7 @@ CREATE POLICY entites_select ON public.entites FOR SELECT USING (true);
 CREATE POLICY entites_insert ON public.entites FOR INSERT WITH CHECK (public.is_platform_admin());
 CREATE POLICY entites_update ON public.entites FOR UPDATE USING (public.is_platform_admin()) WITH CHECK (public.is_platform_admin());
 CREATE POLICY entites_delete ON public.entites FOR DELETE USING (public.is_platform_admin());
--- Mise à jour RLS entites : superviseur peut aussi créer/gérer
+-- Mise Ã  jour RLS entites : superviseur peut aussi crÃ©er/gÃ©rer
 CREATE OR REPLACE FUNCTION public.can_manage_entities()
 RETURNS BOOLEAN
 LANGUAGE SQL

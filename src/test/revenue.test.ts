@@ -38,7 +38,7 @@ const base = {
   formulas,
 };
 
-describe('Chiffre dâ€™affaires DAF : ventes rÃ©elles + abonnements validÃ©s', () => {
+describe('Chiffre d’affaires DAF : ventes réelles + abonnements validés', () => {
   it('ignore les recharges et ne compte pas deux fois un ticket', () => {
     const r = revenueBreakdown(base);
     expect(r.subscriptions).toBe(36500);
@@ -51,7 +51,7 @@ describe('Chiffre dâ€™affaires DAF : ventes rÃ©elles + abonnements valid�
     expect(r.total).toBe(45500);
   });
 
-  it('borne la pÃ©riode et exclut les statuts non payÃ©s / annulÃ©s', () => {
+  it('borne la période et exclut les statuts non payés / annulés', () => {
     const r = revenueBreakdown(base, new Date('2026-10-06T00:00:00.000Z').getTime());
     expect(r.subscriptions).toBe(9500);
     expect(r.subscriptionCount).toBe(1);
@@ -62,7 +62,7 @@ describe('Chiffre dâ€™affaires DAF : ventes rÃ©elles + abonnements valid�
     expect(r.total).toBe(18500);
   });
 
-  it('les Ã©vÃ©nements Â« ventes hors caisse Â» nourrissent les courbes sans la caisse', () => {
+  it('les événements « ventes hors caisse » nourrissent les courbes sans la caisse', () => {
     const r = revenueBreakdown(base);
     expect(r.extraSalesEvents).toHaveLength(4);
     expect(r.extraSalesEvents.reduce((s, e) => s + e.amount, 0)).toBe(5000);
@@ -88,8 +88,8 @@ describe('Chiffre dâ€™affaires DAF : ventes rÃ©elles + abonnements valid�
   });
 });
 
-describe('ComptabilitÃ© ISM bornÃ©e au mois', () => {
-  it('un mois passÃ© ne cumule pas les encaissements des mois suivants', () => {
+describe('Comptabilité ISM bornée au mois', () => {
+  it('un mois passé ne cumule pas les encaissements des mois suivants', () => {
     const settings = {
       ismSubscriptionPct: 0, schoolPerSubscription: 2000, otherSalesPct: 0,
       touchpointPct: 0, sycapayPct: 0, paydounyaPct: 0, ismPerSubscription: 2000,
@@ -106,7 +106,7 @@ describe('ComptabilitÃ© ISM bornÃ©e au mois', () => {
     expect(months).toHaveLength(2);
     expect(months[0].aboCount).toBe(1);
     expect(months[1].aboCount).toBe(1);
-    // et ismPeriod bornÃ© sur le mois courant
+    // et ismPeriod borné sur le mois courant
     const start = new Date(today.getFullYear(), today.getMonth(), 1).getTime();
     expect(ismPeriod(payments as never, [], subs, formulas, settings as never, start).aboCount).toBe(1);
   });
