@@ -21,6 +21,7 @@ import {
 import WavePaymentModal from '@/components/WavePaymentModal';
 import PaymentReceiptModal from '@/components/PaymentReceiptModal';
 import QrCartesEnfants from '@/components/QrCartesEnfants';
+import CartesPrepayeesEnfants from '@/components/CartesPrepayeesEnfants';
 import PayerAbonnementSection from '@/components/PayerAbonnementSection';
 import {
   CheckCircle, AlertCircle, Smartphone,
@@ -88,10 +89,10 @@ function SectionTitle({ step, title, sub }: { step: string; title: string; sub?:
 }
 /**
  * Accès Abonné — parcours fluide du rôle client :
- * QR Codes des enfants → 1 abonnement (paiement Wave / Max it via SycaPay)
- * → 2 menu du jour → 3 kiosque (indisponible) → 4 annonces → 5 réclamations
- * → 6 historique. L'inscription des enfants se fait à l'import (ISM) ;
- * la recharge de carte n'existe plus : l'abonnement couvre le repas.
+ * QR Codes des enfants → cartes prépayées (recharge Wave / Max it via SycaPay)
+ * → 1 abonnement (paiement Wave / Max it via SycaPay) → 2 menu du jour
+ * → 3 kiosque (indisponible) → 4 annonces → 5 réclamations → 6 historique.
+ * L'inscription des enfants se fait à l'import (ISM).
  */
 const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => void }) => {
   const { user, logout } = useAuth();
@@ -500,6 +501,9 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
 
         {/* ===== QR DES ENFANTS (style clair, en haut de page) ===== */}
         <QrCartesEnfants kids={kids} />
+
+        {/* ===== CARTES PRÉPAYÉES : SOLDE + RECHARGE ===== */}
+        <CartesPrepayeesEnfants />
 
         {/* ===== HISTORIQUE DES REPAS PAR JOUR ===== */}
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
