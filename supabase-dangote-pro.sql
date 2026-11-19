@@ -675,77 +675,12 @@ BEGIN
 END $$;
 
 -- ------------------------------------------------------------
--- 14. RPC : dépôt manuel (espèces / virement)
+-- 14. Dépôts : SycaPay uniquement (aucun dépôt manuel)
 -- ------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.dangote_deposer_budget(
-  p_entite_id UUID,
-  p_montant NUMERIC,
-  p_methode TEXT DEFAULT 'cash',
-  p_reference TEXT DEFAULT NULL,
-  p_acteur_id UUID DEFAULT NULL,
-  p_acteur_username TEXT DEFAULT NULL,
-  p_metadata JSONB DEFAULT NULL
-) RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_solde NUMERIC := 0;
-  v_ref TEXT;
-BEGIN
-  IF NOT public.dangote_actor_allowed(
-    p_acteur_id, p_entite_id, ARRAY['admin', 'rh']
-  ) THEN
-    RETURN jsonb_build_object('outcome', 'forbidden', 'message', 'Droits insuffisants.');
-  END IF;
-
-  IF p_montant IS NULL OR p_montant <= 0 THEN
-    RETURN jsonb_build_object('outcome', 'error', 'message', 'Montant invalide.');
-  END IF;
-
-  INSERT INTO public.dangote_budget (entite_id, solde)
-  VALUES (p_entite_id, 0)
-  ON CONFLICT (entite_id) DO NOTHING;
-
-  SELECT solde INTO v_solde
-  FROM public.dangote_budget
-  WHERE entite_id = p_entite_id
-  FOR UPDATE;
-
-  v_ref := COALESCE(NULLIF(p_reference, ''),
-    'DEP-' || to_char(clock_timestamp(), 'YYYYMMDDHH24MISSMS')
-    || '-' || substr(md5(random()::text), 1, 6));
-
-  UPDATE public.dangote_budget
-  SET solde = solde + p_montant, updated_at = NOW()
-  WHERE entite_id = p_entite_id;
-
-  INSERT INTO public.dangote_credit_ledger (
-    entite_id, type, montant, solde_apres, reference,
-    created_by, created_by_username, metadata
-  ) VALUES (
-    p_entite_id, 'depot', p_montant, v_solde + p_montant, v_ref,
-    p_acteur_id, p_acteur_username,
-    COALESCE(p_metadata, '{}'::JSONB) || jsonb_build_object('methode', p_methode)
-  );
-
-  INSERT INTO public.dangote_audit_log (
-    entite_id, acteur_id, acteur_username, action,
-    cible_type, cible_id, details
-  ) VALUES (
-    p_entite_id, p_acteur_id, p_acteur_username, 'budget.depot',
-    'dangote_budget', p_entite_id::TEXT,
-    jsonb_build_object('montant', p_montant, 'methode', p_methode, 'reference', v_ref)
-  );
-
-  RETURN jsonb_build_object(
-    'outcome', 'depose',
-    'reference', v_ref,
-    'montant', p_montant,
-    'solde_apres', v_solde + p_montant
-  );
-END $$;
+-- Les recharges sont initiées par `deposit.initiate` puis créditées par
+-- `dangote_settle_payment` après confirmation. Supprime l'ancienne RPC de
+-- dépôt manuel si elle existe encore sur une base déjà initialisée.
+DROP FUNCTION IF EXISTS public.dangote_deposer_budget(UUID, NUMERIC, TEXT, TEXT, UUID, TEXT, JSONB);
 
 -- ------------------------------------------------------------
 -- 15. RPC : règlement d'un paiement SycaPay (idempotent)
@@ -1192,7 +1127,6 @@ REVOKE ALL ON FUNCTION public.dangote_current_employee() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.dangote_actor_allowed(UUID, UUID, TEXT[]) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.dangote_valider_repas(UUID, UUID, TEXT, UUID, INTEGER, TEXT, UUID, TEXT) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.dangote_annuler_repas(UUID, UUID, TEXT, UUID, TEXT) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.dangote_deposer_budget(UUID, NUMERIC, TEXT, TEXT, UUID, TEXT, JSONB) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.dangote_settle_payment(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.dangote_rotate_qr(UUID, UUID, UUID, TEXT) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.dangote_stats(UUID, DATE, DATE) FROM PUBLIC, anon;
@@ -1203,7 +1137,6 @@ GRANT EXECUTE ON FUNCTION public.dangote_current_employee() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.dangote_actor_allowed(UUID, UUID, TEXT[]) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.dangote_valider_repas(UUID, UUID, TEXT, UUID, INTEGER, TEXT, UUID, TEXT) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.dangote_annuler_repas(UUID, UUID, TEXT, UUID, TEXT) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.dangote_deposer_budget(UUID, NUMERIC, TEXT, TEXT, UUID, TEXT, JSONB) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.dangote_settle_payment(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.dangote_rotate_qr(UUID, UUID, UUID, TEXT) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.dangote_stats(UUID, DATE, DATE) TO authenticated;

@@ -253,39 +253,6 @@ async function cancelMeal(
 // ---------------------------------------------------------------------------
 // Budget et paiements
 // ---------------------------------------------------------------------------
-async function depositManual(
-  db: SupabaseClient,
-  res: ServerResponse,
-  caller: Caller,
-  entiteId: string,
-  body: Body,
-): Promise<void> {
-  const amount = parseAmount(body.montant ?? body.amount);
-  if (amount == null) {
-    return sendError(res, 400, 'Montant invalide : un entier en FCFA, au moins 100.');
-  }
-
-  const { data, error } = await db.rpc('dangote_deposer_budget', {
-    p_entite_id: entiteId,
-    p_montant: amount,
-    p_methode: text(body.methode) || 'cash',
-    p_reference: text(body.reference) || null,
-    p_acteur_id: caller.userId,
-    p_acteur_username: caller.username,
-    p_metadata: sanitizeMetadata(body.metadata) ?? null,
-  });
-
-  if (error) {
-    if (isMissingFunction(error) || schemaMissing(error)) return failSchema(res);
-    return failDb(res, error as ApiError);
-  }
-
-  const result = (data ?? {}) as Record<string, unknown>;
-  if (result.outcome === 'depose') return sendJson(res, 200, { ok: true, ...result });
-  if (result.outcome === 'forbidden') return sendJson(res, 403, { ok: false, ...result });
-  return sendJson(res, 409, { ok: false, ...result });
-}
-
 const METHOD_SERVICE: Record<string, string> = {
   wave: 'SN_PM_WAVE',
   mobile_money: 'SN_PM_OM',
@@ -1223,7 +1190,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       case 'deposit.status':
         return await depositStatus(db, res, entiteId, body);
       case 'deposit.manual':
-        return await depositManual(db, res, caller, entiteId, body);
+        return sendError(
+          res,
+          410,
+          'Dépôts manuels désactivés. Créditez le compte repas via SycaPay.',
+        );
       case 'employee.create':
         return await createEmployee(db, res, caller, entiteId, body);
       case 'employee.update':
