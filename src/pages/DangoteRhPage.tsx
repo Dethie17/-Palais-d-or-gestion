@@ -466,9 +466,16 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
               {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Actualiser
             </button>
-            <button className={secondaryButtonClass} onClick={() => setDepositOpen(true)}>
-              <Wallet className="h-4 w-4" /> Créditer par SycaPay
-            </button>
+            {onNavigate && (
+              <button className={secondaryButtonClass} onClick={() => onNavigate('dangote-budget-recharge')}>
+                <Wallet className="h-4 w-4" /> Recharge budget
+              </button>
+            )}
+            {onNavigate && (
+              <button className={secondaryButtonClass} onClick={() => onNavigate('dangote-import-employes')}>
+                <Users className="h-4 w-4" /> Importer employés
+              </button>
+            )}
             <button className={primaryButtonClass} onClick={() => setEmployeeEditor({ open: true, employe: null })}>
               <Plus className="h-4 w-4" /> Ajouter un employé
             </button>

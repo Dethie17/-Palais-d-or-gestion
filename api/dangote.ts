@@ -694,6 +694,7 @@ async function createEmployee(
       plafond_journalier: numberOrNull(body.plafondJournalier),
       plafond_mensuel: numberOrNull(body.plafondMensuel),
       notes: text(body.notes) || null,
+      photo_url: text(body.photoUrl) || null,
       actif: bool(body.actif, true),
       qr_token: qrToken,
     })
@@ -741,6 +742,7 @@ async function updateEmployee(
   if (body.plafondJournalier !== undefined) patch.plafond_journalier = numberOrNull(body.plafondJournalier);
   if (body.plafondMensuel !== undefined) patch.plafond_mensuel = numberOrNull(body.plafondMensuel);
   if (body.notes !== undefined) patch.notes = text(body.notes) || null;
+  if (body.photoUrl !== undefined) patch.photo_url = text(body.photoUrl) || null;
   if (body.actif !== undefined) patch.actif = bool(body.actif);
   patch.updated_at = new Date().toISOString();
 

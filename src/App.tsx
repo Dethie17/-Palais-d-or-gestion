@@ -48,6 +48,8 @@ const DangoteRhPage = lazy(() => import('./pages/DangoteRhPage'));
 const DangoteSuperviseurPage = lazy(() => import('./pages/DangoteSuperviseurPage'));
 const DangoteEmployePage = lazy(() => import('./pages/DangoteEmployePage'));
 const DangoteQrGalleryPage = lazy(() => import('./pages/DangoteQrGalleryPage'));
+const DangoteImportEmployees = lazy(() => import('./pages/DangoteImportEmployees'));
+const DangoteBudgetRecharge = lazy(() => import('./pages/DangoteBudgetRecharge'));
 
 function PageLoader() {
   return (
@@ -279,6 +281,10 @@ function AppContent() {
         return <DangoteEmployePage onNavigate={navigateTo} />;
       case 'dangote-qrgallery':
         return <DangoteQrGalleryPage />;
+      case 'dangote-import-employes':
+        return <DangoteImportEmployees onNavigate={navigateTo} />;
+      case 'dangote-budget-recharge':
+        return <DangoteBudgetRecharge onNavigate={navigateTo} />;
       case 'establishments':
         return <EstablishmentsPage />;
       case 'settings':

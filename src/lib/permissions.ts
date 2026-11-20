@@ -33,9 +33,9 @@ export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // Caissier : POS uniquement (caisse, scan QR élève).
   gestionnaire: ['pos', 'paymentsuccess', 'paymentfailure', 'profile'],
   // Espace ISM : pilotage + suivi uniquement (sans menus/paramètres/établissements)
-  admin: [...ISM_PAGES, 'dangote-rh', 'paymentsuccess', 'paymentfailure'],
+  admin: [...ISM_PAGES, 'dangote-rh', 'dangote-import-employes', 'dangote-budget-recharge', 'paymentsuccess', 'paymentfailure'],
   // DCH Dangote : gestion employés, achats de talons, crédit repas.
-  rh: ['dangote-rh', 'dangote-qrgallery', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
+  rh: ['dangote-rh', 'dangote-qrgallery', 'dangote-import-employes', 'dangote-budget-recharge', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
   'superviseur-dangote': ['dangote-superviseur', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
   'employe-dangote': ['dangote-employe', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
 };
@@ -97,4 +97,6 @@ export const PAGE_LABEL: Record<PageName, string> = {
   'dangote-superviseur': 'Espace Superviseur MIAM\'S Dangote',
   'dangote-employe': 'Espace Employé Dangote',
   'dangote-qrgallery': 'Gallerie QR Code',
+  'dangote-import-employes': 'Import employés Dangote',
+  'dangote-budget-recharge': 'Recharge budget Dangote',
 };

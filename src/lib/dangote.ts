@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { isValidSnPhone, normalizeSnPhone } from '@/lib/wave';
 import type {
   DangoteApiResponse,
   DangoteAuditLog,
@@ -454,4 +455,170 @@ export function statutPaiementLabel(statut: string): string {
     case 'cancelled': return 'Annulé';
     default: return 'En attente';
   }
+}
+
+// ---------------------------------------------------------------------------
+// Import d'employés
+// ---------------------------------------------------------------------------
+
+export interface DangoteImportRow {
+  matricule: string;
+  nom: string;
+  prenom: string;
+  telephone?: string | null;
+  photo_url?: string | null;
+}
+
+export interface DangoteImportSummary {
+  ok: boolean;
+  imported: number;
+  skipped: number;
+  failed: number;
+  errors: string[];
+}
+
+/**
+ * Importe des employés via l'API Dangote (`employee.create`), qui applique les
+ * contrôles de rôle, génère le QR token et journalise chaque création.
+ * Un matricule déjà présent est compté comme ignoré, pas comme une erreur.
+ */
+export async function importEmployees(
+  entiteId: string,
+  employees: DangoteImportRow[],
+): Promise<DangoteImportSummary> {
+  const summary: DangoteImportSummary = {
+    ok: true,
+    imported: 0,
+    skipped: 0,
+    failed: 0,
+    errors: [],
+  };
+
+  for (const row of employees) {
+    const matricule = (row.matricule ?? '').trim();
+    const nom = (row.nom ?? '').trim();
+    const prenom = (row.prenom ?? '').trim();
+
+    if (!matricule || !nom || !prenom) {
+      summary.failed += 1;
+      summary.errors.push(`${matricule || '(sans matricule)'} : matricule, nom et prénom sont obligatoires.`);
+      continue;
+    }
+
+    try {
+      await dangoteApi('employee.create', {
+        entiteId,
+        matricule,
+        nom,
+        prenom,
+        telephone: row.telephone?.trim() || null,
+        photoUrl: row.photo_url?.trim() || null,
+      });
+      summary.imported += 1;
+    } catch (err) {
+      const message = (err as Error).message ?? 'Erreur inconnue.';
+      if (/déjà|deja|Matricule ou QR/i.test(message)) {
+        summary.skipped += 1;
+      } else {
+        summary.failed += 1;
+        summary.errors.push(`${matricule} : ${message}`);
+      }
+    }
+  }
+
+  summary.ok = summary.failed === 0;
+  return summary;
+}
+
+// ---------------------------------------------------------------------------
+// Recharge du budget entreprise (SycaPay)
+// ---------------------------------------------------------------------------
+
+export type DangoteDepositMethod = 'wave' | 'mobile_money' | 'card';
+
+export interface DangoteDeepLink {
+  app: string;
+  url: string;
+}
+
+export interface DangoteDepositInitiation {
+  reference: string;
+  montant: number;
+  methode: DangoteDepositMethod;
+  redirectUrl?: string | null;
+  qrCode?: string | null;
+  deepLinks?: DangoteDeepLink[] | null;
+  checkoutUrl?: string | null;
+  validFor?: { endDateTime?: string } | null;
+  transactionId?: string | null;
+}
+
+export interface DangoteDepositStatus {
+  reference: string;
+  status: 'pending' | 'paid' | 'failed' | 'cancelled' | 'unknown' | string;
+  montant?: number | null;
+  solde?: number | null;
+  providerStatus?: string | null;
+  providerError?: string | null;
+  settledAt?: string | null;
+  message?: string | null;
+}
+
+export type RechargePreparation =
+  | {
+      ok: true;
+      montant: number;
+      methode: 'wave' | 'mobile_money';
+      telephone: string;
+    }
+  | { ok: false; error: string };
+
+/** Valide une recharge de budget avant d'appeler la passerelle. */
+export function preparerRechargeBudget(
+  amount: number | string,
+  method: string,
+  phone: string,
+): RechargePreparation {
+  const montant = Math.floor(Number(amount));
+  if (!Number.isFinite(montant) || montant < 100) {
+    return { ok: false, error: 'Montant invalide : minimum 100 FCFA.' };
+  }
+  if (method !== 'wave' && method !== 'mobile_money') {
+    return { ok: false, error: 'Moyen de paiement invalide.' };
+  }
+  if (!isValidSnPhone(phone)) {
+    return { ok: false, error: 'Numéro sénégalais invalide (77, 78, 76, 75, 70…).' };
+  }
+  return {
+    ok: true,
+    montant,
+    methode: method,
+    telephone: normalizeSnPhone(phone),
+  };
+}
+
+/** Ouvre un dépôt de budget côté serveur : la ligne reste `pending` jusqu'au webhook. */
+export async function initierDepotBudget(
+  entiteId: string,
+  montant: number,
+  methode: DangoteDepositMethod,
+  telephone?: string,
+): Promise<DangoteDepositInitiation> {
+  return dangoteApi<DangoteDepositInitiation & DangoteApiResponse>('deposit.initiate', {
+    entiteId,
+    montant,
+    methode,
+    telephone: telephone ?? null,
+  });
+}
+
+/** Interroge l'état d'un dépôt et solde le budget si le prestataire a confirmé. */
+export async function statutDepotBudget(
+  entiteId: string,
+  reference: string,
+): Promise<DangoteDepositStatus> {
+  return dangoteApi<DangoteDepositStatus & DangoteApiResponse>('deposit.status', {
+    entiteId,
+    reference,
+  });
 }

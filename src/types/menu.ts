@@ -82,7 +82,9 @@ export type PageName =
   | 'dangote-rh'
   | 'dangote-superviseur'
   | 'dangote-employe'
-  | 'dangote-qrgallery';
+  | 'dangote-qrgallery'
+  | 'dangote-import-employes'
+  | 'dangote-budget-recharge';
 
 // ---------- O RESTO — modèle issu du cahier des charges ----------
 
