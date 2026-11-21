@@ -46,20 +46,22 @@ export function isWeekComplete(menus: { day: string; items: WeeklyMenuItem[] | n
   });
 }
 
-/** Contenu minimal d'un menu : un plat, une description ou un dessert. */
+/** Contenu minimal d'un menu : un plat, une description, un dessert ou une image. */
 export type MenuContent = {
   day: string;
   items?: WeeklyMenuItem[] | null;
   description?: string | null;
   dessert?: string | null;
+  image?: string | null;
 };
 
-/** Un jour est composé dès qu'il porte au moins un plat, une description ou un dessert. */
+/** Un jour est composé dès qu'il porte au moins un plat, une description, un dessert ou une image. */
 export function hasMenuContent(menu: MenuContent): boolean {
   return (
     (Array.isArray(menu.items) && menu.items.length > 0) ||
     !!menu.description?.trim() ||
-    !!menu.dessert?.trim()
+    !!menu.dessert?.trim() ||
+    !!menu.image?.trim()
   );
 }
 

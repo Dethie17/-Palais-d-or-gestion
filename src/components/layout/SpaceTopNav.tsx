@@ -30,7 +30,7 @@ const NAV: { page: PageName; label: string; icon: React.ReactNode; roles: UserRo
   { page: 'home', label: 'Accueil', icon: <Home aria-hidden className="w-4 h-4" />, roles: ['personnel'] },
   { page: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'validation', label: 'Validation repas', icon: <ScanLine aria-hidden className="w-4 h-4" />, roles: ['gestionnaire'] },
-  { page: 'menu', label: 'Gestion Menu', icon: <ClipboardList aria-hidden className="w-4 h-4" />, roles: ['gestionnaire'] },
+  { page: 'menu', label: 'Gestion du menu', icon: <ClipboardList aria-hidden className="w-4 h-4" />, roles: ['personnel', 'gestionnaire'] },
   { page: 'subscriptions', label: 'Abonnés & paiements', icon: <Users aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
 
   { page: 'qrgallery', label: 'QR Code', icon: <QrCode aria-hidden className="w-4 h-4" />, roles: ['personnel', 'gestionnaire'] },
@@ -39,7 +39,7 @@ const NAV: { page: PageName; label: string; icon: React.ReactNode; roles: UserRo
   { page: 'entities', label: 'Entités', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'dangote-rh', label: 'Espace RH', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['rh'] },
   { page: 'dangote-qrgallery', label: 'QR Employés', icon: <QrCode aria-hidden className="w-4 h-4" />, roles: ['rh'] },
-  { page: 'profile', label: 'Mon compte', icon: <UserRound aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin', 'gestionnaire', 'rh', 'superviseur-dangote', 'employe-dangote'] },
+  { page: 'profile', label: 'Mon compte', icon: <UserRound aria-hidden className="w-4 h-4" />, roles: ['admin', 'gestionnaire', 'rh', 'superviseur-dangote', 'employe-dangote'] },
   { page: 'dangote-superviseur', label: 'Espace Superviseur', icon: <UtensilsCrossed aria-hidden className="w-4 h-4" />, roles: ['superviseur-dangote'] },
   { page: 'dangote-employe', label: 'Espace Employé', icon: <UserRound aria-hidden className="w-4 h-4" />, roles: ['employe-dangote'] },
   { page: 'establishments', label: 'Établissements', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: [] },

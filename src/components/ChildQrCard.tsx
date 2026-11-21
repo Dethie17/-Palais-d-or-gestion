@@ -10,7 +10,7 @@ import { useResto } from '@/context/RestoContext';
  * QR + n° + Copier / PNG / Imprimer. Utilisée dans l'espace parent
  * (section QR Codes) et la page QR Codes dédiée.
  */
-const ChildQrCard = ({ k, qrRefCb, copied, onCopy, onPNG, onPrint, anchorId }: {
+const ChildQrCard = ({ k, qrRefCb, copied, onCopy, onPNG, onPrint, anchorId, children }: {
   k: Child;
   qrRefCb: (el: HTMLDivElement | null) => void;
   copied: string | null;
@@ -18,6 +18,7 @@ const ChildQrCard = ({ k, qrRefCb, copied, onCopy, onPNG, onPrint, anchorId }: {
   onPNG: (childId: string, token: string, label: string) => void;
   onPrint: () => void;
   anchorId?: string;
+  children?: React.ReactNode;
 }) => {
   const { subscriptions } = useResto();
   const token = k.qrToken || getChildQrToken(k.id);
@@ -55,6 +56,7 @@ const ChildQrCard = ({ k, qrRefCb, copied, onCopy, onPNG, onPrint, anchorId }: {
           </div>
         </div>
       </div>
+      {children && <div className="mt-4 pt-4 border-t border-slate-100">{children}</div>}
     </li>
   );
 };

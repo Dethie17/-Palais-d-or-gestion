@@ -167,6 +167,8 @@ describe('Ordre des écritures abonnement → paiement', () => {
     act(() => { created = api.subscribeBundle('client', 'F2', undefined, 2, '2026-12-01T00:00:00.000Z'); });
     expect(created).not.toBeNull();
     expect(created!.subscription.id).toBeTruthy();
+    expect(created!.subscription.endDate).toBe('2027-02-01T00:00:00.000Z');
+    expect(created!.subscription.mealsRemaining).toBe(40);
     expect(typeof created!.persisted.then).toBe('function');
     await act(async () => { await Promise.resolve(); });
     act(() => { releaseSubscription?.(); });

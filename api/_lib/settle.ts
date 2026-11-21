@@ -45,8 +45,38 @@ interface InferredSubscription {
   status: string;
   created_at: string;
   child_id: string | null;
-  formula_id: string | null;
+  start_date: string | null;
+  end_date: string | null;
   meals_remaining: number | null;
+}
+
+/**
+ * Quota d'un abonnement multi-mois : un abonnement réservé du 1er novembre au
+ * 1er janvier vaut DEUX fois le quota mensuel. L'ancien repli appliquait un
+ * seul mois et faisait perdre le second mois déjà payé.
+ */
+function quotaForSubscription(
+  mealsIncluded: number | null | undefined,
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+): number {
+  const monthly = Math.max(0, Math.floor(Number(mealsIncluded) || 0));
+  if (!monthly) return 0;
+  const start = startDate ? new Date(startDate) : null;
+  const end = endDate ? new Date(endDate) : null;
+  if (
+    !start || !end
+    || !Number.isFinite(start.getTime())
+    || !Number.isFinite(end.getTime())
+  ) {
+    return monthly;
+  }
+  const months = Math.max(
+    1,
+    (end.getUTCFullYear() - start.getUTCFullYear()) * 12
+      + (end.getUTCMonth() - start.getUTCMonth()),
+  );
+  return monthly * months;
 }
 
 function normalizeTag(tag: unknown): string | null {
@@ -208,8 +238,14 @@ async function settleInternal(args: SettleArgs, db: SupabaseClient = adminClient
           const sub = (siblings ?? []).find((item: InferredSubscription) => item.id === subscriptionId);
           if (!sub) continue;
           const { data: formula } = await db.from('formulas').select('meals_included').eq('id', sub.formula_id).maybeSingle();
+          const quota = quotaForSubscription(
+            formula?.meals_included,
+            sub.start_date,
+            sub.end_date,
+          );
           await db.from('subscriptions').update({
-            status: 'active', meals_remaining: formula?.meals_included ?? sub.meals_remaining,
+            status: 'active',
+            meals_remaining: Math.max(Number(sub.meals_remaining) || 0, quota),
           }).eq('id', subscriptionId);
         }
         return { outcome: 'settled', reference: args.reference, status: 'paid' };

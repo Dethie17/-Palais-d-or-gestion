@@ -81,6 +81,29 @@ export function abonnementCouvreMois(sub: Pick<Subscription, 'startDate' | 'endD
   return s <= debut && e >= fin - 1;
 }
 
+/**
+ * Nombre de mois civils couverts par une période (au moins 1).
+ *
+ * Les abonnements multi-mois sont réservés du 1er d'un mois au 1er du mois
+ * suivant le dernier mois choisi : la différence de clés `yyyy-MM` donne donc
+ * exactement le nombre de mois payés (Novembre → Janvier = 2 mois).
+ */
+export function nombreDeMoisPeriode(startIso: string, endIso: string): number {
+  const debut = cleMois(startIso);
+  const fin = cleMois(endIso);
+  if (!debut || !fin) return 1;
+  const [anneeDebut, moisDebut] = debut.split('-').map(Number);
+  const [anneeFin, moisFin] = fin.split('-').map(Number);
+  const mois = (anneeFin - anneeDebut) * 12 + (moisFin - moisDebut);
+  return Number.isFinite(mois) && mois > 0 ? mois : 1;
+}
+
+/** Quota de repas d'une période : quota mensuel × nombre de mois couverts. */
+export function quotaPourPeriode(quotaMensuel: number, startIso: string, endIso: string): number {
+  const mensuel = Math.max(0, Math.floor(Number(quotaMensuel) || 0));
+  return mensuel * nombreDeMoisPeriode(startIso, endIso);
+}
+
 /** Ensemble des mois couverts par les abonnements de l'enfant. */
 export function moisCouverts(subs: Pick<Subscription, 'startDate' | 'endDate' | 'status'>[]): Set<MoisCle> {
   const set = new Set<MoisCle>();

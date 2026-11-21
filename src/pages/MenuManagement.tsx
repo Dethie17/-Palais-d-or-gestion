@@ -72,6 +72,7 @@ const MenuManagement = () => {
     items: [],
     description: monthForm[day]?.description ?? '',
     dessert: monthForm[day]?.dessert ?? '',
+    image: monthForm[day]?.image ?? '',
   }));
   const composedCount = publishedDays(monthRows).length;
   const canPublish = isWeekPublishable(monthRows);

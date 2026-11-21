@@ -55,7 +55,7 @@ import { inferCycleFromClass, normalizeCycle, canonicalClassName } from '@/lib/s
 import { decodeMenuDescription, encodeMenuDescription, foldDayPriceIntoItems, publishedDays } from '@/lib/menus';
 import { referenceMonth, referenceWeek } from '@/data/cantineWeek';
 import { menuMonthDays } from '@/lib/menuDates';
-import { cleMois, debutDeMoisIso, moisSuivant } from '@/lib/aboMois';
+import { cleMois, debutDeMoisIso, moisSuivant, nombreDeMoisPeriode, quotaPourPeriode } from '@/lib/aboMois';
 
 /**
  * Écritures Supabase « best-effort » : l'application continue en local quand
@@ -1382,7 +1382,10 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const formula = formulas.find((f) => f.id === target.formulaId);
       if (!formula) return;
       // Quota NEUF : le solde de la période précédente n'est pas repris.
-      const meals = formula.mealsIncluded;
+      // Multi-mois : la période réservée porte déjà ses bornes (1er → 1er du
+      // mois suivant le dernier mois choisi), donc le quota est le tarif
+      // mensuel × nombre de mois — jamais un seul mois.
+      const meals = quotaPourPeriode(formula.mealsIncluded, startDate, endDate);
       setSubscriptions((prev) =>
         prev.map((s) => {
           if (s.id === subscriptionId) {
@@ -1856,10 +1859,14 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       if (!sub || sub.status !== 'pending') return null;
       const formula = formulas.find((f) => f.id === sub.formulaId);
       if (!formula) return null;
+      // Un abonnement réservé pour N mois se paie N × le tarif mensuel, même
+      // encaissé au comptoir : sinon le parent règle un mois et n'en reçoit
+      // qu'un alors que sa période en couvre plusieurs.
+      const months = nombreDeMoisPeriode(sub.startDate, sub.endDate);
       const now = new Date();
       const reference = `PAY-${Date.now().toString(36).toUpperCase()}`;
       const payment: ORestoPayment = {
-        id: uid('P'), subscriptionId: sub.id, amount: formula.price,
+        id: uid('P'), subscriptionId: sub.id, amount: formula.price * months,
         method: 'cash', status: 'paid', reference, createdAt: now.toISOString(),
       };      setPayments((prev) => [...prev, payment]);
       persist('oresto_payments', supabase.from('oresto_payments').insert({
@@ -1966,8 +1973,11 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       const start = sub.startDate ? new Date(sub.startDate) : new Date();
       const end = endOfThatMonth(start);
       const formula = formulas.find((f) => f.id === sub.formulaId);
-      setSubscriptions((prev) => prev.map((s) => (s.id === subscriptionId ? { ...s, status: 'active' as const, endDate: end.toISOString(), mealsRemaining: formula?.mealsIncluded ?? s.mealsRemaining } : s)));
-      persist('subscriptions', supabase.from('subscriptions').update({ status: 'active', end_date: end.toISOString() }).eq('id', subscriptionId));
+      const meals = formula
+        ? quotaPourPeriode(formula.mealsIncluded, start.toISOString(), end.toISOString())
+        : sub.mealsRemaining;
+      setSubscriptions((prev) => prev.map((s) => (s.id === subscriptionId ? { ...s, status: 'active' as const, endDate: end.toISOString(), mealsRemaining: meals } : s)));
+      persist('subscriptions', supabase.from('subscriptions').update({ status: 'active', end_date: end.toISOString(), meals_remaining: meals }).eq('id', subscriptionId));
     },
     [subscriptions, formulas],
   );

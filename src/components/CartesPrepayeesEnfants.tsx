@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { formatCurrency } from '@/lib/utils';
@@ -10,7 +10,8 @@ import {
   isParentPaymentMethod,
 } from '@/lib/parentPayments';
 import WavePaymentModal from '@/components/WavePaymentModal';
-import { AlertCircle, CheckCircle, RefreshCw, Smartphone, Wallet } from 'lucide-react';
+import ChildQrCard from '@/components/ChildQrCard';
+import { AlertCircle, CheckCircle, Download, QrCode, RefreshCw, Smartphone, Wallet } from 'lucide-react';
 import type { ORestoPaymentMethod, WalletTx, WalletTxStatus } from '@/types/menu';
 
 const QUICK_AMOUNTS = [1000, 2000, 5000, 10000];
@@ -59,6 +60,47 @@ const CartesPrepayeesEnfants = () => {
   const [confirming, setConfirming] = useState(false);
   const [busyChild, setBusyChild] = useState<string | null>(null);
   const [resumingId, setResumingId] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const qrRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const copyToken = async (token: string) => {
+    try {
+      await navigator.clipboard.writeText(token);
+      setCopied(token);
+      window.setTimeout(() => setCopied(null), 2000);
+    } catch { /* presse-papiers indisponible */ }
+  };
+
+  const downloadPNG = (childId: string, token: string, label: string) => {
+    const svg = qrRefs.current[childId]?.querySelector('svg');
+    if (!svg) return;
+    const xml = new XMLSerializer().serializeToString(svg);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 760;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 36px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('O RESTO', canvas.width / 2, 56);
+      ctx.drawImage(img, 70, 90, 500, 500);
+      ctx.font = '28px monospace';
+      ctx.fillText(token, canvas.width / 2, 640);
+      ctx.font = '24px sans-serif';
+      ctx.fillStyle = '#64748b';
+      ctx.fillText(label, canvas.width / 2, 690);
+      const a = document.createElement('a');
+      a.download = `oresto-qr-${token}.png`;
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+  };
 
   const amountFor = (childId: string) => amounts[childId] ?? '';
   const methodFor = (childId: string): ORestoPaymentMethod => methods[childId] ?? 'wave';
@@ -141,9 +183,12 @@ const CartesPrepayeesEnfants = () => {
           <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Cantine</p>
           <h2 className="text-lg font-black tracking-tight text-slate-900">Cartes prépayées</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Solde de chaque enfant et recharge par Wave ou Orange Money. La carte se crédite dès que le paiement est confirmé.
+            QR, solde et recharge au même endroit : présentez la carte à la cantine ou rechargée par Wave / Orange Money. Crédit après confirmation.
           </p>
         </div>
+        <span className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-[11px] font-black text-emerald-800 whitespace-nowrap">
+          <QrCode className="w-3.5 h-3.5" /> <Download className="w-3.5 h-3.5" /> QR + Recharge
+        </span>
       </div>
 
       {notice && (
@@ -167,22 +212,29 @@ const CartesPrepayeesEnfants = () => {
           Vos cartes prépayées apparaîtront ici dès l’inscription du premier enfant.
         </p>
       ) : (
-        <div className="mt-4 grid md:grid-cols-2 gap-4">
+        <ul data-testid="qr-enfants" className="mt-4 grid md:grid-cols-2 gap-4">
           {kids.map((kid) => {
             const pending = pendingTopUp(kid.id);
             const method = methodFor(kid.id);
             const recent = childTxs(kid.id).slice(0, 3);
             return (
-              <article key={kid.id} className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm flex flex-col">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-extrabold text-slate-900 truncate">{kid.firstName} {kid.lastName}</p>
-                    <p className="text-xs text-slate-500">{kid.className}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
+              <ChildQrCard
+                key={kid.id}
+                k={kid}
+                qrRefCb={(el) => { qrRefs.current[kid.id] = el; }}
+                copied={copied}
+                onCopy={copyToken}
+                onPNG={downloadPNG}
+                onPrint={() => window.print()}
+              >
+                <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 border border-slate-200 p-3">
+                  <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Solde carte</p>
                     <p className="text-2xl font-black text-emerald-700 tabular-nums">{formatCurrency(walletOf(kid.id))}</p>
                   </div>
+                  <span className="px-2.5 py-1 rounded-full bg-white border border-slate-200 text-[10px] font-bold text-slate-600 whitespace-nowrap">
+                    QR + Recharge
+                  </span>
                 </div>
 
                 {pending && (
@@ -305,10 +357,10 @@ const CartesPrepayeesEnfants = () => {
                     </ul>
                   )}
                 </div>
-              </article>
+              </ChildQrCard>
             );
           })}
-        </div>
+        </ul>
       )}
 
       {modal && (

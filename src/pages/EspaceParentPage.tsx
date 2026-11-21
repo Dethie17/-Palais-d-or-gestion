@@ -20,7 +20,6 @@ import {
 } from '@/types/menu';
 import WavePaymentModal from '@/components/WavePaymentModal';
 import PaymentReceiptModal from '@/components/PaymentReceiptModal';
-import QrCartesEnfants from '@/components/QrCartesEnfants';
 import CartesPrepayeesEnfants from '@/components/CartesPrepayeesEnfants';
 import PayerAbonnementSection from '@/components/PayerAbonnementSection';
 import {
@@ -499,10 +498,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
           </div>
         </header>
 
-        {/* ===== QR DES ENFANTS (style clair, en haut de page) ===== */}
-        <QrCartesEnfants kids={kids} />
-
-        {/* ===== CARTES PRÉPAYÉES : SOLDE + RECHARGE ===== */}
+        {/* ===== CARTE UNIQUE PAR ENFANT : QR + SOLDE + RECHARGE ===== */}
         <CartesPrepayeesEnfants />
 
         {/* ===== HISTORIQUE DES REPAS PAR JOUR ===== */}

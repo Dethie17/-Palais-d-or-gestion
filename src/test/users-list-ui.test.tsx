@@ -104,7 +104,7 @@ describe('Utilisateurs — liste professionnelle', () => {
     await screen.findByRole('heading', { name: /utilisateurs/i });
     expect(screen.queryByTestId('create-parent-form')).not.toBeInTheDocument();
     expect(screen.queryByText(/créer un compte parent/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Import → Import Parent/)).toBeInTheDocument();
+    expect(await screen.findByText(/Import → Import Parent/)).toBeInTheDocument();
   });
 
   it('affiche les parents en tableau avec identifiant, enfants et actions', async () => {

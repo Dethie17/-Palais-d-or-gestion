@@ -3,6 +3,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { ORestoPayment, ORestoPaymentMethod, ORestoPaymentStatus, PageName, Subscription } from '@/types/menu';
 import { formatCurrency } from '@/lib/utils';
+import { nombreDeMoisPeriode, quotaPourPeriode } from '@/lib/aboMois';
 import { isMobileMethod, isOnlineMobileMethod, isValidSnPhone, type WavePaymentRequest } from '@/lib/wave';
 import { isOfficialFormula, isHebdoFormula } from '@/lib/formulas';
 import {
@@ -103,6 +104,12 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
 
   const username = user?.username ?? '';
   const active = mySubscription(username);
+  const activeFormula = active ? formulas.find((f) => f.id === active.formulaId) : undefined;
+  // La carte active couvre parfois plusieurs mois : le quota affiché est
+  // celui de TOUTE la période, pas le tarif d'un seul mois.
+  const activeIncluded = active
+    ? quotaPourPeriode(activeFormula?.mealsIncluded ?? active.mealsRemaining, active.startDate, active.endDate)
+    : 0;
   const allMine = mySubscriptions(username);
   const pendings = allMine.filter((s) => s.status === 'pending');
   const payments = myPayments(username);
@@ -361,14 +368,14 @@ const SubscriptionPage = ({ onNavigate }: SubscriptionPageProps) => {
           {active ? (
             <ActiveCard
               sub={active}
-              formulaName={formulas.find((f) => f.id === active.formulaId)?.name ?? 'Formule'}
-              included={formulas.find((f) => f.id === active.formulaId)?.mealsIncluded ?? active.mealsRemaining}
-              durationDays={formulas.find((f) => f.id === active.formulaId)?.durationDays ?? 30}
-              rules={formulas.find((f) => f.id === active.formulaId)?.rules}
+              formulaName={activeFormula?.name ?? 'Formule'}
+              included={activeIncluded}
+              durationDays={activeFormula?.durationDays ?? 30}
+              rules={activeFormula?.rules}
               days={daysLeft(active)}
               pricePerMeal={pricePerMeal(
-                formulas.find((f) => f.id === active.formulaId)?.price ?? 0,
-                formulas.find((f) => f.id === active.formulaId)?.mealsIncluded ?? 1,
+                activeFormula?.price ?? 0,
+                activeFormula?.mealsIncluded ?? 1,
               )}
               onQR={() => onNavigate('qrcode')}
               onRenew={(method) => handleRenew(active.id, method)}
@@ -834,9 +841,12 @@ function ActiveCard({ sub, formulaName, included, durationDays, rules, days, pri
   onQR: () => void; onRenew: (method: ORestoPaymentMethod) => void; onChildren: () => void;
 }) {
   const used = Math.max(0, included - sub.mealsRemaining);
-  const pct = included > 0 ? Math.round((sub.mealsRemaining / included) * 100) : 0;
+  const pct = included > 0 ? Math.min(100, Math.max(0, Math.round((sub.mealsRemaining / included) * 100))) : 0;
   const urgent = days <= 3 || sub.mealsRemaining <= 3;
-  const planLabel = durationDays <= 7 ? 'ABONNEMENT SEMAINE' : 'ABONNEMENT MENSUEL';
+  const months = nombreDeMoisPeriode(sub.startDate, sub.endDate);
+  const planLabel = durationDays <= 7
+    ? 'ABONNEMENT SEMAINE'
+    : months > 1 ? `ABONNEMENT ${months} MOIS` : 'ABONNEMENT MENSUEL';
   return (
     <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950 text-white rounded-3xl overflow-hidden shadow-xl border border-slate-800">
       <div className={`px-5 md:px-6 py-3.5 flex flex-wrap items-center justify-between gap-2 ${urgent ? 'bg-gradient-to-r from-amber-500 to-slate-500' : 'bg-gradient-to-r from-emerald-500 to-teal-500'}`}>

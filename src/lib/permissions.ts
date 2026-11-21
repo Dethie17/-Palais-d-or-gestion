@@ -29,7 +29,7 @@ export const ROLE_PAGES: Record<UserRole, PageName[]> = {
   // Superviseur cantine : tout le terrain (menus, paramètres, établissements),
   // y compris les réclamations. La caisse (POS, encaissement, espace repas)
   // est réservée au Caissier.
-  personnel: ['home', 'subscriptions', 'paiements', 'qrgallery', 'users', 'settings', 'profile', 'dashboard', 'paymentsuccess', 'paymentfailure', 'entities'],
+  personnel: ['home', 'subscriptions', 'paiements', 'qrgallery', 'users', 'settings', 'menu', 'dashboard', 'paymentsuccess', 'paymentfailure', 'entities'],
   // Caissier : POS uniquement (caisse, scan QR élève).
   gestionnaire: ['pos', 'paymentsuccess', 'paymentfailure', 'profile'],
   // Espace ISM : pilotage + suivi uniquement (sans menus/paramètres/établissements)
@@ -77,7 +77,7 @@ export const PAGE_LABEL: Record<PageName, string> = {
   establishments: 'Établissements',
   history: 'Historique des commandes',
   dashboard: 'Tableau de bord',
-  menu: 'Gestion Menu',
+  menu: 'Gestion du menu',
   menus: 'Menus',
   pos: 'Caisse (POS)',
   payment: 'Encaissement',

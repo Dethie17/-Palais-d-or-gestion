@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { weeklyMenuTotal, menuTicketTotal, sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete, isWeekPublishable, publishedDays, foldDayPriceIntoItems, encodeMenuDescription, decodeMenuDescription } from '@/lib/menus';
+import { weeklyMenuTotal, menuTicketTotal, sanitizeMenuItem, MAX_ITEMS_PER_DAY, isWeekComplete, isWeekPublishable, publishedDays, hasMenuContent, foldDayPriceIntoItems, encodeMenuDescription, decodeMenuDescription } from '@/lib/menus';
 import { DAY_PHOTOS, menuPhoto } from '@/data/cantineWeek';
 
 describe('composition des menus du jour (DG)', () => {
@@ -101,7 +101,18 @@ describe('composition des menus du jour (DG)', () => {
     expect(isWeekPublishable([{ day: 'Lundi', items: [], description: '  ', dessert: '' }])).toBe(false);
   });
 
-  it('jours publiés = ceux avec un plat, une description ou un dessert', () => {
+  it('une image seule suffit à publier un jour du menu', () => {
+    const menus = [
+      { day: 'Lundi', items: [], description: '', dessert: '', image: 'https://example.com/lundi.jpg' },
+      { day: 'Mardi', items: [], description: '', dessert: '', image: '   ' },
+    ];
+    expect(hasMenuContent(menus[0])).toBe(true);
+    expect(hasMenuContent(menus[1])).toBe(false);
+    expect(isWeekPublishable(menus)).toBe(true);
+    expect(publishedDays(menus).map((m) => m.day)).toEqual(['Lundi']);
+  });
+
+  it('jours publiés = ceux avec un plat, une description, un dessert ou une image', () => {
     const menus = [
       { day: 'Lundi', items: [{ name: 'A', price: 500 }] },
       { day: 'Mardi', items: [], description: 'Tacos + Jus' },

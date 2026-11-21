@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { canAccess, peutSupprimerParent, ROLE_PAGES } from '@/lib/permissions';
 import { UserRole } from '@/context/AuthContext';
 import UsersPage from '@/pages/UsersPage';
+import SpaceTopNav from '@/components/layout/SpaceTopNav';
 
 /**
  * Suppression définitive d'un parent : permise au Superviseur (personnel)
@@ -63,6 +64,20 @@ describe('Permission — suppression définitive d’un parent', () => {
     expect(canAccess('admin', 'users')).toBe(true);
     expect(canAccess('gestionnaire', 'users')).toBe(false);
     expect(ROLE_PAGES.gestionnaire).not.toContain('users');
+  });
+
+  it('matrice : Superviseur a le menu mais plus « Mon compte »', () => {
+    expect(canAccess('personnel', 'menu')).toBe(true);
+    expect(canAccess('personnel', 'profile')).toBe(false);
+    expect(ROLE_PAGES.personnel).toContain('menu');
+    expect(ROLE_PAGES.personnel).not.toContain('profile');
+  });
+
+  it('nav Superviseur : « Gestion du menu » visible, « Mon compte » absent', () => {
+    états.user = { username: 'session-personnel', role: 'personnel' };
+    render(<SpaceTopNav currentPage="home" onNavigate={vi.fn()} />);
+    expect(screen.getAllByRole('button', { name: /Gestion du menu/i }).length).toBeGreaterThan(0);
+    expect(screen.queryAllByRole('button', { name: /Mon compte/i })).toHaveLength(0);
   });
 
   it('le Superviseur voit le bouton Supprimer', async () => {

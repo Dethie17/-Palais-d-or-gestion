@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   cleMois, labelMois, debutDeMoisIso, moisSuivant, prochainsMois,
   abonnementCouvreMois, moisCouverts, selectionConsecutive, etatMoisPourAbonnements,
+  nombreDeMoisPeriode, quotaPourPeriode,
 } from '@/lib/aboMois';
 import type { Subscription } from '@/types/menu';
 
@@ -27,6 +28,21 @@ describe('aboMois — clés et libellés', () => {
     expect(l).toHaveLength(3);
     expect(l[0].cle).toBe('2026-11');
     expect(l[1].cle).toBe('2026-12');
+  });
+});
+
+describe('aboMois — quota des périodes multi-mois', () => {
+  it('deux mois consécutifs valent deux fois le quota mensuel', () => {
+    expect(nombreDeMoisPeriode('2026-11-01T00:00:00Z', '2027-01-01T00:00:00Z')).toBe(2);
+    expect(quotaPourPeriode(30, '2026-11-01T00:00:00Z', '2027-01-01T00:00:00Z')).toBe(60);
+    expect(quotaPourPeriode(30, '2026-11-01T00:00:00Z', '2027-02-01T00:00:00Z')).toBe(90);
+  });
+
+  it('un seul mois ou des bornes illisibles restent à un mois', () => {
+    expect(nombreDeMoisPeriode('2026-11-01T00:00:00Z', '2026-12-01T00:00:00Z')).toBe(1);
+    expect(nombreDeMoisPeriode('pas-une-date', '2026-12-01T00:00:00Z')).toBe(1);
+    expect(quotaPourPeriode(30, '2026-12-01T00:00:00Z', '2026-11-01T00:00:00Z')).toBe(30);
+    expect(quotaPourPeriode(0, '2026-11-01T00:00:00Z', '2027-01-01T00:00:00Z')).toBe(0);
   });
 });
 
