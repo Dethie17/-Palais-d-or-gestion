@@ -3,7 +3,7 @@
 --
 -- À exécuter dans Supabase → SQL Editor, après supabase-fix-mois-futurs.sql.
 --
--- Deux corrections :
+-- Corrections :
 -- 1. Les fonctions de règlement SycaPay créditent désormais
 --    meals_included × nombre de mois couverts par la période de
 --    l'abonnement, au lieu d'un seul mois.
@@ -12,6 +12,10 @@
 --    Le nombre de repas déjà consommés est déduit des validations
 --    acceptées : on ne retire jamais de repas, on ne fait que combler le
 --    manque.
+-- 3. Les vues « mois payés par enfant » répartissent les paiements
+--    groupés entre les enfants et n'accordent un mois qu'aux paiements
+--    complets (27 000 / 32 000 = 1 mois, 54 000 / 64 000 = 2 mois).
+-- 4. Le Superviseur (personnel) peut écrire les menus et les produits.
 --
 -- Idempotent : functions CREATE OR REPLACE, table de sauvegarde avec
 -- ON CONFLICT DO NOTHING, UPDATE conditionné sur l'ancienne valeur.
@@ -184,41 +188,77 @@ ORDER BY b.created_at DESC;
 -- ------------------------------------------------------------
 -- 3. Historique des paiements → mois payés par enfant
 --    Règle métier : 27 000 / 32 000 = 1 mois ; 54 000 / 64 000 = 2 mois.
---    Source = montant réellement réglé / tarif de la formule.
---    L'enfant vient du paiement, de l'abonnement lié, ou d'un groupe
---    d'un seul enfant. Les paiements sans enfant identifiable restent
---    visibles dans v_detail_mois_payes_par_enfant (champs enfant NULL).
+--    Un paiement partiel (ex. 9 500) ne compte pas comme un mois.
+--    Paiement groupé : le montant est réparti entre les abonnements du
+--    groupe, puis chaque enfant est compté séparément.
+--    L'enfant vient de l'abonnement, du paiement, ou du groupe.
 -- ------------------------------------------------------------
 CREATE OR REPLACE VIEW public.v_detail_mois_payes_par_enfant AS
-WITH base AS (
+WITH paiements AS (
   SELECT
-    p.id AS payment_id,
+    p.id,
     p.reference,
     COALESCE(p.paid_at, p.settled_at, p.created_at) AS paid_at,
     p.client_username,
-    COALESCE(p.formula_id, s.formula_id) AS formula_id,
     p.amount,
-    COALESCE(
-      p.child_id,
-      s.child_id,
-      CASE WHEN array_length(g.child_ids, 1) = 1 THEN g.child_ids[1] END
-    ) AS child_id,
-    CASE
-      WHEN NULLIF(f.price, 0) IS NOT NULL
-        THEN GREATEST(1, ROUND(p.amount / NULLIF(f.price, 0))::INTEGER)
-      WHEN s.id IS NOT NULL
-        THEN public.oresto_subscription_months(s.start_date, s.end_date)
-      ELSE 1
-    END AS mois_payes
+    p.subscription_id,
+    p.formula_id,
+    p.child_id
   FROM public.oresto_payments p
-  LEFT JOIN public.subscriptions s ON s.id = p.subscription_id
-  LEFT JOIN public.formulas f ON f.id = COALESCE(p.formula_id, s.formula_id)
-  LEFT JOIN public.oresto_payment_groups g ON g.payment_reference = p.reference
   WHERE p.status = 'paid'
     AND p.amount > 0
-    AND COALESCE(f.kind, 'subscription') = 'subscription'
-    AND COALESCE(p.formula_id, s.formula_id) <> 'TICKET-JOUR'
-    AND COALESCE(f.duration_days, 30) >= 28
+), groupes AS (
+  SELECT
+    g.payment_reference,
+    g.subscription_ids,
+    COALESCE(SUM(f.price), 0) AS prix_groupe
+  FROM public.oresto_payment_groups g
+  LEFT JOIN LATERAL unnest(g.subscription_ids) AS u(sid) ON TRUE
+  LEFT JOIN public.subscriptions s ON s.id = u.sid
+  LEFT JOIN public.formulas f ON f.id = s.formula_id
+  GROUP BY g.payment_reference, g.subscription_ids
+), lignes_groupe AS (
+  SELECT
+    p.id AS payment_id,
+    p.reference,
+    p.paid_at,
+    p.client_username,
+    s.formula_id,
+    CASE
+      WHEN gr.prix_groupe > 0 THEN p.amount * f.price / gr.prix_groupe
+      ELSE p.amount / GREATEST(array_length(gr.subscription_ids, 1), 1)
+    END AS amount,
+    COALESCE(s.child_id, p.child_id) AS child_id,
+    s.id AS subscription_id,
+    s.start_date,
+    s.end_date
+  FROM paiements p
+  JOIN groupes gr ON gr.payment_reference = p.reference
+  CROSS JOIN LATERAL unnest(gr.subscription_ids) AS u(sid)
+  JOIN public.subscriptions s ON s.id = u.sid
+  LEFT JOIN public.formulas f ON f.id = s.formula_id
+), lignes_simples AS (
+  SELECT
+    p.id AS payment_id,
+    p.reference,
+    p.paid_at,
+    p.client_username,
+    COALESCE(p.formula_id, s.formula_id) AS formula_id,
+    p.amount AS amount,
+    COALESCE(p.child_id, s.child_id) AS child_id,
+    s.id AS subscription_id,
+    s.start_date,
+    s.end_date
+  FROM paiements p
+  LEFT JOIN public.subscriptions s ON s.id = p.subscription_id
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.oresto_payment_groups g
+    WHERE g.payment_reference = p.reference
+  )
+), base AS (
+  SELECT * FROM lignes_groupe
+  UNION ALL
+  SELECT * FROM lignes_simples
 )
 SELECT
   b.payment_id,
@@ -227,14 +267,24 @@ SELECT
   b.client_username,
   b.formula_id,
   b.amount,
-  b.mois_payes,
+  CASE
+    WHEN NULLIF(f.price, 0) IS NOT NULL
+      THEN GREATEST(0, FLOOR(b.amount / NULLIF(f.price, 0))::INTEGER)
+    WHEN b.subscription_id IS NOT NULL
+      THEN public.oresto_subscription_months(b.start_date, b.end_date)
+    ELSE 0
+  END AS mois_payes,
   b.child_id,
   c.first_name AS enfant_prenom,
   c.last_name AS enfant_nom,
   c.class_name AS classe,
   c.parent_username
 FROM base b
-LEFT JOIN public.children c ON c.id = b.child_id;
+LEFT JOIN public.formulas f ON f.id = b.formula_id
+LEFT JOIN public.children c ON c.id = b.child_id
+WHERE COALESCE(f.kind, 'subscription') = 'subscription'
+  AND b.formula_id <> 'TICKET-JOUR'
+  AND COALESCE(f.duration_days, 30) >= 28;
 
 CREATE OR REPLACE VIEW public.v_mois_payes_par_enfant AS
 SELECT
