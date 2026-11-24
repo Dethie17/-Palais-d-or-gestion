@@ -256,6 +256,19 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
     };
   }, [dashboard?.stats, dashboard?.budget?.solde, repasValides, employes, activeEmployees.length, debut, fin]);
 
+  const budgetSolde = num(stats.solde);
+  const budgetSeuil = num(parametres?.budget_alerte_seuil ?? 0);
+  const budgetLow = budgetSolde <= budgetSeuil;
+  const readiness = [
+    { label: 'Schéma Pro installé', done: Boolean(dashboard?.schemaReady), hint: dashboard?.schemaReady ? 'Toutes les tables sont prêtes' : 'Exécuter supabase-dangote-pro.sql' },
+    { label: 'Paramètres du restaurant', done: Boolean(parametres), hint: parametres ? `${parametres.heure_ouverture} – ${parametres.heure_fermeture}` : 'À configurer' },
+    { label: 'Employés enregistrés', done: employes.length > 0, hint: `${employes.length} fiche${employes.length > 1 ? 's' : ''}` },
+    { label: 'Budget cantine alimenté', done: budgetSolde > 0, hint: budgetSolde > 0 ? formatMoney(budgetSolde, devise) : 'Rechargez le budget' },
+    { label: 'Menu du jour publié', done: menusAujourdhui.length > 0, hint: menusAujourdhui.length > 0 ? 'Service prêt' : 'À composer' },
+  ];
+  const readinessDone = readiness.filter((step) => step.done).length;
+  const readinessPct = Math.round((readinessDone / readiness.length) * 100);
+
   const filteredEmployees = useMemo(() => {
     const needle = search.trim().toLowerCase();
     if (!needle) return employes;
@@ -457,11 +470,6 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
         icon={<ShieldCheck className="h-5 w-5" />}
         actions={
           <>
-            {onNavigate && (
-              <button className={secondaryButtonClass} onClick={() => onNavigate('entities')}>
-                ← Entités
-              </button>
-            )}
             <button className={secondaryButtonClass} onClick={() => void load(true)} disabled={refreshing}>
               {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Actualiser
@@ -489,10 +497,33 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
         <SchemaBanner message="Exécutez supabase-dangote-pro.sql dans Supabase pour activer toutes les fonctions Pro." />
       ) : null}
 
+      {budgetLow ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-gradient-to-r from-amber-50 to-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+              <Wallet className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-sm font-black text-amber-900">Budget cantine à surveiller</p>
+              <p className="text-xs text-amber-700">
+                Solde disponible : {formatMoney(budgetSolde, devise)}
+                {budgetSeuil > 0 ? ` · seuil d’alerte ${formatMoney(budgetSeuil, devise)}` : ''}. Rechargez pour garantir les subventions.
+              </p>
+            </div>
+          </div>
+          {onNavigate ? (
+            <button className={primaryButtonClass} onClick={() => onNavigate('dangote-budget-recharge')}>
+              <Wallet className="h-4 w-4" /> Recharger le budget
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-slate-100 p-1">
           <TabsTrigger value="apercu" className="gap-1.5"><LayoutDashboard className="h-4 w-4" /> Vue d’ensemble</TabsTrigger>
           <TabsTrigger value="employes" className="gap-1.5"><Users className="h-4 w-4" /> Employés</TabsTrigger>
+          <TabsTrigger value="menus" className="gap-1.5"><UtensilsCrossed className="h-4 w-4" /> Menus &amp; catalogue</TabsTrigger>
 
           <TabsTrigger value="paiements" className="gap-1.5"><Wallet className="h-4 w-4" /> Paiements SycaPay</TabsTrigger>
           <TabsTrigger value="rapports" className="gap-1.5"><BarChart3 className="h-4 w-4" /> Rapports</TabsTrigger>
@@ -527,6 +558,48 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
               hint={`${stats.repas} repas · ${stats.participants} participant(s)`}
               icon={<Banknote className="h-5 w-5" />}
             />
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[1.3fr_1fr]">
+            <Panel
+              title="Mise en route"
+              description="Les cinq étapes pour un service Dangote totalement opérationnel."
+              actions={<StatusBadge tone={readinessPct === 100 ? 'green' : readinessPct >= 60 ? 'amber' : 'red'}>{readinessPct}% prêt</StatusBadge>}
+            >
+              <ProgressBar value={readinessPct} tone={readinessPct === 100 ? 'green' : readinessPct >= 60 ? 'amber' : 'red'} />
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {readiness.map((step) => (
+                  <div key={step.label} className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 ${step.done ? 'border-emerald-100 bg-emerald-50/40' : 'border-slate-200 bg-white'}`}>
+                    <CheckCircle2 className={`mt-0.5 h-4 w-4 shrink-0 ${step.done ? 'text-emerald-600' : 'text-slate-300'}`} />
+                    <div className="min-w-0">
+                      <p className={`text-xs font-black ${step.done ? 'text-emerald-900' : 'text-slate-700'}`}>{step.label}</p>
+                      <p className="truncate text-[11px] text-slate-500">{step.hint}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+
+            <Panel title="Actions rapides" description="Le quotidien du gestionnaire en un clic.">
+              <div className="grid gap-2">
+                <button className={primaryButtonClass} onClick={() => setEmployeeEditor({ open: true, employe: null })}>
+                  <Plus className="h-4 w-4" /> Ajouter un employé
+                </button>
+                <button className={secondaryButtonClass} onClick={() => { setTab('menus'); setMenuDate(todayIso()); }}>
+                  <UtensilsCrossed className="h-4 w-4" /> Composer le menu du jour
+                </button>
+                {onNavigate ? (
+                  <button className={secondaryButtonClass} onClick={() => onNavigate('dangote-budget-recharge')}>
+                    <Wallet className="h-4 w-4" /> Recharger le budget
+                  </button>
+                ) : null}
+                {onNavigate ? (
+                  <button className={secondaryButtonClass} onClick={() => onNavigate('dangote-import-employes')}>
+                    <Users className="h-4 w-4" /> Importer des employés
+                  </button>
+                ) : null}
+              </div>
+            </Panel>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
@@ -690,6 +763,88 @@ const DangoteRhPage = ({ onNavigate }: { onNavigate?: (page: string) => void }) 
               </div>
             )}
           </Panel>
+        </TabsContent>
+
+        <TabsContent value="menus" className="space-y-4">
+          <Panel
+            title="Menus du jour"
+            description="Composez les menus standard et premium servis au comptoir."
+            actions={
+              <div className="flex flex-wrap items-end gap-2">
+                <button className={secondaryButtonClass} onClick={() => setMenuDate(shiftDate(menuDate, -1))} type="button">
+                  Précédent
+                </button>
+                <Field label="Date">
+                  <input type="date" className={`${inputClass} w-40`} value={menuDate} onChange={(event) => setMenuDate(event.target.value)} />
+                </Field>
+                <button className={secondaryButtonClass} onClick={() => setMenuDate(shiftDate(menuDate, 1))} type="button">
+                  Suivant
+                </button>
+                <button className={secondaryButtonClass} onClick={() => setMenuDate(todayIso())} type="button">
+                  Aujourd’hui
+                </button>
+                <button className={primaryButtonClass} onClick={() => openMenuEditor('standard')}>
+                  <Plus className="h-4 w-4" /> Menu standard
+                </button>
+                <button className={primaryButtonClass} onClick={() => openMenuEditor('premium')}>
+                  <Plus className="h-4 w-4" /> Menu premium
+                </button>
+              </div>
+            }
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              {(['standard', 'premium'] as const).map((type) => {
+                const menu = menuFor(type);
+                const plats = platsForMenu(menu);
+                const active = Boolean(menu?.actif);
+                return (
+                  <div key={type} className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/60 p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{type} · {type === 'premium' ? 'Repas supérieur' : 'Repas standard'}</p>
+                        <p className="mt-0.5 truncate text-base font-black text-slate-900">{menu?.titre ?? `Menu ${type}`}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {menu ? formatMoney(menu.prix, devise) : `Prix par défaut : ${formatMoney(type === 'premium' ? parametres?.prix_premium ?? 2300 : parametres?.prix_standard ?? 1400, devise)}`}
+                        </p>
+                      </div>
+                      <StatusBadge tone={active ? 'green' : menu ? 'slate' : 'amber'}>{menu ? (active ? 'Actif' : 'Inactif') : 'Absent'}</StatusBadge>
+                    </div>
+                    <div className="mt-3 min-h-[84px] rounded-2xl border border-dashed border-slate-200 bg-white/70 p-3">
+                      {plats.length === 0 ? (
+                        <EmptyState title="Aucun plat composé" description="Ajoutez des plats du catalogue pour ce menu." />
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {plats.map((plat) => (
+                            <span key={plat.id} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800">
+                              {plat.nom}
+                              <span className="font-black text-slate-900">{formatMoney(plat.prix, devise)}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button className={primaryButtonClass} onClick={() => openMenuEditor(type)}>
+                        {menu ? 'Modifier le menu' : 'Créer le menu'}
+                      </button>
+                      {menu ? (
+                        <button className={dangerButtonClass} onClick={() => deleteMenu(menu)}>
+                          Supprimer
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Panel>
+
+          <DangoteCataloguePanel
+            entiteId={entiteId}
+            categories={dashboard?.categories ?? []}
+            plats={dashboard?.plats ?? []}
+            onChanged={() => void load(true)}
+          />
         </TabsContent>
 
         <TabsContent value="paiements" className="space-y-4">

@@ -39,7 +39,7 @@ const NAV: { page: PageName; label: string; icon: React.ReactNode; roles: UserRo
   { page: 'entities', label: 'Entités', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['personnel', 'admin'] },
   { page: 'dangote-rh', label: 'Espace RH', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: ['rh'] },
   { page: 'dangote-qrgallery', label: 'QR Employés', icon: <QrCode aria-hidden className="w-4 h-4" />, roles: ['rh'] },
-  { page: 'profile', label: 'Mon compte', icon: <UserRound aria-hidden className="w-4 h-4" />, roles: ['admin', 'gestionnaire', 'rh', 'superviseur-dangote', 'employe-dangote'] },
+  { page: 'profile', label: 'Mon compte', icon: <UserRound aria-hidden className="w-4 h-4" />, roles: ['admin', 'rh', 'superviseur-dangote', 'employe-dangote'] },
   { page: 'dangote-superviseur', label: 'Espace Superviseur', icon: <UtensilsCrossed aria-hidden className="w-4 h-4" />, roles: ['superviseur-dangote'] },
   { page: 'dangote-employe', label: 'Espace Employé', icon: <UserRound aria-hidden className="w-4 h-4" />, roles: ['employe-dangote'] },
   { page: 'establishments', label: 'Établissements', icon: <Building2 aria-hidden className="w-4 h-4" />, roles: [] },

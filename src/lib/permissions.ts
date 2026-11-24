@@ -24,20 +24,22 @@ const ISM_PAGES: PageName[] = [
   // émission et impression restent côté Superviseur (terrain).
 ];
 export const ROLE_PAGES: Record<UserRole, PageName[]> = {
-  // Parent : UN seul parcours continu (Accès Abonné) + profil.
-  client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'profile', 'paymentsuccess', 'paymentfailure', 'entities'],
+  // Parent : UN seul parcours continu (Accès Abonné). La page « Mon compte »
+  // est retirée de l'espace parent.
+  client: ['home', 'menus', 'children', 'subscription', 'qrcode', 'paymentsuccess', 'paymentfailure', 'entities'],
   // Superviseur cantine : tout le terrain (menus, paramètres, établissements),
   // y compris les réclamations. La caisse (POS, encaissement, espace repas)
-  // est réservée au Caissier.
+  // est réservée au Caissier. « Mon compte » est retiré de son périmètre.
   personnel: ['home', 'subscriptions', 'paiements', 'qrgallery', 'users', 'settings', 'menu', 'dashboard', 'paymentsuccess', 'paymentfailure', 'entities'],
-  // Caissier : POS uniquement (caisse, scan QR élève).
-  gestionnaire: ['pos', 'paymentsuccess', 'paymentfailure', 'profile'],
+  // Caissier : POS uniquement (caisse, scan QR élève). « Mon compte » retiré.
+  gestionnaire: ['pos', 'paymentsuccess', 'paymentfailure'],
   // Espace ISM : pilotage + suivi uniquement (sans menus/paramètres/établissements)
   admin: [...ISM_PAGES, 'dangote-rh', 'dangote-import-employes', 'dangote-budget-recharge', 'paymentsuccess', 'paymentfailure'],
   // DCH Dangote : gestion employés, achats de talons, crédit repas.
-  rh: ['dangote-rh', 'dangote-qrgallery', 'dangote-import-employes', 'dangote-budget-recharge', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
-  'superviseur-dangote': ['dangote-superviseur', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
-  'employe-dangote': ['dangote-employe', 'entities', 'profile', 'paymentsuccess', 'paymentfailure'],
+  // La page « Entités » est retirée de TOUT l'espace Dangote.
+  rh: ['dangote-rh', 'dangote-qrgallery', 'dangote-import-employes', 'dangote-budget-recharge', 'profile', 'paymentsuccess', 'paymentfailure'],
+  'superviseur-dangote': ['dangote-superviseur', 'profile', 'paymentsuccess', 'paymentfailure'],
+  'employe-dangote': ['dangote-employe', 'profile', 'paymentsuccess', 'paymentfailure'],
 };
 
 export function canAccess(role: UserRole | undefined, page: PageName): boolean {

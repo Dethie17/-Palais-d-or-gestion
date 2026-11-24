@@ -73,11 +73,33 @@ describe('Permission — suppression définitive d’un parent', () => {
     expect(ROLE_PAGES.personnel).not.toContain('profile');
   });
 
+  it('matrice : Caissier et Parent n’ont plus « Mon compte »', () => {
+    expect(canAccess('gestionnaire', 'profile')).toBe(false);
+    expect(canAccess('client', 'profile')).toBe(false);
+    expect(ROLE_PAGES.gestionnaire).not.toContain('profile');
+    expect(ROLE_PAGES.client).not.toContain('profile');
+  });
+
+  it('matrice Dangote : plus de page « Entités » pour les rôles Dangote', () => {
+    expect(canAccess('rh', 'entities')).toBe(false);
+    expect(canAccess('superviseur-dangote', 'entities')).toBe(false);
+    expect(canAccess('employe-dangote', 'entities')).toBe(false);
+    expect(ROLE_PAGES.rh).not.toContain('entities');
+    expect(ROLE_PAGES['superviseur-dangote']).not.toContain('entities');
+    expect(ROLE_PAGES['employe-dangote']).not.toContain('entities');
+  });
+
   it('nav Superviseur : « Gestion du menu » visible, « Mon compte » absent', () => {
     états.user = { username: 'session-personnel', role: 'personnel' };
     render(<SpaceTopNav currentPage="home" onNavigate={vi.fn()} />);
     expect(screen.getAllByRole('button', { name: /Gestion du menu/i }).length).toBeGreaterThan(0);
     expect(screen.queryAllByRole('button', { name: /Mon compte/i })).toHaveLength(0);
+  });
+
+  it('nav Dangote : plus d’entrée « Entités »', () => {
+    états.user = { username: 'session-rh', role: 'rh' };
+    render(<SpaceTopNav currentPage="dangote-rh" onNavigate={vi.fn()} />);
+    expect(screen.queryAllByRole('button', { name: /Entités/i })).toHaveLength(0);
   });
 
   it('le Superviseur voit le bouton Supprimer', async () => {

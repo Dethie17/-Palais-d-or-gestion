@@ -12,7 +12,7 @@ import { publishedDays } from '@/lib/menus';
 import { menuPhoto } from '@/data/cantineWeek';
 import { localDateKey, menuDateLabel } from '@/lib/menuDates';
 import type {
-  Complaint, ComplaintCategory, ComplaintStatus,
+  Child, Complaint, ComplaintCategory, ComplaintStatus, MealValidation,
   ORestoPayment, ORestoPaymentStatus, PageName, Subscription, WalletTx,
 } from '@/types/menu';
 import {
@@ -26,6 +26,7 @@ import {
   CheckCircle, AlertCircle, Smartphone,
   LogOut, CalendarClock, CreditCard, Megaphone,
   MessageSquareWarning, Send, X, MessagesSquare,
+  Receipt, UtensilsCrossed, Inbox,
 } from 'lucide-react';
 
 const METHOD_LABEL: Record<string, string> = {
@@ -63,6 +64,15 @@ const shortDate = (iso: string) => {
   const d = new Date(iso);
   return Number.isNaN(+d) ? '' : d.toLocaleDateString('fr-FR');
 };
+/** Retrouve l'enfant d'une validation repas (id, QR, ou enfant unique). */
+function childOfValidation(kids: Child[], v: MealValidation, kidsCount: number): Child | undefined {
+  const direct = v.childId ? kids.find((k) => k.id === v.childId) : undefined;
+  if (direct) return direct;
+  const byQr = kids.find((k) => k.qrToken && v.qrToken && k.qrToken === v.qrToken);
+  if (byQr) return byQr;
+  if (kidsCount === 1) return kids[0];
+  return undefined;
+}
 /** Jours restants avant la fin de la période (0 = dernier jour, négatif = fini). */
 const daysUntil = (iso: string, nowMs = Date.now()) => {
   const end = new Date(iso).getTime();
@@ -111,6 +121,8 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [histChild, setHistChild] = useState('all');
+  const [histTab, setHistTab] = useState<'paiements' | 'consommation'>('paiements');
+  const [histStatus, setHistStatus] = useState<'all' | ORestoPaymentStatus>('all');
   const [loggingOut, setLoggingOut] = useState(false);
 
   /** Annonces déjà lues par ce parent (clé par parent) : badge « nouveautés ». */
@@ -166,25 +178,6 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
   };
   const activeSubs = allMine.filter(isLiveNow);
   const activeByChild = (childId: string) => activeSubs.find((s) => s.childId === childId);
-
-  const totals = useMemo(() => {
-    const spent = kids
-      .flatMap((k) => childTxs(k.id))
-      .filter((t) => t.status === 'paid' && (t.kind === 'debit' || t.kind === 'subscription') && new Date(t.createdAt) >= monthStartOf())
-      .reduce((s, t) => s + t.amount, 0);
-    const mealsLeft = activeSubs.reduce((s, sub) => s + sub.mealsRemaining, 0);
-    return { spent, mealsLeft };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kids, allMine, childTxs]);
-
-  const paidCount = payments.filter((p) => p.status === 'paid').length;
-  const pendingPaymentsCount = payments.filter((p) => p.status === 'pending').length;
-
-  const childNameOf = (sub: Subscription | null | undefined) => {
-    if (!sub?.childId) return null;
-    const k = kids.find((x) => x.id === sub.childId);
-    return k ? `${k.firstName} ${k.lastName}` : null;
-  };
 
   /** Nom affiché du parent connecté (fiche identité sinon identifiant). */
   const myName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : username;
@@ -394,64 +387,117 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     return map;
   }, [kids, childTxs, walletOf]);
 
-  // ---------- Historique complet ----------
-  const historyRows = useMemo(() => {
-    const payList = myPayments(username)
-      .filter((p) => p.status !== 'cancelled')
-      .map((p) => ({
-        kind: 'pay' as const,
+  // ---------- Historique : paiements / recharges / consommation ----------
+  const subscriptionRows = payments
+    .filter((p) => p.status !== 'cancelled')
+    .map((p) => {
+      const sub = allMine.find((s) => s.id === p.subscriptionId);
+      const child = sub?.childId ? kids.find((k) => k.id === sub.childId) : undefined;
+      return {
         id: p.id,
+        kind: 'subscription' as const,
         date: p.createdAt,
-        child: childNameOf(allMine.find((s) => s.id === p.subscriptionId)) ?? 'Abonnement',
-        label: `Paiement ${p.reference} — ${METHOD_LABEL[p.method] ?? p.method}`,
+        childId: child?.id ?? null,
+        child: child ? `${child.firstName} ${child.lastName}` : 'Abonnement cantine',
+        label: p.status === 'refunded' ? 'Abonnement remboursé' : 'Abonnement cantine',
+        detail: p.reference,
+        method: p.method,
         amount: -p.amount,
         status: p.status,
         solde: null as number | null,
-        tx: null as WalletTx | null,
         payment: p,
-      }));
-    const walletList = kids
-      .filter((k) => histChild === 'all' || k.id === histChild)
-      .flatMap((k) =>
-        childTxs(k.id).map((t) => ({
-          kind: 'wallet' as const,
-          id: t.id,
-          date: t.createdAt,
-          child: `${k.firstName} ${k.lastName}`,
-          label: t.label ?? (t.kind === 'topup' ? 'Recharge carte' : t.kind === 'subscription' ? 'Abonnement' : 'Repas'),
-          amount: t.kind === 'topup' || t.kind === 'refund' ? t.amount : -t.amount,
-          status: t.status,
-          solde: soldeAfterByTx[t.id] ?? null,
-          tx: t,
-          payment: null as ORestoPayment | null,
-        })),
-      );
-    const validList = myValidations(username)
-      .filter(() => histChild === 'all')
-      .map((v) => ({
-        kind: 'valid' as const,
+        tx: null as WalletTx | null,
+      };
+    });
+
+  const cardRows = kids.flatMap((k) =>
+    childTxs(k.id)
+      .filter((t) => t.kind === 'topup' || t.kind === 'refund')
+      .filter((t) => t.status !== 'cancelled')
+      .map((t) => ({
+        id: t.id,
+        kind: t.kind,
+        date: t.createdAt,
+        childId: k.id,
+        child: `${k.firstName} ${k.lastName}`,
+        label: t.kind === 'refund' ? 'Remboursement carte' : 'Recharge carte',
+        detail: t.reference,
+        method: t.method,
+        amount: t.amount,
+        status: t.status,
+        solde: soldeAfterByTx[t.id] ?? null,
+        payment: null as ORestoPayment | null,
+        tx: t,
+      })),
+  );
+
+  const paymentHistory = [...subscriptionRows, ...cardRows]
+    .sort((a, b) => +new Date(b.date) - +new Date(a.date));
+
+  const filteredPaymentHistory = paymentHistory.filter((r) => {
+    if (histChild !== 'all' && r.childId !== histChild) return false;
+    if (histStatus !== 'all' && r.status !== histStatus) return false;
+    return true;
+  });
+
+  const paymentStats = {
+    subscriptions: subscriptionRows
+      .filter((r) => r.status === 'paid' && (histChild === 'all' || r.childId === histChild))
+      .reduce((sum, r) => sum + Math.abs(r.amount), 0),
+    subscriptionCount: subscriptionRows.filter((r) => r.status === 'paid' && (histChild === 'all' || r.childId === histChild)).length,
+    topups: cardRows
+      .filter((r) => r.kind === 'topup' && r.status === 'paid' && (histChild === 'all' || r.childId === histChild))
+      .reduce((sum, r) => sum + r.amount, 0),
+    topupCount: cardRows.filter((r) => r.kind === 'topup' && r.status === 'paid' && (histChild === 'all' || r.childId === histChild)).length,
+    pending: paymentHistory.filter((r) => r.status === 'pending' && (histChild === 'all' || r.childId === histChild)).length,
+  };
+
+  const mealRows = myValidations(username)
+    .map((v) => {
+      const child = childOfValidation(kids, v, kids.length);
+      return {
         id: v.id,
         date: v.validatedAt,
-        child: 'Cantine',
-        label: v.status === 'accepted' ? 'Repas servi' : `Repas refusé${v.reason ? ` — ${v.reason}` : ''}`,
-        amount: 0,
-        status: v.status === 'accepted' ? 'paid' : 'failed',
-        solde: null as number | null,
-        tx: null as WalletTx | null,
-        payment: null as ORestoPayment | null,
-      }));
-    return [...payList, ...walletList, ...validList].sort((a, b) => +new Date(b.date) - +new Date(a.date));
-  }, [myPayments, username, kids, childTxs, histChild, myValidations, allMine, soldeAfterByTx]);
+        childId: child?.id ?? null,
+        child: child ? `${child.firstName} ${child.lastName}` : 'Enfant non identifié',
+        className: child?.className ?? '—',
+        status: v.status,
+        reason: v.reason ?? '',
+      };
+    })
+    .sort((a, b) => +new Date(b.date) - +new Date(a.date));
+
+  const filteredMealRows = mealRows.filter((r) => histChild === 'all' || r.childId === histChild);
+
+  const mealStatsByChild = kids.map((k) => {
+    const accepted = mealRows.filter((r) => r.childId === k.id && r.status === 'accepted');
+    const thisMonth = accepted.filter((r) => new Date(r.date) >= monthStartOf());
+    const rejected = mealRows.filter((r) => r.childId === k.id && r.status === 'rejected');
+    return {
+      child: k,
+      accepted: accepted.length,
+      thisMonth: thisMonth.length,
+      rejected: rejected.length,
+      last: accepted[0]?.date ?? null,
+    };
+  });
+
+  const mealsThisMonth = mealRows.filter(
+    (r) => r.status === 'accepted' && new Date(r.date) >= monthStartOf() && (histChild === 'all' || r.childId === histChild),
+  ).length;
+  const mealsAccepted = filteredMealRows.filter((r) => r.status === 'accepted').length;
+  const mealsRejected = filteredMealRows.filter((r) => r.status === 'rejected').length;
 
   const mealsByDay = useMemo(() => {
     const map = new Map<string, number>();
-    for (const v of myValidations(username)) {
-      if (v.status !== 'accepted') continue;
-      const day = v.validatedAt.slice(0, 10);
+    for (const row of filteredMealRows) {
+      if (row.status !== 'accepted') continue;
+      const day = row.date.slice(0, 10);
       map.set(day, (map.get(day) ?? 0) + 1);
     }
-    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [myValidations, username]);
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 7);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myValidations, histChild]);
 
   const sortedMenus = [...weeklyMenus].sort((a, b) => a.day.localeCompare(b.day));
   const publishedMenus = publishedDays(sortedMenus).filter((m) => /^2026-11-(0[2-9]|[12][0-9]|30)$/.test(m.day));
@@ -500,22 +546,6 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
 
         {/* ===== CARTE UNIQUE PAR ENFANT : QR + SOLDE + RECHARGE ===== */}
         <CartesPrepayeesEnfants />
-
-        {/* ===== HISTORIQUE DES REPAS PAR JOUR ===== */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-bold text-slate-900 mb-3">Historique des repas servis</h2>
-          {mealsByDay.length === 0 ? (
-            <p className="text-xs text-slate-500">Aucun repas servi pour le moment.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {mealsByDay.map(([day, count]) => (
-                <span key={day} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700">
-                  {day} <span className="font-bold text-slate-900">{count}</span>
-                </span>
-              ))}
-            </div>
-          )}
-        </section>
 
         {/* ===== 1. PAIEMENT D'ABONNEMENT ===== */}
         <section id="payer-abonnement" className="scroll-mt-24" data-testid="section-payer-abonnement">
@@ -647,73 +677,317 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
 
         {/* ===== 6. HISTORIQUE ===== */}
         <section id="historique" className="scroll-mt-24" data-testid="section-historique">
-          <SectionTitle step="6" title="Historique des dépenses" />
-          <div className="flex flex-wrap items-center gap-2 mt-4 mb-3">
-            {[{ id: 'all', label: 'Tous' }, ...kids.map((k) => ({ id: k.id, label: k.firstName }))].map((o) => (
-              <button
-                key={o.id}
-                onClick={() => setHistChild(o.id)}
-                className={`px-3.5 py-1.5 min-h-[36px] rounded-full text-xs font-bold ${histChild === o.id ? 'bg-slate-900 text-white' : 'bg-white border text-slate-600'}`}
-              >
-                {o.label}
-              </button>
-            ))}
-            <span className="ml-auto text-sm font-bold">Ce mois : <span className="text-emerald-700">{formatCurrency(totals.spent)}</span></span>
+          <SectionTitle
+            step="6"
+            title="Historique des dépenses"
+            sub="Deux fenêtres claires : vos paiements et recharges, puis la consommation des repas de chaque enfant."
+          />
 
-          </div>
-          <div className="bg-white rounded-2xl border overflow-hidden">
-            {historyRows.length === 0 ? (
-              <p className="p-10 text-center text-sm text-slate-500">Aucune dépense pour le moment.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[640px]">
-                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-widest">
-                    <tr><th className="text-left p-4">Date</th><th className="text-left p-4">Enfant</th><th className="text-left p-4">Opération</th><th className="text-right p-4">Montant</th><th className="text-right p-4">Solde</th><th className="text-right p-4">Statut</th></tr>
-                  </thead>
-                  <tbody>
-                    {historyRows.slice(0, 80).map((r) => (
-                      <tr key={`${r.kind}-${r.id}`} className="border-t">
-                        <td className="p-4 text-slate-400 text-[13px] whitespace-nowrap">{new Date(r.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</td>
-                        <td className="p-4 font-bold text-[13px]">{r.child}</td>
-                        <td className="p-4 text-slate-500 text-[13px]">{r.label}</td>
-                        <td className={`p-4 text-right font-bold text-[13px] ${r.amount > 0 ? 'text-emerald-700' : ''}`}>
-                          {r.amount > 0 ? '+' : ''}{r.amount === 0 ? '—' : formatCurrency(r.amount)}
-                        </td>
-                        <td className="p-4 text-right text-[13px] font-bold text-slate-500">
-                          {r.solde != null ? formatCurrency(r.solde) : '—'}
-                        </td>
-                        <td className="p-4 text-right">
-                          {r.kind === 'pay' && r.payment ? (
-                            <span className="inline-flex items-center gap-2">
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_STYLE[r.payment.status]}`}>{STATUS_LABEL[r.payment.status]}</span>
-                              {r.payment.status === 'paid' && (
-                                <button onClick={() => setReceipt(r.payment)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-bold">Reçu</button>
-                              )}
-                              {r.payment.status === 'pending' && r.payment.method && isMobileMethod(r.payment.method) && (
-                                <button onClick={() => handleResumePayment(r.payment!.id)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-bold inline-flex items-center gap-1">
-                                  <Smartphone className="w-3.5 h-3.5" /> Confirmer
-                                </button>
-                              )}
-                            </span>
-                          ) : r.kind === 'wallet' && r.status === 'pending' && r.tx && isMobileMethod(r.tx.method) ? (
-                            <span className="inline-flex items-center gap-2">
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_STYLE[r.status as ORestoPaymentStatus]}`}>{STATUS_LABEL[r.status as ORestoPaymentStatus]}</span>
-                              <button onClick={() => handleResumeTopup(r.tx)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-bold inline-flex items-center gap-1">
-                                <Smartphone className="w-3.5 h-3.5" /> Confirmer
-                              </button>
-                            </span>
-                          ) : (
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_STYLE[r.status as ORestoPaymentStatus] ?? STATUS_STYLE.paid}`}>{STATUS_LABEL[r.status as ORestoPaymentStatus] ?? r.status}</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <div className="mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="relative overflow-hidden bg-gradient-to-r from-slate-950 via-emerald-950 to-slate-900 px-4 py-5 text-white md:px-6">
+              <div aria-hidden className="absolute -right-12 -top-20 h-52 w-52 rounded-full bg-emerald-400/10 blur-2xl" />
+              <div aria-hidden className="absolute -bottom-16 left-1/3 h-40 w-40 rounded-full bg-amber-300/10 blur-2xl" />
+              <div className="relative flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-200">Journal du parent</p>
+                  <p className="text-lg font-black tracking-tight">Mes opérations</p>
+                </div>
+                <div className="inline-flex rounded-2xl bg-white/10 p-1 ring-1 ring-white/10" role="tablist" aria-label="Historique">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={histTab === 'paiements'}
+                    data-testid="hist-tab-paiements"
+                    onClick={() => setHistTab('paiements')}
+                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition ${histTab === 'paiements' ? 'bg-white text-slate-900 shadow' : 'text-emerald-50/80 hover:bg-white/10'}`}
+                  >
+                    <Receipt className="h-4 w-4" aria-hidden /> Paiements &amp; recharges
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${histTab === 'paiements' ? 'bg-emerald-100 text-emerald-800' : 'bg-white/15 text-white'}`}>{paymentHistory.length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={histTab === 'consommation'}
+                    data-testid="hist-tab-repas"
+                    onClick={() => setHistTab('consommation')}
+                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition ${histTab === 'consommation' ? 'bg-white text-slate-900 shadow' : 'text-emerald-50/80 hover:bg-white/10'}`}
+                  >
+                    <UtensilsCrossed className="h-4 w-4" aria-hidden /> Repas par enfant
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${histTab === 'consommation' ? 'bg-emerald-100 text-emerald-800' : 'bg-white/15 text-white'}`}>{mealRows.length}</span>
+                  </button>
+                </div>
               </div>
-            )}
+            </div>
+
+            <div className="p-4 md:p-6">
+              {histTab === 'paiements' ? (
+                <div data-testid="historique-paiements">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Abonnements réglés</p>
+                      <p className="mt-1 text-xl font-black text-emerald-900">{formatCurrency(paymentStats.subscriptions)}</p>
+                      <p className="text-[11px] text-emerald-700/80">{paymentStats.subscriptionCount} paiement{paymentStats.subscriptionCount > 1 ? 's' : ''}</p>
+                    </div>
+                    <div className="rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 to-white p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-sky-700">Cartes rechargées</p>
+                      <p className="mt-1 text-xl font-black text-sky-900">{formatCurrency(paymentStats.topups)}</p>
+                      <p className="text-[11px] text-sky-700/80">{paymentStats.topupCount} recharge{paymentStats.topupCount > 1 ? 's' : ''}</p>
+                    </div>
+                    <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">En attente</p>
+                      <p className="mt-1 text-xl font-black text-amber-900">{paymentStats.pending}</p>
+                      <p className="text-[11px] text-amber-700/80">opération{paymentStats.pending > 1 ? 's' : ''} à confirmer</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Enfant</span>
+                    <button
+                      type="button"
+                      onClick={() => setHistChild('all')}
+                      className={`min-h-[34px] rounded-full px-3.5 py-1.5 text-xs font-bold transition ${histChild === 'all' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
+                    >
+                      Tous
+                    </button>
+                    {kids.map((k) => (
+                      <button
+                        key={k.id}
+                        type="button"
+                        onClick={() => setHistChild(k.id)}
+                        className={`min-h-[34px] rounded-full px-3.5 py-1.5 text-xs font-bold transition ${histChild === k.id ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
+                      >
+                        {k.firstName}
+                      </button>
+                    ))}
+                    <select
+                      value={histStatus}
+                      onChange={(e) => setHistStatus(e.target.value as typeof histStatus)}
+                      className="ml-auto min-h-[34px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+                      aria-label="Filtrer par statut"
+                    >
+                      <option value="all">Tous les statuts</option>
+                      <option value="paid">Payé</option>
+                      <option value="pending">En attente</option>
+                      <option value="failed">Échoué</option>
+                      <option value="refunded">Remboursé</option>
+                    </select>
+                  </div>
+
+                  <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
+                    {filteredPaymentHistory.length === 0 ? (
+                      <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+                        <Inbox className="h-8 w-8 text-slate-300" aria-hidden />
+                        <p className="text-sm font-bold text-slate-700">Aucune opération pour ce filtre.</p>
+                        <p className="text-xs text-slate-500">Vos paiements d’abonnement et recharges de carte apparaîtront ici.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[720px] text-sm">
+                          <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                            <tr>
+                              <th className="p-3 text-left font-black">Date</th>
+                              <th className="p-3 text-left font-black">Enfant</th>
+                              <th className="p-3 text-left font-black">Opération</th>
+                              <th className="p-3 text-right font-black">Montant</th>
+                              <th className="p-3 text-right font-black">Solde carte</th>
+                              <th className="p-3 text-right font-black">Statut</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredPaymentHistory.slice(0, 80).map((r) => (
+                              <tr key={`${r.kind}-${r.id}`} className="border-t border-slate-100 transition hover:bg-emerald-50/30">
+                                <td className="whitespace-nowrap p-3 text-[13px] text-slate-400">
+                                  {new Date(r.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: '2-digit' })}
+                                </td>
+                                <td className="p-3 text-[13px] font-bold text-slate-900">{r.child}</td>
+                                <td className="p-3">
+                                  <p className="text-[13px] font-bold text-slate-800">{r.label}</p>
+                                  <p className="text-[11px] text-slate-400">{r.detail} · {METHOD_LABEL[r.method] ?? r.method}</p>
+                                </td>
+                                <td className={`p-3 text-right text-[13px] font-black ${r.amount > 0 ? 'text-emerald-700' : 'text-slate-800'}`}>
+                                  {r.amount > 0 ? '+' : ''}{formatCurrency(r.amount)}
+                                </td>
+                                <td className="p-3 text-right text-[13px] font-bold text-slate-500">
+                                  {r.solde != null ? formatCurrency(r.solde) : '—'}
+                                </td>
+                                <td className="p-3 text-right">
+                                  <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${STATUS_STYLE[r.status as ORestoPaymentStatus] ?? STATUS_STYLE.paid}`}>
+                                      {STATUS_LABEL[r.status as ORestoPaymentStatus] ?? r.status}
+                                    </span>
+                                    {r.payment?.status === 'paid' && (
+                                      <button type="button" onClick={() => setReceipt(r.payment)} className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-slate-800">
+                                        Reçu
+                                      </button>
+                                    )}
+                                    {r.payment?.status === 'pending' && r.payment.method && isMobileMethod(r.payment.method) && (
+                                      <button type="button" onClick={() => handleResumePayment(r.payment!.id)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-800">
+                                        <Smartphone className="h-3.5 w-3.5" aria-hidden /> Confirmer
+                                      </button>
+                                    )}
+                                    {!r.payment && r.tx?.status === 'pending' && isMobileMethod(r.tx.method) && (
+                                      <button type="button" onClick={() => handleResumeTopup(r.tx!)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-800">
+                                        <Smartphone className="h-3.5 w-3.5" aria-hidden /> Confirmer
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                  <p className="mt-3 text-xs text-slate-400">
+                    {filteredPaymentHistory.length} opération{filteredPaymentHistory.length > 1 ? 's' : ''} affichée{filteredPaymentHistory.length > 1 ? 's' : ''}
+                    {paymentStats.pending > 0 ? ` · ${paymentStats.pending} en attente` : ''}.
+                  </p>
+                </div>
+              ) : (
+                <div data-testid="historique-consommation">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Repas servis ce mois</p>
+                      <p className="mt-1 text-xl font-black text-emerald-900">{mealsThisMonth}</p>
+                      <p className="text-[11px] text-emerald-700/80">sur {kids.length} enfant{kids.length > 1 ? 's' : ''}</p>
+                    </div>
+                    <div className="rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50 to-white p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-sky-700">Total repas servis</p>
+                      <p className="mt-1 text-xl font-black text-sky-900">{mealsAccepted}</p>
+                      <p className="text-[11px] text-sky-700/80">validations acceptées</p>
+                    </div>
+                    <div className="rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50 to-white p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-700">Repas refusés</p>
+                      <p className="mt-1 text-xl font-black text-rose-900">{mealsRejected}</p>
+                      <p className="text-[11px] text-rose-700/80">quota, solde ou carte</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Enfant</span>
+                    <button
+                      type="button"
+                      onClick={() => setHistChild('all')}
+                      className={`min-h-[34px] rounded-full px-3.5 py-1.5 text-xs font-bold transition ${histChild === 'all' ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
+                    >
+                      Tous
+                    </button>
+                    {kids.map((k) => (
+                      <button
+                        key={k.id}
+                        type="button"
+                        onClick={() => setHistChild(k.id)}
+                        className={`min-h-[34px] rounded-full px-3.5 py-1.5 text-xs font-bold transition ${histChild === k.id ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
+                      >
+                        {k.firstName}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {mealStatsByChild.map((stat) => {
+                      const active = histChild === stat.child.id;
+                      return (
+                        <button
+                          key={stat.child.id}
+                          type="button"
+                          onClick={() => setHistChild(active ? 'all' : stat.child.id)}
+                          className={`rounded-2xl border p-4 text-left transition ${active ? 'border-emerald-400 bg-emerald-50/50 ring-2 ring-emerald-100' : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/20'}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-black text-slate-900">{stat.child.firstName} {stat.child.lastName}</p>
+                              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{stat.child.className}</p>
+                            </div>
+                            <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-black text-emerald-800">{stat.thisMonth} ce mois</span>
+                          </div>
+                          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                            <div className="rounded-xl bg-white/80 p-2 ring-1 ring-slate-100">
+                              <p className="text-base font-black text-slate-900">{stat.accepted}</p>
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Servis</p>
+                            </div>
+                            <div className="rounded-xl bg-white/80 p-2 ring-1 ring-slate-100">
+                              <p className="text-base font-black text-slate-900">{stat.thisMonth}</p>
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Ce mois</p>
+                            </div>
+                            <div className="rounded-xl bg-white/80 p-2 ring-1 ring-slate-100">
+                              <p className="text-base font-black text-rose-700">{stat.rejected}</p>
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Refusés</p>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-[11px] text-slate-500">
+                            Dernier repas : {stat.last ? shortDate(stat.last) : 'aucun pour le moment'}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
+                    {filteredMealRows.length === 0 ? (
+                      <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+                        <Inbox className="h-8 w-8 text-slate-300" aria-hidden />
+                        <p className="text-sm font-bold text-slate-700">Aucun repas enregistré pour ce filtre.</p>
+                        <p className="text-xs text-slate-500">Chaque passage au kiosque sera visible ici, enfant par enfant.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[620px] text-sm">
+                          <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                            <tr>
+                              <th className="p-3 text-left font-black">Date &amp; heure</th>
+                              <th className="p-3 text-left font-black">Enfant</th>
+                              <th className="p-3 text-left font-black">Statut</th>
+                              <th className="p-3 text-left font-black">Détail</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredMealRows.slice(0, 80).map((r) => (
+                              <tr key={r.id} className="border-t border-slate-100 transition hover:bg-emerald-50/30">
+                                <td className="whitespace-nowrap p-3 text-[13px] text-slate-500">
+                                  {new Date(r.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: '2-digit' })}
+                                  <span className="ml-2 text-[11px] font-bold text-slate-400">
+                                    {new Date(r.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </td>
+                                <td className="p-3">
+                                  <p className="text-[13px] font-bold text-slate-900">{r.child}</p>
+                                  <p className="text-[11px] text-slate-400">{r.className}</p>
+                                </td>
+                                <td className="p-3">
+                                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${r.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                    {r.status === 'accepted' ? 'Repas servi' : 'Repas refusé'}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-[12px] text-slate-500">
+                                  {r.status === 'accepted' ? 'Validé au kiosque' : (r.reason || 'Passage refusé')}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {mealsByDay.length > 0 && (
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Derniers jours servis</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {mealsByDay.map(([day, count]) => (
+                          <span key={day} className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
+                            {new Date(`${day}T12:00:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' })}
+                            <span className="rounded-full bg-emerald-100 px-1.5 text-emerald-800">{count}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-          <p className="mt-3 text-xs text-slate-400">{paidCount} paiement{paidCount > 1 ? 's' : ''}{pendingPaymentsCount > 0 ? ` · ${pendingPaymentsCount} en attente` : ''}</p>
         </section>
       </div>
 

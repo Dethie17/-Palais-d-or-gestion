@@ -121,6 +121,9 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
   const parametres = dashboard?.parametres ?? null;
   const devise = parametres?.devise ?? 'FCFA';
   const employes = dashboard?.employes ?? [];
+  const budgetSolde = num(dashboard?.budget?.solde ?? 0);
+  const budgetSeuil = num(parametres?.budget_alerte_seuil ?? 0);
+  const budgetLow = budgetSolde <= budgetSeuil;
   const today = todayIso();
   const repas = dashboard?.repas ?? [];
   const todayRepas = useMemo(
@@ -349,7 +352,7 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
   }
 
   return (
-    <div className="space-y-6 p-4 lg:p-8">
+    <div className="space-y-6 bg-gradient-to-b from-slate-50 via-emerald-50/60 to-slate-100 p-4 lg:p-8">
       <DangotePageHeader
         eyebrow="Comptoir MIAM'S"
         title="Espace Superviseur"
@@ -357,11 +360,6 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
         icon={<UtensilsCrossed className="h-5 w-5" />}
         actions={
           <>
-            {onNavigate && (
-              <button className={secondaryButtonClass} onClick={() => onNavigate('entities')}>
-                ← Entités
-              </button>
-            )}
             <button className={secondaryButtonClass} onClick={() => void load(true)} disabled={refreshing}>
               {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Actualiser
@@ -371,6 +369,28 @@ const DangoteSuperviseurPage = ({ onNavigate }: { onNavigate?: (page: string) =>
       />
 
       <SchemaBanner message={error} />
+
+      {budgetLow ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-gradient-to-r from-amber-50 to-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+              <Wallet className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-sm font-black text-amber-900">Budget cantine à surveiller</p>
+              <p className="text-xs text-amber-700">
+                Solde disponible : {formatMoney(budgetSolde, devise)}
+                {budgetSeuil > 0 ? ` · seuil d’alerte ${formatMoney(budgetSeuil, devise)}` : ''}. Rechargez pour garantir les subventions.
+              </p>
+            </div>
+          </div>
+          {onNavigate ? (
+            <button className={primaryButtonClass} onClick={() => onNavigate('dangote-budget-recharge')}>
+              <Wallet className="h-4 w-4" /> Recharger le budget
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Repas aujourd’hui" value={todayStats.repas} hint={`${todayStats.standard} standard · ${todayStats.premium} premium`} tone="green" icon={<UtensilsCrossed className="h-5 w-5" />} />

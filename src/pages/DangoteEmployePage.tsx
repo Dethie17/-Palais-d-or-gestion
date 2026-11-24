@@ -133,11 +133,11 @@ const DangoteEmployePage = ({ onNavigate }: { onNavigate?: (page: string) => voi
   }
 
   if (loading && !portal) {
-    return <div className="p-4 lg:p-8"><LoadingState label="Chargement de votre espace…" /></div>;
+    return <div className="min-h-screen bg-gradient-to-b from-slate-50 via-emerald-50/60 to-slate-100 p-4 lg:p-8"><LoadingState label="Chargement de votre espace…" /></div>;
   }
 
   return (
-    <div className="space-y-6 p-4 lg:p-8">
+    <div className="space-y-6 bg-gradient-to-b from-slate-50 via-emerald-50/60 to-slate-100 p-4 lg:p-8">
       <DangotePageHeader
         eyebrow="Espace Employé"
         title={employe ? employeeName(employe) : 'Mon espace Dangote'}
@@ -145,11 +145,6 @@ const DangoteEmployePage = ({ onNavigate }: { onNavigate?: (page: string) => voi
         icon={<ShieldCheck className="h-5 w-5" />}
         actions={
           <>
-            {onNavigate && (
-              <button className={secondaryButtonClass} onClick={() => onNavigate('entities')}>
-                ← Entités
-              </button>
-            )}
             <button className={secondaryButtonClass} onClick={() => void load(true)} disabled={refreshing}>
               {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Actualiser

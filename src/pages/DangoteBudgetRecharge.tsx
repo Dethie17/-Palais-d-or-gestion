@@ -118,7 +118,7 @@ export const DangoteBudgetRecharge = ({ entiteId, onNavigate }: DangoteBudgetRec
   };
 
   return (
-    <div className="space-y-6 p-4 lg:p-8">
+    <div className="space-y-6 bg-gradient-to-b from-slate-50 via-emerald-50/60 to-slate-100 p-4 lg:p-8">
       <DangotePageHeader
         eyebrow="Direction du Capital Humain"
         title="Recharge du budget"
