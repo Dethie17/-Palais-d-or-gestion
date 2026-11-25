@@ -1,4 +1,5 @@
 import { WEEK_DAYS, type WeeklyMenuItem } from '@/types/menu';
+import { normalizeImageUrl } from '@/lib/imageUrl';
 
 /** Nombre max de plats par menu du jour (cantine : entrée + plat + dessert + boisson…). */
 export const MAX_ITEMS_PER_DAY = 8;
@@ -98,7 +99,7 @@ const IMAGE_MARKER = '\n[menu-image]';
 export function encodeMenuDescription(description: string, dessert?: string, image?: string): string {
   const cleanDescription = (description ?? '').trim();
   const cleanDessert = (dessert ?? '').trim().slice(0, 60);
-  const cleanImage = (image ?? '').trim().slice(0, 500);
+  const cleanImage = normalizeImageUrl(image).slice(0, 500);
   let encoded = cleanDescription;
   if (cleanDessert) encoded += `${DESSERT_MARKER}${cleanDessert}`;
   if (cleanImage) encoded += `${IMAGE_MARKER}${cleanImage}`;
@@ -111,7 +112,7 @@ export function decodeMenuDescription(raw: string | null | undefined): { descrip
   let image = '';
   const imageIndex = text.lastIndexOf(IMAGE_MARKER);
   if (imageIndex !== -1) {
-    image = text.slice(imageIndex + IMAGE_MARKER.length).trim().slice(0, 500);
+    image = normalizeImageUrl(text.slice(imageIndex + IMAGE_MARKER.length)).slice(0, 500);
     text = text.slice(0, imageIndex);
   }
   const dessertIndex = text.lastIndexOf(DESSERT_MARKER);

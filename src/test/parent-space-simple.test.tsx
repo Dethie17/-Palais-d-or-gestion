@@ -105,7 +105,7 @@ describe('Espace Abonné — rendu général', () => {
     expect(screen.getAllByText(/Déconnexion/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('les enfants inscrits apparaissent avec un QR Carte unique chacun', async () => {
+  it('les enfants inscrits restent visibles sans carte prépayée', async () => {
     seedFamily([
       { first: 'Moussa', last: 'Diallo', cls: 'CIA', cycle: 'primaire' },
       { first: 'Aïcha', last: 'Diallo', cls: 'CIB', cycle: 'primaire' },
@@ -113,10 +113,9 @@ describe('Espace Abonné — rendu général', () => {
     renderPage(<EspaceParentPage />);
     await waitForProfile();
 
-    expect(screen.getByTestId('qr-enfants')).toBeTruthy();
-    // Jeton sécurisé : 22 caractères base64url, un par enfant.
-    const tokens = screen.getAllByText(/^[A-Za-z0-9_-]{22}$/).map((el) => el.textContent);
-    expect(new Set(tokens).size).toBe(2);
+    // La section « cartes prépayées » a été retirée de l'espace parent.
+    expect(screen.queryByTestId('qr-enfants')).toBeNull();
+    expect(screen.queryByTestId('section-cartes-prepayees')).toBeNull();
 
     expect(screen.getAllByText(/Moussa Diallo/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Aïcha Diallo/).length).toBeGreaterThanOrEqual(1);

@@ -53,6 +53,7 @@ import { normalizeParentPhone, isValidParentPhone, formatParentPhone } from '@/l
 import { dedupeChildren, childNaturalKey } from '@/lib/childIdentity';
 import { inferCycleFromClass, normalizeCycle, canonicalClassName } from '@/lib/schoolCycles';
 import { decodeMenuDescription, encodeMenuDescription, foldDayPriceIntoItems, publishedDays } from '@/lib/menus';
+import { normalizeImageUrl } from '@/lib/imageUrl';
 import { referenceMonth, referenceWeek } from '@/data/cantineWeek';
 import { menuMonthDays } from '@/lib/menuDates';
 import { cleMois, debutDeMoisIso, moisSuivant, nombreDeMoisPeriode, quotaPourPeriode } from '@/lib/aboMois';
@@ -547,7 +548,7 @@ interface RestoContextType {
   deleteExpense: (id: string) => void;
   // ---- Menu de la semaine (informatif) ----
   weeklyMenus: WeeklyMenu[];
-  updateWeeklyMenu: (day: WeeklyMenu['day'], name: string, description: string, items?: WeeklyMenuItem[], price?: number, dessert?: string, image?: string) => void;
+  updateWeeklyMenu: (day: WeeklyMenu['day'], name: string, description: string, items?: WeeklyMenuItem[], price?: number, dessert?: string, image?: string) => Promise<boolean>;
   // ---- Ticket visiteur (walk-in) ----
   walkInTickets: { token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string }[];
   createWalkInTicket: (menu: WeeklyMenu, method: 'cash' | 'wave' | 'mobile_money') => { token: string; reference: string; ticket: { token: string; reference: string; menuName: string; menuDay: string; price: number; items: WeeklyMenuItem[]; method: string; status: string; createdAt: string } };
@@ -800,7 +801,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
           supabase.from('children').select('*').order('created_at', { ascending: false }).limit(500),
           supabase.from('wallets').select('*').limit(500),
           supabase.from('wallet_transactions').select('*').order('created_at', { ascending: false }).limit(500),
-          Promise.resolve(ignored), Promise.resolve(ignored), Promise.resolve(ignored),
+          Promise.resolve(ignored), Promise.resolve(ignored), supabase.from('weekly_menus').select('*'),
           supabase.from('parent_profiles').select('*').limit(500),
           supabase.from('reclamations').select('*').order('updated_at', { ascending: false }).limit(500),
           supabase.from('reclamation_messages').select('*').order('created_at', { ascending: true }).limit(2000),
@@ -3807,7 +3808,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
     [complaintMessages],
   );
 
-  const updateWeeklyMenu = useCallback((day: WeeklyMenu['day'], name: string, description: string, items: WeeklyMenuItem[] = [], price?: number, dessert?: string, image?: string) => {
+  const updateWeeklyMenu = useCallback(async (day: WeeklyMenu['day'], name: string, description: string, items: WeeklyMenuItem[] = [], price?: number, dessert?: string, image?: string) => {
     const clean = items
       .filter((it) => it && typeof it.name === 'string')
       .map((it) => ({ name: it.name.trim().slice(0, 60), price: Math.max(0, Math.floor(Number(it.price) || 0)) }))
@@ -3815,7 +3816,7 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       .slice(0, 8);
     const dayPrice = Math.max(0, Math.floor(Number(price) || 0));
     const cleanDessert = (dessert ?? '').trim().slice(0, 60);
-    const cleanImage = (image ?? '').trim().slice(0, 500);
+    const cleanImage = normalizeImageUrl(image).slice(0, 500);
     // Les colonnes dessert/image n'existent pas encore en base : on les empaquette dans
     // `description` (marqueur interne) pour que la publication reste partagée.
     const storedDescription = encodeMenuDescription(description, cleanDessert, cleanImage);
@@ -3826,23 +3827,27 @@ export function RestoProvider({ children }: { children: ReactNode }) {
       }
       return [...prev, { day, name, description, dessert: cleanDessert, image: cleanImage || undefined, items: clean, price: dayPrice }];
     });
+    if (!isSupabaseConfigured) return true;
     // Persistance : l'état local est optimiste (affichage immédiat). On écrit
     // en base sans jamais avaler l'erreur en silence.
-    void (async () => {
+    try {
       const { error } = await supabase
         .from('weekly_menus')
         .upsert({ day, name, description: storedDescription, items: clean, price: dayPrice });
-      if (!error) return;
+      if (!error) return true;
       // Colonne `price` absente (base non migrée) : on réessaie sans elle, en
       // repliant le prix du jour dans les plats pour que les parents / la
       // caisse voient le bon total et que la publication soit bien partagée.
       const { error: retryError } = await supabase
         .from('weekly_menus')
         .upsert({ day, name, description: storedDescription, items: foldDayPriceIntoItems(clean, dayPrice) });
-      if (retryError) {
-        console.warn(`[menus] Publication de ${day} non enregistrée en base :`, retryError.message);
-      }
-    })();
+      if (!retryError) return true;
+      console.warn(`[menus] Publication de ${day} non enregistrée en base :`, retryError.message);
+      return false;
+    } catch (err) {
+      console.warn(`[menus] Publication de ${day} impossible :`, (err as Error).message);
+      return false;
+    }
   }, []);
 
   const nowMsStats = Date.now();

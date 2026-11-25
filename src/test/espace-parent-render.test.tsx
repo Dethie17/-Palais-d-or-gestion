@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, act, cleanup, fireEvent, within } from '@testing-library/react';
+import { render, screen, act, cleanup } from '@testing-library/react';
 import { AuthProvider } from '@/context/AuthContext';
 import { RestoProvider, useResto } from '@/context/RestoContext';
 import { ProductProvider } from '@/context/ProductContext';
@@ -123,50 +123,5 @@ describe('EspaceParentPage render (repro crash childId)', () => {
     // Le pavé « Abonnement » (et son titre) coexiste désormais avec la
     // section de paiement en haut de page : une occurrence suffit.
     expect(screen.getAllByText(/^Abonnement$/).length).toBeGreaterThanOrEqual(1);
-  });
-});
-
-describe('EspaceParentPage — cartes prépayées des enfants', () => {
-  it('affiche le solde et les moyens de recharge Wave / Orange Money', async () => {
-    seedChild();
-    renderPage();
-    const section = await screen.findByTestId('section-cartes-prepayees');
-
-    expect(within(section).getByText('Cartes prépayées')).toBeTruthy();
-    expect(within(section).getByText('Moussa Diallo')).toBeTruthy();
-    expect(within(section).getByText('Solde carte')).toBeTruthy();
-
-    const amount = within(section).getByLabelText(/Montant/) as HTMLInputElement;
-    const method = within(section).getByLabelText(/Moyen de paiement/) as HTMLSelectElement;
-    expect(amount.value).toBe('');
-    expect(Array.from(method.options).map((option) => option.value)).toEqual(['wave', 'mobile_money']);
-    expect(method.innerHTML).not.toContain('Espèces');
-
-    const phone = within(section).getByLabelText(/Numéro Wave/) as HTMLInputElement;
-    expect(phone.value).toBe('771234567');
-  });
-
-  it('refuse un numéro invalide sans ouvrir le paiement', async () => {
-    seedChild();
-    renderPage();
-    const section = await screen.findByTestId('section-cartes-prepayees');
-
-    fireEvent.change(within(section).getByLabelText(/Montant/), { target: { value: '100' } });
-    fireEvent.change(within(section).getByLabelText(/Numéro Wave/), { target: { value: '123' } });
-    fireEvent.click(within(section).getByRole('button', { name: /^Recharger$/ }));
-
-    expect(await within(section).findByText(/Numéro mobile invalide/)).toBeTruthy();
-    expect(screen.queryByText(/Payer avec Wave/)).toBeNull();
-  });
-
-  it('ouvre la session Wave pour une recharge valide', async () => {
-    seedChild();
-    renderPage();
-    const section = await screen.findByTestId('section-cartes-prepayees');
-
-    fireEvent.change(within(section).getByLabelText(/Montant/), { target: { value: '100' } });
-    fireEvent.click(within(section).getByRole('button', { name: /^Recharger$/ }));
-
-    expect(await screen.findByText(/Payer avec Wave/)).toBeTruthy();
   });
 });

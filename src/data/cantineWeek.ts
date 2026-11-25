@@ -1,5 +1,6 @@
 import type { WeekDay, WeeklyMenu } from '@/types/menu';
 import { menuMonthDays } from '@/lib/menuDates';
+import { normalizeImageUrl } from '@/lib/imageUrl';
 
 /**
  * Semaine cantine de référence (vitrine parent Lun → Ven).
@@ -48,7 +49,8 @@ const normaliser = (texte: string): string =>
 export function menuPhoto(
   menu: Pick<WeeklyMenu, 'day' | 'description' | 'items' | 'dessert'> & { image?: string },
 ): string {
-  if (menu.image?.trim()) return menu.image.trim();
+  const custom = normalizeImageUrl(menu.image);
+  if (custom) return custom;
   const texte = normaliser([
     menu.description,
     menu.dessert,

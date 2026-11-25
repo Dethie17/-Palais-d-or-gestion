@@ -20,7 +20,7 @@ import {
 } from '@/types/menu';
 import WavePaymentModal from '@/components/WavePaymentModal';
 import PaymentReceiptModal from '@/components/PaymentReceiptModal';
-import CartesPrepayeesEnfants from '@/components/CartesPrepayeesEnfants';
+
 import PayerAbonnementSection from '@/components/PayerAbonnementSection';
 import {
   CheckCircle, AlertCircle, Smartphone,
@@ -500,7 +500,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
   }, [myValidations, histChild]);
 
   const sortedMenus = [...weeklyMenus].sort((a, b) => a.day.localeCompare(b.day));
-  const publishedMenus = publishedDays(sortedMenus).filter((m) => /^2026-11-(0[2-9]|[12][0-9]|30)$/.test(m.day));
+  const publishedMenus = publishedDays(sortedMenus);
   const menuDuJour = publishedMenus.find((m) => m.day === todayName)
     ?? publishedMenus[0];
 
@@ -544,9 +544,6 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
           </div>
         </header>
 
-        {/* ===== CARTE UNIQUE PAR ENFANT : QR + SOLDE + RECHARGE ===== */}
-        <CartesPrepayeesEnfants />
-
         {/* ===== 1. PAIEMENT D'ABONNEMENT ===== */}
         <section id="payer-abonnement" className="scroll-mt-24" data-testid="section-payer-abonnement">
           <div className="flex items-start gap-3">
@@ -579,7 +576,17 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
               <p className="font-bold text-slate-800 mb-2">Menu du jour — {menuDuJour.day}</p>
               <div className="bg-white rounded-2xl border-2 border-green-500 ring-2 ring-green-200 shadow-sm overflow-hidden">
                 <div className="relative h-36 overflow-hidden">
-                  <img src={menuPhoto(menuDuJour)} alt={`Menu du jour — ${menuDuJour.day}`} loading="lazy" className="w-full h-full object-cover" />
+                  <img
+                    src={menuPhoto(menuDuJour)}
+                    alt={`Menu du jour — ${menuDuJour.day}`}
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                    onError={(event) => {
+                      const img = event.currentTarget;
+                      img.onerror = null;
+                      img.src = menuPhoto({ day: menuDuJour.day, description: '', items: [] });
+                    }}
+                  />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
                   <span className="absolute bottom-2 left-3 text-sm font-black uppercase tracking-widest text-white drop-shadow">{menuDateLabel(menuDuJour.day)}</span>
                   <span className="absolute top-2 right-2 text-[11px] font-bold px-2.5 py-1 rounded-full bg-white text-slate-900 shadow">MENU DU JOUR</span>

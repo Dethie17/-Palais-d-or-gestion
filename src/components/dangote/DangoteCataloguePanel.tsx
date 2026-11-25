@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react';
+import { Image as ImageIcon, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { normalizeImageUrl } from '@/lib/imageUrl';
 import {
   Dialog,
   DialogContent,
@@ -128,7 +129,7 @@ export default function DangoteCataloguePanel({ entiteId, categories, plats, onC
         disponible: platForm.disponible,
         stockQuantite: platForm.stockQuantite,
         stockAlerte: platForm.stockAlerte,
-        imageUrl: platForm.imageUrl,
+        imageUrl: normalizeImageUrl(platForm.imageUrl),
       });
       toast.success('Plat enregistré.');
       setPlatOpen(false);
@@ -230,8 +231,24 @@ export default function DangoteCataloguePanel({ entiteId, categories, plats, onC
                   return (
                     <tr key={plat.id} className="border-t border-slate-100">
                       <td className="px-3 py-2">
-                        <p className="font-bold text-slate-800">{plat.nom}</p>
-                        {plat.description ? <p className="max-w-xs truncate text-xs text-slate-500">{plat.description}</p> : null}
+                        <div className="flex items-center gap-3">
+                          {plat.image_url ? (
+                            <img
+                              src={normalizeImageUrl(plat.image_url)}
+                              alt={plat.nom}
+                              className="h-10 w-10 shrink-0 rounded-lg border border-slate-200 object-cover"
+                              onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                            />
+                          ) : (
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
+                              <ImageIcon className="h-4 w-4" />
+                            </span>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-800">{plat.nom}</p>
+                            {plat.description ? <p className="max-w-xs truncate text-xs text-slate-500">{plat.description}</p> : null}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-slate-600">{category?.nom ?? '—'}</td>
                       <td className="px-3 py-2 font-bold text-slate-800">{formatMoney(plat.prix)}</td>
@@ -305,6 +322,15 @@ export default function DangoteCataloguePanel({ entiteId, categories, plats, onC
             <Field label="Image (URL)">
               <input className={inputClass} value={platForm.imageUrl} onChange={(e) => set('imageUrl', e.target.value)} placeholder="https://…" />
             </Field>
+            {normalizeImageUrl(platForm.imageUrl) ? (
+              <img
+                key={normalizeImageUrl(platForm.imageUrl)}
+                src={normalizeImageUrl(platForm.imageUrl)}
+                alt="Aperçu du plat"
+                className="h-36 w-full rounded-xl border border-slate-200 object-cover"
+                onError={(event) => { event.currentTarget.style.display = 'none'; }}
+              />
+            ) : null}
             <div className="flex flex-wrap gap-4 text-sm font-bold text-slate-700">
               <label className="flex items-center gap-2">
                 <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-green-700" checked={platForm.disponible} onChange={(e) => set('disponible', e.target.checked)} />

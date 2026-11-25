@@ -10,6 +10,8 @@ import { useAuth } from '@/context/AuthContext';
 import { useResto } from '@/context/RestoContext';
 import { menuDateLabel, menuMonthDays } from '@/lib/menuDates';
 import { menuPhoto } from '@/data/cantineWeek';
+import { normalizeImageUrl } from '@/lib/imageUrl';
+import { toast } from 'sonner';
 
 const MenuManagement = () => {
   const { user } = useAuth();
@@ -58,6 +60,7 @@ const MenuManagement = () => {
   const monthDays = menuMonthDays(2026, 10, 2);
   const [monthDraft, setMonthDraft] = useState<Record<string, DayDraft> | null>(null);
   const [monthSaved, setMonthSaved] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const baseMonth = (): Record<string, DayDraft> => {
     const byDay = Object.fromEntries(weeklyMenus.map((m) => [m.day, { name: m.name, description: m.description, dessert: m.dessert ?? '', image: m.image ?? '' }]));
     return Object.fromEntries(monthDays.map((day) => [day, byDay[day] ?? { name: '', description: '', dessert: '', image: '' }]));
@@ -76,17 +79,27 @@ const MenuManagement = () => {
   }));
   const composedCount = publishedDays(monthRows).length;
   const canPublish = isWeekPublishable(monthRows);
-  const saveMonthMenus = () => {
-    if (!canPublish) return;
-    monthDays.forEach((day) => {
-      const row = monthForm[day];
-      if (!row) return;
-      const existing = weeklyMenus.find((m) => m.day === day);
-      updateWeeklyMenu(day, '', row.description.trim(), [], existing?.price ?? 0, row.dessert.trim(), row.image.trim());
-    });
-    setMonthDraft(null);
-    setMonthSaved(true);
-    window.setTimeout(() => setMonthSaved(false), 2500);
+  const saveMonthMenus = async () => {
+    if (!canPublish || publishing) return;
+    setPublishing(true);
+    try {
+      const results = await Promise.all(monthDays.map((day) => {
+        const row = monthForm[day];
+        if (!row) return Promise.resolve(true);
+        const existing = weeklyMenus.find((m) => m.day === day);
+        return updateWeeklyMenu(day, '', row.description.trim(), [], existing?.price ?? 0, row.dessert.trim(), row.image.trim());
+      }));
+      setMonthDraft(null);
+      if (results.every(Boolean)) {
+        setMonthSaved(true);
+        toast.success('Menus publiés : visibles par les parents et à l’Espace Repas.');
+        window.setTimeout(() => setMonthSaved(false), 2500);
+      } else {
+        toast.error('Publication locale OK, mais la base distante a refusé. Exécutez supabase-menus-mensuel.sql dans Supabase, puis republiez.');
+      }
+    } finally {
+      setPublishing(false);
+    }
   };
 
   return (
@@ -155,6 +168,11 @@ const MenuManagement = () => {
                     alt="Illustration du menu"
                     className="w-[72px] h-[72px] rounded-xl object-cover border border-slate-200"
                     loading="lazy"
+                    onError={(event) => {
+                      const img = event.currentTarget;
+                      img.onerror = null;
+                      img.src = menuPhoto({ day, description: '', items: [] });
+                    }}
                   />
                   <div>
                     <label htmlFor={`image-${day}`} className="text-[11px] font-black uppercase tracking-widest text-slate-600">Image illustrant le menu</label>
@@ -174,12 +192,12 @@ const MenuManagement = () => {
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
-            onClick={saveMonthMenus}
-            disabled={!canPublish}
+            onClick={() => void saveMonthMenus()}
+            disabled={!canPublish || publishing}
             title={canPublish ? 'Publier le mois (Accès Abonné + Espace Repas)' : 'Renseignez au moins un jour pour publier'}
             className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-700 disabled:bg-slate-200 disabled:text-slate-400"
           >
-            Publier les menus (parents + Espace Repas)
+            {publishing ? 'Publication…' : 'Publier les menus (parents + Espace Repas)'}
           </button>
           <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${canPublish ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
             {composedCount}/29 jours composés{canPublish ? ' — publication possible' : ' — renseignez au moins un jour'}
@@ -211,7 +229,16 @@ const MenuManagement = () => {
         {filtered.map((product) => (
           <div key={product.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
             <div className="relative h-48 lg:h-52 overflow-hidden">
-              <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+              <img
+                src={product.image}
+                alt={product.name}
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                onError={(event) => {
+                  const img = event.currentTarget;
+                  img.onerror = null;
+                  img.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&h=400&fit=crop';
+                }}
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
               <span className={`absolute top-3 right-3 px-3 py-1.5 rounded-full text-xs font-bold shadow-lg ${
                 product.available 
@@ -315,7 +342,7 @@ const ProductModal = ({ product, onClose, onSave }: ModalProps) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(form as Product);
+    onSave({ ...form, image: normalizeImageUrl(form.image) } as Product);
   };
 
   const addExtra = () => {
@@ -393,6 +420,15 @@ const ProductModal = ({ product, onClose, onSave }: ModalProps) => {
               className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-800 text-sm focus:ring-2 focus:ring-slate-500/30 focus:border-slate-500 outline-none"
               placeholder="https://..."
             />
+            {normalizeImageUrl(form.image) ? (
+              <img
+                key={normalizeImageUrl(form.image)}
+                src={normalizeImageUrl(form.image)}
+                alt="Aperçu de l’image"
+                className="mt-2 h-28 w-full rounded-xl object-cover border border-slate-200"
+                onError={(event) => { event.currentTarget.style.display = 'none'; }}
+              />
+            ) : null}
           </div>
           {/* Extras */}
           <div>

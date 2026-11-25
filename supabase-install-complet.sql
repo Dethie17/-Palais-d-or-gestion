@@ -540,7 +540,7 @@ CREATE POLICY open_finance_expenses ON finance_expenses FOR ALL USING (true) WIT
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS weekly_menus (
-  day TEXT PRIMARY KEY CHECK (day IN ('Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi')),
+  day TEXT PRIMARY KEY,
   name TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
   -- Plats du jour (noms) + prix UNIQUE du ticket, saisis par le Personnel.
