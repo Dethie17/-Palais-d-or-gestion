@@ -24,7 +24,7 @@ import PaymentReceiptModal from '@/components/PaymentReceiptModal';
 import PayerAbonnementSection from '@/components/PayerAbonnementSection';
 import {
   CheckCircle, AlertCircle, Smartphone,
-  LogOut, CalendarClock, CreditCard, Megaphone,
+  LogOut, CreditCard, Megaphone,
   MessageSquareWarning, Send, X, MessagesSquare,
   Receipt, UtensilsCrossed, Inbox,
 } from 'lucide-react';
@@ -73,14 +73,6 @@ function childOfValidation(kids: Child[], v: MealValidation, kidsCount: number):
   if (kidsCount === 1) return kids[0];
   return undefined;
 }
-/** Jours restants avant la fin de la période (0 = dernier jour, négatif = fini). */
-const daysUntil = (iso: string, nowMs = Date.now()) => {
-  const end = new Date(iso).getTime();
-  if (!Number.isFinite(end)) return 0;
-  return Math.ceil((end - nowMs) / 86_400_000);
-};
-/** Le réabonnement est proposé dans les 7 derniers jours de la période. */
-const renewDueSoon = (endIso: string, nowMs = Date.now()) => daysUntil(endIso, nowMs) <= 7;
 
 /** Titre d'étape premium : pastille numérotée + titre. */
 function SectionTitle({ step, title, sub }: { step: string; title: string; sub?: string }) {
@@ -98,9 +90,8 @@ function SectionTitle({ step, title, sub }: { step: string; title: string; sub?:
 }
 /**
  * Accès Abonné — parcours fluide du rôle client :
- * QR Codes des enfants → cartes prépayées (recharge Wave / Max it via SycaPay)
- * → 1 abonnement (paiement Wave / Max it via SycaPay) → 2 menu du jour
- * → 3 kiosque (indisponible) → 4 annonces → 5 réclamations → 6 historique.
+ * 1 abonnement (paiement Wave / Max it via SycaPay) → 2 menu du jour
+ * → annonces de la cantine → historique des dépenses.
  * L'inscription des enfants se fait à l'import (ISM).
  */
 const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => void }) => {
@@ -147,8 +138,6 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     window.setTimeout(() => setMessage(null), 8000);
   };
 
-  const nowTs = Date.now();
-
   // ===== Annonces de la cantine (publiées par le Superviseur) =====
   const announcements = useMemo(
     () => complaints
@@ -166,35 +155,8 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
     }));
     document.getElementById('annonces')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-  // Un abonnement n'est « actif » que DANS sa période : un réabonnement déjà
-  // payé pour le mois suivant ne doit pas masquer la carte en cours.
-  const isLiveNow = (s: Subscription) => {
-    const start = new Date(s.startDate).getTime();
-    const end = new Date(s.endDate).getTime();
-    return s.status === 'active'
-      && (!Number.isFinite(start) || start <= nowTs)
-      && Number.isFinite(end)
-      && end >= nowTs;
-  };
-  const activeSubs = allMine.filter(isLiveNow);
-  const activeByChild = (childId: string) => activeSubs.find((s) => s.childId === childId);
-
   /** Nom affiché du parent connecté (fiche identité sinon identifiant). */
   const myName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : username;
-
-  /** Période déjà RÉGLÉE qui démarre plus tard (réabonnement de fin de mois). */
-  const nextPeriodOf = (childId: string) =>
-    allMine.find(
-      (s) => s.childId === childId
-        && s.status === 'active'
-        && new Date(s.startDate).getTime() > nowTs,
-    );
-
-  /** Enfants dont la carte arrive à échéance (7 derniers jours). */
-  const renewDue = kids.filter((k) => {
-    const s = activeByChild(k.id);
-    return !!s && renewDueSoon(s.endDate, nowTs);
-  });
 
   const todayName = localDateKey(new Date(), 2026, 10);
 
@@ -553,9 +515,6 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
             <div className="min-w-0">
               <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Abonnement</p>
               <h2 className="text-lg font-black tracking-tight text-slate-900">Payer l’abonnement</h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                L’enfant, les mois à régler, le total — un mois déjà payé ne se paie pas deux fois.
-              </p>
             </div>
           </div>
           <div className="mt-4">
@@ -607,29 +566,6 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
             </div>
           )}
         </section>
-
-        {/* ===== 3. KIOSQUE : indisponible pour le moment ===== */}
-        <section id="kiosque" className="scroll-mt-24">
-          <SectionTitle step="3" title="Kiosque Récréation & Pause" />
-          <div className="mt-4 bg-white rounded-3xl border-2 border-dashed border-slate-200 p-10 text-center shadow-sm">
-            <p className="text-lg font-black text-slate-800">Kiosque indisponible pour le moment</p>
-            <p className="mt-1.5 text-sm text-slate-500 max-w-md mx-auto">
-              Les snacks et boissons ne sont plus en vente en ligne. Passez par le comptoir de la cantine pendant la pause.
-            </p>
-          </div>
-        </section>
-
-        {/* Rappel de fin de mois : les repas non consommés expirent. */}
-        {renewDue.length > 0 && (
-          <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-2">
-            <CalendarClock className="w-5 h-5 flex-shrink-0 text-amber-600" />
-            <span>
-              La période se termine le <strong>{shortDate(activeByChild(renewDue[0].id)!.endDate)}</strong> pour{' '}
-              {renewDue.map((k) => k.firstName).join(', ')}. Les repas non consommés ne sont pas reportés —
-              renouvelez l’abonnement pour le mois suivant.
-            </span>
-          </div>
-        )}
 
         {message && (
           <div role="status" className={`rounded-xl p-4 flex gap-3 text-sm font-medium border ${message.ok ? 'bg-emerald-50 text-emerald-900 border-emerald-200' : 'bg-red-50 text-red-800 border-red-200'}`}>
@@ -685,7 +621,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
         {/* ===== 6. HISTORIQUE ===== */}
         <section id="historique" className="scroll-mt-24" data-testid="section-historique">
           <SectionTitle
-            step="6"
+            step="3"
             title="Historique des dépenses"
             sub="Deux fenêtres claires : vos paiements et recharges, puis la consommation des repas de chaque enfant."
           />
@@ -846,10 +782,6 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
                       </div>
                     )}
                   </div>
-                  <p className="mt-3 text-xs text-slate-400">
-                    {filteredPaymentHistory.length} opération{filteredPaymentHistory.length > 1 ? 's' : ''} affichée{filteredPaymentHistory.length > 1 ? 's' : ''}
-                    {paymentStats.pending > 0 ? ` · ${paymentStats.pending} en attente` : ''}.
-                  </p>
                 </div>
               ) : (
                 <div data-testid="historique-consommation">
@@ -936,7 +868,6 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
                       <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
                         <Inbox className="h-8 w-8 text-slate-300" aria-hidden />
                         <p className="text-sm font-bold text-slate-700">Aucun repas enregistré pour ce filtre.</p>
-                        <p className="text-xs text-slate-500">Chaque passage au kiosque sera visible ici, enfant par enfant.</p>
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
@@ -968,7 +899,7 @@ const EspaceParentPage = ({ onNavigate }: { onNavigate?: (page: PageName) => voi
                                   </span>
                                 </td>
                                 <td className="p-3 text-[12px] text-slate-500">
-                                  {r.status === 'accepted' ? 'Validé au kiosque' : (r.reason || 'Passage refusé')}
+                                  {r.status === 'accepted' ? 'Validé à la cantine' : (r.reason || 'Passage refusé')}
                                 </td>
                               </tr>
                             ))}

@@ -91,7 +91,7 @@ async function waitForProfile() {
 }
 
 describe('Espace Abonné — rendu général', () => {
-  it('affiche le parcours continu : payer, menu, kiosque, annonces, historique', async () => {
+  it('affiche le parcours continu : payer, menu, annonces, historique', async () => {
     seedFamily([{ first: 'Moussa', last: 'Diallo', cls: 'CIA', cycle: 'primaire' }]);
     renderPage(<EspaceParentPage />);
     await waitForProfile();
@@ -99,7 +99,7 @@ describe('Espace Abonné — rendu général', () => {
     expect(screen.getByTestId('section-payer-abonnement')).toBeTruthy();
     expect(screen.getByText('Payer l’abonnement')).toBeTruthy();
     expect(screen.getAllByText(/Menu du jour/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/Kiosque indisponible pour le moment/)).toBeTruthy();
+    expect(screen.queryByText(/Kiosque/)).toBeNull();
     expect(screen.getByText(/Annonces de la cantine/)).toBeTruthy();
     expect(screen.getByText(/Historique des dépenses/)).toBeTruthy();
     expect(screen.getAllByText(/Déconnexion/).length).toBeGreaterThanOrEqual(1);

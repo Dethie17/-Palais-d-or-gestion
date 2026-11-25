@@ -309,18 +309,12 @@ const PayerAbonnementSection = ({ kids, start, onError }: {
             >
               <Smartphone className="w-4 h-4" /> Payer via {methodLabel} · {formatCurrency(total)} pour {selected.length} mois
             </button>
-            <p className="text-[11px] text-slate-400">
-              Vous partez automatiquement dans l’application {methodLabel} pour valider avec votre code secret. Le débit réel est confirmé par SycaPay.
-            </p>
           </>
         ) : (
           <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-900" role="status">
             Ouverture du paiement {methodLabel} — vous partez chez l’opérateur…
           </div>
         )}
-        <p className="text-[11px] text-slate-400">
-          Règles : montant recalculé depuis la formule de la classe de l’enfant · paiement en une opération possible sur plusieurs mois consécutifs, puis de nouveaux paiements plus tard · « Payé » = mois civil entièrement couvert par un règlement confirmé · « Impayé » = mois non réglé, sélectionnable · « En attente » = demande jamais soldée, libérable d’un clic.
-        </p>
       </div>
     </div>
   );

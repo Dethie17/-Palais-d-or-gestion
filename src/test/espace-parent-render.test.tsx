@@ -75,7 +75,7 @@ describe('EspaceParentPage render (repro crash childId)', () => {
     await screen.findByTestId('section-payer-abonnement');
     expect(screen.getByText('Payer l’abonnement')).toBeTruthy();
     expect(screen.getAllByText(/Menu du jour/).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText(/Kiosque indisponible pour le moment/)).toBeTruthy();
+    expect(screen.queryByText(/Kiosque/)).toBeNull();
     expect(screen.getByText(/Historique des dépenses/)).toBeTruthy();
   });
 
